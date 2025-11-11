@@ -73,7 +73,8 @@ def save_patient_links(links: Dict) -> bool:
         return False
 
 
-def generate_patient_link(device_name: str, notes: str = "") -> Optional[str]:
+def generate_patient_link(device_name: str, notes: str = "", recording_date: str = None, 
+                         start_time: str = None, end_time: str = None, pdf_path: str = None) -> Optional[str]:
     """
     Generează un nou link persistent pentru un pacient.
     
@@ -82,6 +83,10 @@ def generate_patient_link(device_name: str, notes: str = "") -> Optional[str]:
     Args:
         device_name: Numele aparatului (ex: "Checkme O2 #3539")
         notes: Notițe medicale opționale (ex: "Apnee severă")
+        recording_date: Data înregistrării (ex: "2025-05-02")
+        start_time: Ora de început (ex: "23:30")
+        end_time: Ora de sfârșit (ex: "06:37")
+        pdf_path: Calea către fișierul PDF asociat (opțional)
         
     Returns:
         str: Token-ul UUID generat sau None dacă eroare
@@ -94,7 +99,7 @@ def generate_patient_link(device_name: str, notes: str = "") -> Optional[str]:
         patient_folder = os.path.join(PATIENT_DATA_DIR, token)
         os.makedirs(patient_folder, exist_ok=True)
         
-        # Salvăm metadata
+        # Salvăm metadata EXTINSĂ pentru workflow medical
         links = load_patient_links()
         links[token] = {
             "device_name": device_name,
@@ -102,7 +107,18 @@ def generate_patient_link(device_name: str, notes: str = "") -> Optional[str]:
             "created_at": datetime.now().isoformat(),
             "last_accessed": None,
             "is_active": True,
-            "recordings_count": 0
+            "recordings_count": 0,
+            # [NEW] Metadata medicală extinsă
+            "recording_date": recording_date,  # Data înregistrării
+            "start_time": start_time,          # Ora de început
+            "end_time": end_time,              # Ora de sfârșit
+            "medical_notes": "",               # Notițe medicale detaliate (textarea)
+            "sent_status": False,              # Marcat ca trimis către pacient
+            "sent_at": None,                   # Când a fost marcat ca trimis
+            "view_count": 0,                   # Număr total vizualizări
+            "first_viewed_at": None,           # Prima vizualizare
+            "last_viewed_at": None,            # Ultima vizualizare
+            "pdf_path": pdf_path               # Cale către PDF asociat (opțional)
         }
         
         if save_patient_links(links):
@@ -117,12 +133,13 @@ def generate_patient_link(device_name: str, notes: str = "") -> Optional[str]:
         return None
 
 
-def get_patient_link(token: str) -> Optional[Dict]:
+def get_patient_link(token: str, track_view: bool = True) -> Optional[Dict]:
     """
     Preia metadata pentru un link de pacient.
     
     Args:
         token: UUID-ul pacientului
+        track_view: Dacă True, contorizează vizualizarea (default True)
         
     Returns:
         Dict: Metadata pacient sau None dacă nu există
@@ -131,11 +148,15 @@ def get_patient_link(token: str) -> Optional[Dict]:
     patient_data = links.get(token)
     
     if patient_data:
-        # Actualizăm last_accessed
+        # Actualizăm last_accessed (backward compatibility)
         patient_data['last_accessed'] = datetime.now().isoformat()
         links[token] = patient_data
         save_patient_links(links)
         logger.debug(f"Link accesat: {token[:8]}...")
+        
+        # [NEW] Tracking automat vizualizări
+        if track_view:
+            track_link_view(token)
     else:
         logger.warning(f"Link inexistent: {token}")
     
@@ -382,6 +403,159 @@ def validate_token(token: str) -> bool:
         return False
     
     return True
+
+
+# ==============================================================================
+# FUNCȚII WORKFLOW MEDICAL - TRACKING & MANAGEMENT
+# ==============================================================================
+
+def track_link_view(token: str) -> bool:
+    """
+    Înregistrează o vizualizare a link-ului de către pacient.
+    Actualizează contoarele și timestamp-urile.
+    
+    Args:
+        token: UUID-ul pacientului
+        
+    Returns:
+        bool: True dacă tracking-ul a reușit
+    """
+    try:
+        links = load_patient_links()
+        
+        if token not in links:
+            logger.warning(f"Token inexistent pentru tracking: {token}")
+            return False
+        
+        now = datetime.now().isoformat()
+        
+        # Incrementăm view_count
+        links[token]['view_count'] = links[token].get('view_count', 0) + 1
+        
+        # Setăm first_viewed_at dacă e prima vizualizare
+        if links[token].get('first_viewed_at') is None:
+            links[token]['first_viewed_at'] = now
+            logger.info(f"🔵 Prima vizualizare pentru link {token[:8]}...")
+        
+        # Actualizăm last_viewed_at
+        links[token]['last_viewed_at'] = now
+        
+        if save_patient_links(links):
+            logger.debug(f"📊 Tracking view: {token[:8]}... (Total: {links[token]['view_count']})")
+            return True
+        else:
+            return False
+            
+    except Exception as e:
+        logger.error(f"Eroare la tracking vizualizare pentru {token}: {e}", exc_info=True)
+        return False
+
+
+def update_link_medical_notes(token: str, medical_notes: str) -> bool:
+    """
+    Actualizează notițele medicale pentru un link de pacient.
+    
+    Args:
+        token: UUID-ul pacientului
+        medical_notes: Notițele medicale (text liber)
+        
+    Returns:
+        bool: True dacă actualizarea a reușit
+    """
+    try:
+        links = load_patient_links()
+        
+        if token not in links:
+            logger.warning(f"Token inexistent pentru actualizare notițe: {token}")
+            return False
+        
+        links[token]['medical_notes'] = medical_notes
+        links[token]['notes_updated_at'] = datetime.now().isoformat()
+        
+        if save_patient_links(links):
+            logger.info(f"📝 Notițe medicale actualizate pentru {token[:8]}...")
+            return True
+        else:
+            return False
+            
+    except Exception as e:
+        logger.error(f"Eroare la actualizarea notițelor pentru {token}: {e}", exc_info=True)
+        return False
+
+
+def mark_link_as_sent(token: str, sent: bool = True) -> bool:
+    """
+    Marchează un link ca trimis (sau netrimis) către pacient.
+    
+    Args:
+        token: UUID-ul pacientului
+        sent: True = marcat ca trimis, False = anulare status trimis
+        
+    Returns:
+        bool: True dacă actualizarea a reușit
+    """
+    try:
+        links = load_patient_links()
+        
+        if token not in links:
+            logger.warning(f"Token inexistent pentru marcare trimis: {token}")
+            return False
+        
+        links[token]['sent_status'] = sent
+        
+        if sent:
+            links[token]['sent_at'] = datetime.now().isoformat()
+            logger.info(f"📨 Link marcat ca TRIMIS: {token[:8]}...")
+        else:
+            links[token]['sent_at'] = None
+            logger.info(f"🔄 Link marcat ca NETRIMIS: {token[:8]}...")
+        
+        if save_patient_links(links):
+            return True
+        else:
+            return False
+            
+    except Exception as e:
+        logger.error(f"Eroare la marcarea status trimis pentru {token}: {e}", exc_info=True)
+        return False
+
+
+def get_all_links_for_admin() -> List[Dict]:
+    """
+    Preia TOATE link-urile cu metadata completă pentru dashboard-ul medical.
+    Include: date, notițe, status trimis, vizualizări.
+    
+    Returns:
+        List[Dict]: Listă cu toate link-urile și metadata detaliată
+    """
+    links = load_patient_links()
+    result = []
+    
+    for token, data in links.items():
+        if data.get('is_active', True):
+            result.append({
+                "token": token,
+                "device_name": data.get("device_name", "Unknown"),
+                "notes": data.get("notes", ""),
+                "created_at": data.get("created_at"),
+                "recordings_count": data.get("recordings_count", 0),
+                # Metadata medicală extinsă
+                "recording_date": data.get("recording_date"),
+                "start_time": data.get("start_time"),
+                "end_time": data.get("end_time"),
+                "medical_notes": data.get("medical_notes", ""),
+                "sent_status": data.get("sent_status", False),
+                "sent_at": data.get("sent_at"),
+                "view_count": data.get("view_count", 0),
+                "first_viewed_at": data.get("first_viewed_at"),
+                "last_viewed_at": data.get("last_viewed_at")
+            })
+    
+    # Sortăm după created_at (cele mai noi primele)
+    result.sort(key=lambda x: x.get('created_at', ''), reverse=True)
+    
+    logger.debug(f"Dashboard admin: {len(result)} link-uri active returnate.")
+    return result
 
 
 # ==============================================================================

@@ -1,0 +1,37 @@
+{
+  "cbd8f122-a7e4-4829-ae7b-91cd3df24855": {
+    "device_name": "Checkme O2 #3539",
+    "notes": "Procesare automată batch - Checkme O2 3539_20251007230437.csv",
+    "created_at": "2025-11-11T12:33:47.518500",
+    "last_accessed": "2025-11-11T12:57:45.543809",
+    "is_active": true,
+    "recordings_count": 0,
+    "recording_date": "2025-10-07",
+    "start_time": "23:04",
+    "end_time": "06:36",
+    "medical_notes": "Apnee obstructivă de somn severă. SpO2 scăzut noaptea (85-92%). Recomandat CPAP. Follow-up în 2 săptămâni pentru evaluare eficiență tratament.",
+    "sent_status": true,
+    "sent_at": "2025-11-11T12:38:09.605805",
+    "view_count": 4,
+    "first_viewed_at": "2025-11-11T12:56:12.463505",
+    "last_viewed_at": "2025-11-11T12:57:45.530962",
+    "notes_updated_at": "2025-11-11T12:38:09.599814"
+  },
+  "56ae5494-25c9-49ef-98f1-d8bf67a64548": {
+    "device_name": "Checkme O2 #3539",
+    "notes": "Procesare automată batch - Checkme O2 3539_20251014203224.csv",
+    "created_at": "2025-11-11T12:35:41.624158",
+    "last_accessed": "2025-11-11T14:10:08.896832",
+    "is_active": true,
+    "recordings_count": 0,
+    "recording_date": "2025-10-14",
+    "start_time": "20:32",
+    "end_time": "04:45",
+    "medical_notes": "",
+    "sent_status": false,
+    "sent_at": null,
+    "view_count": 42,
+    "first_viewed_at": "2025-11-11T12:58:40.124376",
+    "last_viewed_at": "2025-11-11T14:10:08.894832"
+  }
+}

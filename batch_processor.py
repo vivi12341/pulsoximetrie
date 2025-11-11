@@ -22,12 +22,14 @@ import os
 import re
 import pandas as pd
 from datetime import timedelta
+from typing import List, Dict
 
 # Importăm modulele și configurațiile necesare
 import config
 from logger_setup import logger
 from data_parser import parse_csv_data
 from plot_generator import create_plot
+from patient_links import generate_patient_link
 
 # --- Mapare Luni în Română ---
 MONTH_NAMES_RO = {
@@ -175,22 +177,29 @@ def generate_intuitive_image_name(df_slice: pd.DataFrame, device_number: str) ->
         end_str = df_slice.index.max().strftime('%H%M%S')
         return f"grafic_{start_str}_pana_la_{end_str}.jpg"
 
-def run_batch_job(input_folder: str, output_folder: str, window_minutes: int):
+def run_batch_job(input_folder: str, output_folder: str, window_minutes: int) -> List[Dict]:
     """
     Execută procesul de generare în lot a imaginilor cu grafice.
+    
+    [NEW v4.0] Generează automat link-uri persistente pentru fiecare CSV procesat.
 
     Args:
         input_folder (str): Calea către folderul care conține fișierele CSV.
         output_folder (str): Calea către folderul rădăcină unde vor fi salvate
                              rezultatele.
         window_minutes (int): Durata în minute a fiecărei "felii" de grafic.
+                             
+    Returns:
+        List[Dict]: Listă cu link-urile generate (token, device, date, etc.)
     """
     logger.info("=" * 50)
-    logger.info("A ÎNCEPUT PROCESUL DE PROCESARE ÎN LOT (BATCH).")
+    logger.info("A ÎNCEPUT PROCESUL DE PROCESARE ÎN LOT (BATCH) + GENERARE LINK-URI.")
     logger.info(f"Folder intrare: {input_folder}")
     logger.info(f"Folder ieșire: {output_folder}")
     logger.info(f"Durată fereastră: {window_minutes} minute")
     logger.info("=" * 50)
+    
+    generated_links = []  # Lista de link-uri generate
 
     try:
         # Validăm existența folderului de intrare
@@ -271,6 +280,52 @@ def run_batch_job(input_folder: str, output_folder: str, window_minutes: int):
                     current_slice_start = current_slice_end
 
                 logger.info(f"Procesare finalizată pentru '{file_name}'. S-au generat {slice_count-1} imagini.")
+                
+                # [NEW v4.0] Generăm automat link persistent pentru acest CSV
+                try:
+                    # Extragem metadata pentru link
+                    recording_date = record_start_time.strftime('%Y-%m-%d')
+                    start_time_str = record_start_time.strftime('%H:%M')
+                    end_time_str = record_end_time.strftime('%H:%M')
+                    device_display_name = f"Checkme O2 #{device_number}"
+                    
+                    # Generăm link-ul cu metadata despre folderul de output
+                    token = generate_patient_link(
+                        device_name=device_display_name,
+                        notes=f"Procesare automată batch - {file_name}",
+                        recording_date=recording_date,
+                        start_time=start_time_str,
+                        end_time=end_time_str
+                    )
+                    
+                    if token:
+                        # Salvăm și calea folderului de output în metadata link-ului
+                        from patient_links import load_patient_links, save_patient_links
+                        links = load_patient_links()
+                        if token in links:
+                            links[token]['output_folder'] = file_output_folder_name
+                            links[token]['output_folder_path'] = file_output_path
+                            links[token]['images_count'] = slice_count - 1
+                            links[token]['original_filename'] = file_name
+                            save_patient_links(links)
+                        
+                        generated_links.append({
+                            "token": token,
+                            "device_name": device_display_name,
+                            "device_number": device_number,
+                            "recording_date": recording_date,
+                            "start_time": start_time_str,
+                            "end_time": end_time_str,
+                            "original_filename": file_name,
+                            "output_folder": file_output_folder_name,
+                            "images_count": slice_count - 1
+                        })
+                        logger.info(f"🔗 Link generat automat: {token[:8]}... pentru {device_display_name}")
+                    else:
+                        logger.warning(f"Nu s-a putut genera link pentru '{file_name}'")
+                        
+                except Exception as link_error:
+                    logger.error(f"Eroare la generarea link-ului pentru '{file_name}': {link_error}", exc_info=True)
 
             except ValueError as e:
                 # Prindem erorile de la data_parser (ex: CSV invalid)
@@ -284,4 +339,7 @@ def run_batch_job(input_folder: str, output_folder: str, window_minutes: int):
     finally:
         logger.info("=" * 50)
         logger.info("PROCESUL DE PROCESARE ÎN LOT (BATCH) S-A FINALIZAT.")
+        logger.info(f"🔗 Link-uri generate: {len(generated_links)}")
         logger.info("=" * 50)
+    
+    return generated_links

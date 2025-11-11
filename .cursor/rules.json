@@ -1,0 +1,29 @@
+{
+  "version": 1,
+  "rules": [
+    {
+      "name": "Cursor General Rules",
+      "path": "./rules/CURSOR_RULE.mdc",
+      "enabled": true,
+      "applyTo": ["*"]
+    },
+    {
+      "name": "EG Rules",
+      "path": "./rules/EG.mdc",
+      "enabled": true,
+      "applyTo": ["*"]
+    },
+    {
+      "name": "Simplu Rules",
+      "path": "./rules/SIMPLU.mdc",
+      "enabled": true,
+      "applyTo": ["*"]
+    },
+    {
+      "name": "Test Rules",
+      "path": "./rules/TESTEAZA.mdc",
+      "enabled": true,
+      "applyTo": ["*"]
+    }
+  ]
+}

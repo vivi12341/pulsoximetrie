@@ -13,7 +13,7 @@ from dash import dcc, html
 import plotly.graph_objects as go
 import config
 
-# --- Layout Principal cu 4 Tabs ---
+# --- Layout Principal - Condițional Medic/Pacient ---
 layout = html.Div(
     id="main-container",
     style={
@@ -23,136 +23,174 @@ layout = html.Div(
         'padding': '20px'
     },
     children=[
-        # Header
-        html.H1(
-            "📊 Platformă Pulsoximetrie Medicală",
-            id="app-title",
-            style={'textAlign': 'center', 'color': '#333', 'marginBottom': '30px'}
-        ),
-
-        # Container notificări globale
-        html.Div(id="global-notification-container"),
-
+        # Detectare URL pentru token
+        dcc.Location(id='url', refresh=False),
+        
         # Store-uri pentru date
         dcc.Store(id='loaded-data-store'),
         dcc.Store(id='current-patient-token'),
+        dcc.Store(id='url-token-detected'),  # Nou: detectare token din URL
+        
+        # Container notificări globale
+        html.Div(id="global-notification-container"),
+        
+        # Container dinamic - se populează în funcție de prezența token-ului
+        html.Div(id='dynamic-layout-container')
+    ]
+)
 
-        # Tabs principale
-        dcc.Tabs(
+# --- Layout pentru MEDICI (cu tab-uri complete) ---
+medical_layout = html.Div([
+    # Header
+    html.H1(
+        "📊 Platformă Pulsoximetrie Medicală",
+        id="app-title",
+        style={'textAlign': 'center', 'color': '#333', 'marginBottom': '30px'}
+    ),
+    
+    # Tabs principale
+    dcc.Tabs(
             id="app-tabs",
             value='tab-admin',
             children=[
                 # ==========================================
-                # TAB 1: ADMIN (PENTRU MEDICI)
+                # TAB 1: PROCESARE BATCH
                 # ==========================================
                 dcc.Tab(
-                    label="👨‍⚕️ Admin (Medic)",
-                    value='tab-admin',
+                    label="📁 Procesare Batch",
+                    value='tab-batch-medical',
                     children=[
                         html.Div(
                             className="tab-content",
-                            style={'padding': '30px'},
+                            style={'padding': '30px', 'backgroundColor': '#f5f7fa'},
                             children=[
-                                html.H2("Panou Admin - Gestionare Pacienți", style={'color': '#2c3e50'}),
+                                html.H2(
+                                    "📁 Procesare Batch CSV + Generare Link-uri", 
+                                    style={'color': '#2c3e50', 'marginBottom': '10px'}
+                                ),
+                                html.P(
+                                    "Încărcați mai multe fișiere CSV simultan. Link-urile se generează AUTOMAT după procesare.",
+                                    style={'color': '#7f8c8d', 'marginBottom': '30px', 'fontSize': '14px'}
+                                ),
                                 
-                                # Secțiune 1: Creare Link Nou
+                                # Store pentru refresh automat
+                                dcc.Store(id='admin-refresh-trigger', data=0),
+                                
                                 html.Div([
-                                    html.H3("🔗 Creare Link Nou Pacient", style={'marginTop': '30px'}),
-                                    html.P("Generați un link persistent pentru un pacient nou."),
-                                    
-                                    html.Label("Nume Aparat:", style={'fontWeight': 'bold'}),
-                                    dcc.Input(
-                                        id='admin-device-name-input',
-                                        type='text',
-                                        value='',
-                                        placeholder='Ex: Checkme O2 #3539',
-                                        style={'width': '100%', 'padding': '10px', 'marginBottom': '10px'}
+                                    html.Div([
+                                        html.Label("📂 Folder intrare CSV:", style={'fontWeight': 'bold', 'display': 'block', 'marginBottom': '5px'}),
+                                        dcc.Input(
+                                            id='admin-batch-input-folder',
+                                            type='text',
+                                            value='',
+                                            placeholder='Ex: C:\\DateMedicale\\CSV_Intrare',
+                                            style={'width': '100%', 'padding': '12px', 'marginBottom': '15px', 'border': '1px solid #bdc3c7', 'borderRadius': '5px'}
+                                        ),
+                                        
+                                        html.Label("📂 Folder ieșire imagini:", style={'fontWeight': 'bold', 'display': 'block', 'marginBottom': '5px'}),
+                                        dcc.Input(
+                                            id='admin-batch-output-folder',
+                                            type='text',
+                                            value='',
+                                            placeholder=f'Implicit: .\\{config.OUTPUT_DIR}',
+                                            style={'width': '100%', 'padding': '12px', 'marginBottom': '15px', 'border': '1px solid #bdc3c7', 'borderRadius': '5px'}
+                                        ),
+                                        
+                                        html.Div([
+                                            html.Label("⏱️ Durată fereastră (minute):", style={'fontWeight': 'bold', 'marginRight': '10px'}),
+                                            dcc.Input(
+                                                id='admin-batch-window-minutes',
+                                                type='number',
+                                                value=config.DEFAULT_WINDOW_MINUTES,
+                                                min=1,
+                                                max=120,
+                                                step=1,
+                                                style={'padding': '10px', 'width': '80px', 'border': '1px solid #bdc3c7', 'borderRadius': '5px'}
+                                            )
+                                        ], style={'marginBottom': '20px'}),
+                                        
+                                        html.Button(
+                                            '🚀 Pornește Procesare Batch + Generare Link-uri',
+                                            id='admin-start-batch-button',
+                                            n_clicks=0,
+                                            style={
+                                                'width': '100%',
+                                                'padding': '15px',
+                                                'fontSize': '16px',
+                                                'fontWeight': 'bold',
+                                                'backgroundColor': '#27ae60',
+                                                'color': 'white',
+                                                'border': 'none',
+                                                'borderRadius': '5px',
+                                                'cursor': 'pointer',
+                                                'marginBottom': '15px'
+                                            }
+                                        ),
+                                        
+                                        dcc.Loading(
+                                            id="admin-batch-loading",
+                                            type="default",
+                                            children=html.Div(id='admin-batch-result', style={'marginTop': '15px'})
+                                        )
+                                    ])
+                                ], style={
+                                    'padding': '25px', 
+                                    'backgroundColor': '#fff', 
+                                    'borderRadius': '10px',
+                                    'boxShadow': '0 2px 8px rgba(0,0,0,0.1)'
+                                })
+                            ]
+                        )
+                    ]
+                ),
+                
+                # ==========================================
+                # TAB 2: VIZUALIZARE DATE (NOU - CU ACCORDION)
+                # ==========================================
+                dcc.Tab(
+                    label="📊 Vizualizare Date",
+                    value='tab-data-view',
+                    children=[
+                        html.Div(
+                            className="tab-content",
+                            style={'padding': '30px', 'backgroundColor': '#f5f7fa'},
+                            children=[
+                                html.Div([
+                                    html.H2(
+                                        "📊 Înregistrări Pacienți - Vizualizare Detaliată", 
+                                        style={'color': '#2c3e50', 'marginBottom': '10px', 'display': 'inline-block', 'marginRight': '20px'}
                                     ),
-                                    
-                                    html.Label("Notițe Medicale (opțional):", style={'fontWeight': 'bold'}),
-                                    dcc.Textarea(
-                                        id='admin-notes-input',
-                                        value='',
-                                        placeholder='Ex: Apnee severă, follow-up săptămânal',
-                                        style={'width': '100%', 'padding': '10px', 'marginBottom': '20px', 'minHeight': '80px'}
-                                    ),
-                                    
                                     html.Button(
-                                        '🔗 Generează Link Nou',
-                                        id='admin-create-link-button',
+                                        '🔄 Reîmprospătează',
+                                        id='admin-refresh-data-view',
                                         n_clicks=0,
                                         style={
-                                            'padding': '15px 30px',
-                                            'fontSize': '16px',
+                                            'padding': '10px 20px',
+                                            'fontSize': '14px',
                                             'backgroundColor': '#3498db',
                                             'color': 'white',
                                             'border': 'none',
                                             'borderRadius': '5px',
-                                            'cursor': 'pointer'
+                                            'cursor': 'pointer',
+                                            'verticalAlign': 'middle'
                                         }
-                                    ),
-                                    
-                                    html.Div(id='admin-link-creation-result', style={'marginTop': '20px'})
-                                ], style={'marginBottom': '40px', 'padding': '20px', 'backgroundColor': '#ecf0f1', 'borderRadius': '10px'}),
+                                    )
+                                ], style={'marginBottom': '10px'}),
                                 
-                                html.Hr(),
+                                html.P(
+                                    "Click pe o linie pentru a vedea detaliile complete: grafic, imagini, PDF și notițe medicale.",
+                                    style={'color': '#7f8c8d', 'marginBottom': '30px', 'fontSize': '14px'}
+                                ),
                                 
-                                # Secțiune 2: Upload CSV pentru Pacient Existent
-                                html.Div([
-                                    html.H3("📤 Upload CSV pentru Pacient", style={'marginTop': '30px'}),
-                                    html.P("Încărcați un fișier CSV pentru un pacient existent."),
-                                    
-                                    html.Label("Selectați Pacient:", style={'fontWeight': 'bold'}),
-                                    dcc.Dropdown(
-                                        id='admin-patient-selector',
-                                        options=[],
-                                        placeholder='Selectați un pacient din listă...',
-                                        style={'marginBottom': '20px'}
-                                    ),
-                                    
-                                    dcc.Upload(
-                                        id='admin-upload-csv',
-                                        children=html.Div([
-                                            '📁 Trageți și plasați CSV aici sau ',
-                                            html.A('click pentru selectare')
-                                        ]),
-                                        style={
-                                            'width': '100%',
-                                            'height': '80px',
-                                            'lineHeight': '80px',
-                                            'borderWidth': '2px',
-                                            'borderStyle': 'dashed',
-                                            'borderRadius': '10px',
-                                            'textAlign': 'center',
-                                            'backgroundColor': '#f8f9fa'
-                                        },
-                                        multiple=False
-                                    ),
-                                    
-                                    html.Div(id='admin-upload-result', style={'marginTop': '20px'})
-                                ], style={'marginBottom': '40px', 'padding': '20px', 'backgroundColor': '#e8f5e9', 'borderRadius': '10px'}),
+                                # Store pentru tracking expandare
+                                dcc.Store(id='expanded-row-id', data=None),
                                 
-                                html.Hr(),
-                                
-                                # Secțiune 3: Listă Pacienți Activi
-                                html.Div([
-                                    html.H3("👥 Pacienți Activi", style={'marginTop': '30px'}),
-                                    html.Button(
-                                        '🔄 Reîmprospătează Listă',
-                                        id='admin-refresh-button',
-                                        n_clicks=0,
-                                        style={
-                                            'padding': '10px 20px',
-                                            'marginBottom': '20px',
-                                            'backgroundColor': '#95a5a6',
-                                            'color': 'white',
-                                            'border': 'none',
-                                            'borderRadius': '5px',
-                                            'cursor': 'pointer'
-                                        }
-                                    ),
-                                    html.Div(id='admin-patients-list')
-                                ])
+                                # Container pentru lista de înregistrări
+                                dcc.Loading(
+                                    id="data-view-loading",
+                                    type="default",
+                                    children=html.Div(id='data-view-container')
+                                )
                             ]
                         )
                     ]
@@ -398,4 +436,59 @@ layout = html.Div(
         )
     ]
 )
+
+# --- Layout pentru PACIENȚI (simplificat, fără tab-uri) ---
+patient_layout = html.Div([
+    # Header simplificat
+    html.Div([
+        html.H1(
+            "📊 Rezultate Pulsoximetrie",
+            style={'textAlign': 'center', 'color': '#2c3e50', 'marginBottom': '10px'}
+        ),
+        html.P(
+            "Vizualizați datele dumneavoastră medicale",
+            style={'textAlign': 'center', 'color': '#7f8c8d', 'marginBottom': '30px', 'fontSize': '16px'}
+        )
+    ]),
+    
+    # Container pentru datele pacientului
+    html.Div(
+        id='patient-data-view',
+        style={'padding': '20px'}
+    ),
+    
+    # Grafic interactiv pentru explorare
+    html.Div([
+        html.H3("📈 Grafic Interactiv", style={'color': '#2980b9', 'marginTop': '30px'}),
+        html.P("Folosiți mouse-ul pentru zoom și navigare.", style={'color': '#666', 'fontSize': '14px'}),
+        dcc.Loading(
+            id="patient-graph-loading",
+            type="default",
+            children=dcc.Graph(
+                id='patient-main-graph',
+                figure=go.Figure(),
+                style={'height': '600px'}
+            )
+        )
+    ], style={
+        'padding': '25px',
+        'backgroundColor': '#fff',
+        'borderRadius': '10px',
+        'boxShadow': '0 2px 8px rgba(0,0,0,0.1)',
+        'marginTop': '20px'
+    }),
+    
+    # Footer cu informații
+    html.Div([
+        html.Hr(style={'margin': '40px 0'}),
+        html.P(
+            "🔒 Datele dumneavoastră sunt confidențiale și securizate conform GDPR.",
+            style={'textAlign': 'center', 'color': '#95a5a6', 'fontSize': '12px'}
+        ),
+        html.P(
+            "Pentru întrebări, contactați medicul dumneavoastră.",
+            style={'textAlign': 'center', 'color': '#95a5a6', 'fontSize': '12px'}
+        )
+    ], style={'marginTop': '40px'})
+])
 
