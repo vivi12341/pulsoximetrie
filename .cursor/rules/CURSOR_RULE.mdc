@@ -1,0 +1,588 @@
+---
+alwaysApply: true
+---
+
+# 📊 Reguli de Programare - Aplicație Pulsoximetrie
+
+
+## 🎯 Cele 11 Principii Fundamentale
+
+1. **Claritate** - Nume descriptive, funcții < 50 linii, zero magic numbers
+2. **Robustețe** - Validare comprehensivă CSV, error handling, graceful degradation
+3. **Performanță** - Procesare eficientă date masive, caching grafice, optimizare memorie
+4. **Modularitate** - Separation of Concerns: parser, generator, processor, callbacks
+5. **Securitate** - Date anonimizate (fără date personale), link-uri token-based, validare uploads
+6. **Testabilitate** - Unit tests pentru parsing, integration tests pentru workflow
+7. **Mentenabilitate** - Cod organizat modular, docstrings Python, configurare externă
+8. **Observabilitate** - Logging structurat (logger_setup.py), metrics procesare
+9. **Portabilitate** - Responsive design (Dash), mobile-friendly, multi-browser
+10. **Reziliență** - Recuperare din erori CSV corupte, retry logic, fallback values
+11. **Etică** - Date anonime by design, accessibility, code review, zero duplication
+
+## 👥 Echipa de Dezvoltare Virtuală (21 Membri)
+
+Pentru fiecare task, formezi mental o echipă diversă din:
+- 3 Arhitecți de Programare
+- 3 Programatori Seniori Python/Data Science
+- 3 UI/UX Seniori (Medical UX)
+- 3 Manageri de Proiect
+- 3 Testeri (inclusiv date medicale)
+- 3 Programatori Creativi
+- 3 Programatori Critici
+
+## 🔄 Procesul de Colaborare
+
+### Faza 3: Propunerea de Soluții (Creativi + Seniori)
+1. **Minim 5 soluții diferite** pentru fiecare problemă
+2. Evaluarea Pro/Contra pentru fiecare
+3. Votul echipei pentru cea mai bună soluție
+
+## 🏗️ Stack Tehnologic
+
+**Current (Local Application):**
+- **Framework**: Dash (Python-based web framework)
+- **Data Processing**: pandas, numpy
+- **Visualization**: Plotly (interactive graphs)
+- **Image Export**: Kaleido
+- **File Watching**: watchdog
+
+**Future (Cloud Platform):**
+- **Frontend**: Dash + React components
+- **Backend**: FastAPI + Python
+- **Database**: PostgreSQL (Neon/Supabase)
+- **Storage**: Cloudflare R2 / MinIO
+- **PDF Processing**: pdfplumber / PyMuPDF
+- **Deployment**: Railway / Render + Docker
+
+## 🔧 Quality Gates
+
+### Pre-Commit Checklist:
+- [ ] Python type hints adăugate (mypy compatible)
+- [ ] No linting errors (pylint/flake8)
+- [ ] Tests pass pentru parsing și procesare
+- [ ] Manual testing (Chrome, Firefox, Edge)
+- [ ] Mobile responsive (Dash layout)
+- [ ] Logging added (min 5 per feature în logger_setup.py)
+- [ ] Error handling pentru CSV corrupt/invalid
+- [ ] Validare date medicale (SaO2: 0-100, Puls: 30-200)
+
+## 📊 Exemple de Cod
+
+### Format CSV Valid (REAL - Din Aparat Checkme O2)
+```csv
+Timp,Nivel de oxigen,Puls cardiac,Mişcare
+20:35:10 15/10/2025,92,78,0
+20:35:14 15/10/2025,92,78,0
+20:35:18 15/10/2025,93,78,0
+20:35:22 15/10/2025,94,77,0
+20:35:26 15/10/2025,92,76,1
+```
+
+**Coloane (în Română!):**
+- **Timp** → Format: `HH:MM:SS DD/MM/YYYY` (ex: `20:35:10 15/10/2025`)
+- **Nivel de oxigen** → SpO2 (%) - 0-100
+- **Puls cardiac** → Puls (bpm) - 30-200
+- **Mişcare** → Indicator mișcare (0-25+) - pentru detectare zgomot/artefacte
+
+**Filename Format:**
+```
+Checkme O2 [APARAT]_[YYYYMMDDHHMMSS].csv
+```
+Exemple:
+- `Checkme O2 0331_20251015203510.csv` → Aparat 0331, Start: 15 Oct 2025 20:35:10
+- `Checkme O2 3539_20250502233000.csv` → Aparat 3539, Start: 2 Mai 2025 23:30:00
+
+**ATENȚIE:** CSV-ul NU conține:
+- ❌ Nume/Prenume pacient
+- ❌ CNP/Date naștere
+- ❌ Telefon/Email
+- ❌ Adresă pacient
+- ❌ Număr aparat în CSV (este în filename!)
+- ❌ Orice informație identificabilă
+
+**Frecvență înregistrare:** ~4 secunde între măsurători (poate varia).
+
+**PDF Rapoarte Format:**
+```
+Checkme O2 [APARAT]_[MIN]_[MAX]_[YYYYMMDDHHMMSS].pdf
+```
+Exemple:
+- `Checkme O2 0331_70_100_20251015203510.pdf` 
+  - Aparat: 0331
+  - Parametri alerte: Min SpO2=70%, Max SpO2=100%
+  - Timestamp: 15 Oct 2025 20:35:10
+
+**Workflow Bulk Upload Medic:**
+
+**Model REAL:** 1 PACIENT = 1 LINK PERSISTENT (poate avea MULTIPLE înregistrări)
+
+1. **Medicul uploadează BULK** fișiere pentru multiple înregistrări (5-10 teste):
+   ```
+   Test 1: Checkme O2 0331_20251015203510.csv + .pdf (Aparat 0331, 15 Oct)
+   Test 2: Checkme O2 3539_20251015210000.csv + .pdf (Aparat 3539, 15 Oct)
+   Test 3: Checkme O2 0331_20251016203000.csv + .pdf (Aparat 0331, 16 Oct)
+   Test 4: Checkme O2 3539_20251017220000.csv + .pdf (Aparat 3539, 17 Oct)
+   etc. (5-10 perechi CSV+PDF)
+   ```
+
+2. **Sistem procesează** fișierele:
+   - Parsare CSV → date medicale
+   - Parsare PDF → raport → JSONB DB
+   - **Afișare dialog**: "Selectați pacient pentru fiecare înregistrare"
+
+3. **Medic asociază manual** fiecare test la un pacient:
+   ```
+   Test 1 (Aparat 0331, 15 Oct):
+     ⚪ OPȚIUNE A: Creează LINK NOU (pacient nou "Ion Popescu")
+        → Sistem generează: https://app.com/view/abc123-uuid
+        → Link PERSISTENT pentru Ion Popescu
+   
+   Test 2 (Aparat 3539, 15 Oct):
+     ⚪ OPȚIUNE A: Creează LINK NOU (pacient nou "Maria Ionescu")
+        → Sistem generează: https://app.com/view/def456-uuid
+   
+   Test 3 (Aparat 0331, 16 Oct):
+     ⚫ OPȚIUNE B: ADAUGĂ la link EXISTENT
+        → Medic selectează link: "Ion Popescu (abc123)"
+        → Test 3 se adaugă la același link (https://app.com/view/abc123)
+        → Ion vede acum 2 înregistrări pe același link (15 Oct + 16 Oct)
+   
+   Test 4 (Aparat 3539, 17 Oct):
+     ⚫ OPȚIUNE B: ADAUGĂ la link EXISTENT
+        → Medic selectează: "Maria Ionescu (def456)"
+   ```
+
+4. **MERGE LINKS** (pentru același pacient cu link-uri diferite):
+   ```
+   Scenariu: Ion Popescu are 2 link-uri (aparate diferite în nopți diferite):
+     - Link 1 (abc123): Test cu Aparat 0331, 15 Oct
+     - Link 2 (xyz789): Test cu Aparat 3539, 16 Oct
+   
+   Medic selectează: "Merge link xyz789 → abc123"
+   → Rezultat: Toate testele lui Ion acum pe https://app.com/view/abc123
+   → Link xyz789 devine invalid (redirect către abc123)
+   → Ion vede 2 înregistrări SEPARATE pe același link:
+       - Înregistrare 1: 15 Oct, Aparat 0331 (grafic + raport)
+       - Înregistrare 2: 16 Oct, Aparat 3539 (grafic + raport)
+   ```
+
+5. **Medic trimite link-ul persistent** către pacient (email/SMS)
+
+**IMPORTANT:**
+- ✅ **Link-uri PERSISTENTE**: 1 link = 1 pacient real (poate avea N teste)
+- ✅ **"Adaugă la link existent"**: Control/test nou pentru același pacient
+- ✅ **"Merge links"**: Unire link-uri pentru același pacient (date SEPARATE, nu amestecate)
+- ✅ **Afișare SEPARATĂ**: Fiecare test = card/secțiune distinctă pe pagina pacientului
+- ✅ **Același aparat, zile diferite**: Poate fi același pacient (medic decide)
+- ✅ **Aparate diferite, aceeași zi**: Poate fi același pacient (medic decide)
+- ✅ **Link salvat o dată**: Pacient bookmarkează, accesează oricând (fără expirare)
+
+### Parsing Pattern (Data Parser REAL - Format Checkme O2)
+```python
+from typing import Optional, Dict, Tuple
+import pandas as pd
+import os
+import re
+from logger_setup import setup_logger
+
+logger = setup_logger(__name__)
+
+def extract_device_from_filename(filename: str) -> Optional[str]:
+    """
+    Extrage numărul aparatului din numele fișierului.
+    
+    Format: "Checkme O2 0331_20251015203510.csv" → "0331"
+    """
+    match = re.search(r'Checkme O2 (\d{4})_', filename)
+    if match:
+        return match.group(1)
+    logger.warning(f"Could not extract device number from: {filename}")
+    return None
+
+def parse_checkme_csv(file_path: str) -> Optional[Tuple[pd.DataFrame, str]]:
+    """
+    Parsează fișier CSV Checkme O2 cu format românesc.
+    
+    Args:
+        file_path: Calea către fișierul CSV
+        
+    Returns:
+        Tuple (DataFrame cu coloane: DateTime, SpO2, Puls, Miscare, device_num)
+        sau None dacă eroare
+    """
+    tag = "parse_checkme_csv"
+    logger.info(f"[{tag}] START parsing: {file_path}")
+    
+    try:
+        # Extrage numărul aparatului din filename
+        filename = os.path.basename(file_path)
+        device_num = extract_device_from_filename(filename)
+        if not device_num:
+            logger.error(f"[{tag}] Cannot extract device number from filename")
+            return None
+        
+        # Citire CSV cu encoding UTF-8 (pentru caractere românești)
+        df = pd.read_csv(file_path, encoding='utf-8')
+        
+        # Validare coloane obligatorii (ROMÂNĂ!)
+        required_cols = ['Timp', 'Nivel de oxigen', 'Puls cardiac']
+        if not all(col in df.columns for col in required_cols):
+            logger.error(f"[{tag}] Missing required columns. Found: {df.columns.tolist()}")
+            return None
+        
+        # VERIFICARE CRITICĂ: Asigură-te că NU există date personale
+        forbidden_cols = ['Nume', 'Prenume', 'Name', 'CNP', 'Phone', 
+                         'Telefon', 'Email', 'Address', 'Adresa', 'Patient', 'Pacient']
+        found_forbidden = [col for col in forbidden_cols if col in df.columns]
+        if found_forbidden:
+            logger.error(f"[{tag}] PRIVACY VIOLATION: Found personal data columns: {found_forbidden}")
+            return None
+        
+        # Parsare timestamp din format românesc: "HH:MM:SS DD/MM/YYYY"
+        df['DateTime'] = pd.to_datetime(
+            df['Timp'], 
+            format='%H:%M:%S %d/%m/%Y'
+        )
+        
+        # Redenumire coloane pentru consistență
+        df = df.rename(columns={
+            'Nivel de oxigen': 'SpO2',
+            'Puls cardiac': 'Puls',
+            'Mişcare': 'Miscare'  # opțional
+        })
+        
+        # Validare date medicale
+        initial_count = len(df)
+        df = df[(df['SpO2'] >= 0) & (df['SpO2'] <= 100)]
+        df = df[(df['Puls'] >= 30) & (df['Puls'] <= 200)]
+        
+        filtered_count = initial_count - len(df)
+        if filtered_count > 0:
+            logger.warning(f"[{tag}] Filtered {filtered_count} invalid medical values")
+        
+        logger.info(f"[{tag}] SUCCESS: {len(df)} records parsed from device {device_num}")
+        
+        # Selectează coloanele finale
+        cols = ['DateTime', 'SpO2', 'Puls']
+        if 'Miscare' in df.columns:
+            cols.append('Miscare')
+        
+        return df[cols], device_num
+        
+    except Exception as e:
+        logger.error(f"[{tag}] ERROR: {str(e)}", exc_info=True)
+        return None
+```
+
+### Dash Callback Pattern
+```python
+from dash import Input, Output, State, callback
+from dash.exceptions import PreventUpdate
+
+@callback(
+    Output('interactive-graph', 'figure'),
+    Output('output-filename-container', 'children'),
+    Input('upload-data-component', 'contents'),
+    State('upload-data-component', 'filename'),
+    prevent_initial_call=True
+)
+def update_graph(contents, filename):
+    """
+    Callback pentru actualizare grafic la upload fișier CSV.
+    """
+    tag = "update_graph_callback"
+    logger.info(f"[{tag}] START - File: {filename}")
+    
+    if contents is None:
+        logger.warning(f"[{tag}] No file uploaded")
+        raise PreventUpdate
+    
+    try:
+        # Decode base64 content
+        df = decode_csv_from_upload(contents)
+        
+        # Generare grafic
+        fig = generate_interactive_plot(df, filename)
+        
+        success_msg = html.Div(
+            f"✅ Fișier încărcat: {filename}",
+            style={'color': 'green', 'marginTop': '10px'}
+        )
+        
+        logger.info(f"[{tag}] SUCCESS")
+        return fig, success_msg
+        
+    except Exception as e:
+        logger.error(f"[{tag}] ERROR: {str(e)}", exc_info=True)
+        error_msg = html.Div(
+            f"❌ Eroare la procesare: {str(e)}",
+            style={'color': 'red', 'marginTop': '10px'}
+        )
+        return go.Figure(), error_msg
+```
+
+## 🚀 Proces de Dezvoltare
+
+### Pentru fiecare task:
+1. **Analiza (7 min)** - Citește cerințele, identifică complexitatea
+2. **Design (15 min)** - Propune 5+ soluții, evaluează Pro/Contra
+3. **Implementare** - Cod defensiv, logging (min 7), error handling
+4. **Review (7 min)** - Self-review cu checklist, quality gates
+
+## 💡 Best Practices
+
+### DO ✅
+- **Validează CSV format Checkme O2**: Coloane în ROMÂNĂ (`Timp`, `Nivel de oxigen`, `Puls cardiac`, `Mişcare`)
+- **Parsează timestamp românesc**: Format `HH:MM:SS DD/MM/YYYY` (nu englezesc!)
+- **Extrage device number din filename**: Regex `Checkme O2 (\d{4})_`
+- **Verifică absența date personale** (CSV conține DOAR date medicale + timestamp)
+- **Encoding UTF-8**: Pentru caractere românești (ă, â, î, ș, ț)
+- Folosește type hints Python pentru claritate
+- Implementează error handling pentru CSV corrupt/format greșit
+- Loghează comprehensiv cu logger_setup.py (fără date identificabile!)
+- Testează grafice pe multiple rezoluții
+- Configurare externă (config.py, colors_config.json)
+- Implementează loading states în Dash (dcc.Loading)
+- Folosește pandas vectorization (evită loops)
+- **Token-uri PERSISTENTE** pentru link-uri (UUID v4, reutilizabile pentru același pacient)
+- **Asociere manuală** medic → test la pacient (link nou SAU link existent)
+- **Merge links** pentru același pacient (unire 2+ link-uri → toate datele în 1 link)
+- **Afișare multiplă** înregistrări pe același link (secțiuni SEPARATE, nu amestecate)
+- **Format titlu descriptiv** per înregistrare cu zi săptămână + context temporal
+- **Număr aparat ca string** (ex: "0331" NU 331 - păstrează zero-ul leading!)
+- **1 pacient = 1 link persistent** (poate avea N teste în timp)
+
+### DON'T ❌
+- **NU presupune coloane în engleză** (sunt în română: `Timp`, nu `Time`!)
+- **NU convertești număr aparat la integer** (păstrează "0331" ca string!)
+- **NU ignora encoding UTF-8** (caractere românești se corupe fără UTF-8)
+- Nu ignora erori de parsing CSV (format timestamp greșit)
+- Nu hard-codezi culori/limite medicale
+- Nu folosi print() în producție (doar logger)
+- Nu lăsa memory leaks (închide file handles)
+- Nu ignora accessibility (ARIA labels în Dash)
+- Nu commit fără testing pe date reale (CSV-uri Checkme O2!)
+- Nu procesa CSV fără validare medicală
+- Nu folosi magic numbers (SaO2/Puls limits în config)
+- **NU stoca date personale în CSV/timestamp** (nume, CNP în fișiere date)
+- **NU genera ID-uri predictibile** (folosește UUID/secrets pentru token-uri)
+- **NU include date identificabile în metadata EXIF** (PNG/JPG exportate)
+- **NU presupune frecvență fixă** (poate varia între 3-5 secunde)
+- **NU amesteca datele** din înregistrări diferite (afișare SEPARATĂ obligatorie!)
+- **NU ștergi link-ul source** la merge (redirect, nu delete, pentru bookmark-uri vechi)
+
+## 🎯 Target Metrics
+- **CSV Parsing Time**: < 2s pentru 10,000 înregistrări
+- **Graph Generation**: < 3s pentru 8h de date
+- **Memory Usage**: < 500MB pentru batch processing
+- **Error Rate**: < 0.5% (date medicale critice)
+- **Mobile Responsive**: Grafice lizibile pe 360px width
+
+## 📊 Specific pentru Pulsoximetrie
+
+### 🏥 Model Date: 1 PACIENT = 1 LINK PERSISTENT (Multiple Înregistrări)
+- **Link Persistent:** 1 link = 1 pacient real (poate avea N teste în timp)
+- **Exemplu:** Pacient "Ion Popescu" → link ABC123 → 3 teste (15 Oct, 16 Oct, 20 Oct)
+- **Bulk Upload:** Medic uploadează 10-20 fișiere → asociază manual la pacienți (link-uri noi sau existente)
+- **Distribuire:** Medic trimite link persistent o singură dată → pacient bookmarkează
+- **Teste noi:** Medic adaugă la același link → pacient vede automat (refresh pagină)
+- **Merge Links:** Medic poate uni 2+ link-uri ale aceluiași pacient → toate datele în 1 link
+- **Afișare:** Fiecare test = secțiune SEPARATĂ pe pagina pacientului (nu se amestecă datele)
+
+### 🔒 Anonimizare Date (Privacy by Design)
+- **ZERO date personale**: CSV-uri conțin DOAR timestamp + date medicale + număr aparat
+- **Fără nume/prenume**: Identificare exclusiv prin token link (generat automat)
+- **Fără CNP/telefon**: Nu se stochează date identificabile
+- **GDPR Simplificat**: Date anonime = fără consimțământ explicit necesar
+- **Link-uri Token-Based**: Format `https://app.com/view/abc123xyz` (UUID random)
+
+### 🔗 Model Link-uri PERSISTENTE + Merge
+- **1 LINK = 1 PACIENT REAL** (poate avea multiple înregistrări)
+- **Link Persistent:** https://app.com/view/abc123-uuid (valid indefinit, fără expirare)
+- **Token format**: UUID v4 random (ex: `abc123-7f3a2b1c-9d4e-4f5a-8b6c`)
+- **Asociere Manuală**: Medic selectează pentru fiecare test: Link NOU sau Link EXISTENT
+- **Multiple Teste**: 1 link → N înregistrări (afișate SEPARAT ca liste/carduri)
+
+**Exemplu Workflow Complet:**
+```
+PACIENT: Ion Popescu
+
+Test 1 (15 Oct, Aparat 0331):
+  → Medic: "Creează link NOU"
+  → Sistem generează: https://app.com/view/ion-abc123
+  → Medic trimite link către Ion
+
+Test 2 (16 Oct, Aparat 0331):
+  → Medic: "Adaugă la link existent: Ion Popescu (abc123)"
+  → Sistemul adaugă test la același link
+  → Ion accesează același link → vede 2 înregistrări
+
+Test 3 (20 Oct, Aparat 3539 - aparat DIFERIT):
+  → Medic (greșeală): "Creează link NOU" 
+  → Sistem generează: https://app.com/view/ion-xyz789
+  → Acum Ion are 2 link-uri diferite!
+
+MERGE LINKS:
+  → Medic: "Merge link xyz789 în abc123"
+  → Toate testele acum în https://app.com/view/ion-abc123
+  → Link xyz789 → redirect către abc123
+  → Ion vede 3 înregistrări pe un singur link:
+      1. 15 Oct, Aparat 0331 (secțiune separată)
+      2. 16 Oct, Aparat 0331 (secțiune separată)
+      3. 20 Oct, Aparat 3539 (secțiune separată)
+```
+
+**Afișare Pagină Pacient:**
+```
+[Header] Înregistrările Tale - Link: abc123
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📊 ÎNREGISTRARE 1
+Marți 15 Octombrie 2025 seara ora 20:35 
+până în Miercuri 16 Octombrie ora 06:31
+Aparat: 0331
+[Grafic interactiv SpO2 + Puls]
+[Raport PDF interpretat]
+[Download CSV] [Download PNG]
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📊 ÎNREGISTRARE 2
+Miercuri 16 Octombrie 2025 seara ora 21:00
+până în Joi 17 Octombrie ora 07:15
+Aparat: 0331
+[Grafic interactiv SpO2 + Puls]
+[Raport PDF interpretat]
+[Download CSV] [Download PNG]
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📊 ÎNREGISTRARE 3
+Duminică 20 Octombrie 2025 seara ora 22:30
+până în Luni 21 Octombrie ora 06:45
+Aparat: 3539 (aparat diferit!)
+[Grafic interactiv SpO2 + Puls]
+[Raport PDF interpretat]
+[Download CSV] [Download PNG]
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+```
+
+### 📋 Format Titlu Pagină Pacient
+Pagina pacientului afișează titlu descriptiv **fără nume**, dar cu context temporal:
+
+**Format:**
+```
+Înregistrare din [Zi Săptămână] [Data] [Moment Zi] ora [HH:MM]
+până în [Zi Săptămână] [Data] ora [HH:MM] [Status] - Aparat [NNNN]
+```
+
+**Exemple concrete:**
+- `Înregistrare din Joi 2 Mai 2025 seara ora 23:30 până în Vineri 3 Mai 2025 ora 06:37 - Aparat 3539`
+- `Înregistrare din Marți 7 Mai 2025 după ora 12:15 până în Miercuri 8 Mai 2025 ora 02:30 (întreruptă înainte de ora 12 noaptea) - Aparat 0563`
+
+**Reguli pentru moment zi (START):**
+- **"seara"** → Dacă ora început ≥ 20:00
+- **"după ora 12"** → Dacă ora început ≥ 12:00 și < 20:00
+- **"dimineața"** → Dacă ora început < 12:00
+
+**Reguli pentru status (END):**
+- **"(întreruptă înainte de ora 12 noaptea)"** → Dacă înregistrarea se termină înainte de miezul nopții (00:00) a doua zi
+  - Exemplu: Start 2 Mai 23:30 → End 3 Mai 02:30 = OK (continuă peste 00:00)
+  - Exemplu: Start 2 Mai 23:30 → End 2 Mai 23:59 = ÎNTRERUPTĂ (se termină înainte de 00:00)
+- **Nimic** → Dacă înregistrarea continuă peste 00:00 (înregistrare completă nocturnă)
+
+**Implementare:**
+```python
+from datetime import datetime, timedelta
+
+def generate_recording_title(start_dt: datetime, end_dt: datetime, device_num: str) -> str:
+    """
+    Generează titlu descriptiv pentru pagina pacientului.
+    
+    Args:
+        start_dt: Datetime început înregistrare
+        end_dt: Datetime sfârșit înregistrare
+        device_num: Număr aparat (ex: "3539", "0563")
+    
+    Returns:
+        Titlu complet cu zi săptămână, date, context temporal
+    """
+    # Zile săptămână în română
+    days_ro = ['Luni', 'Marți', 'Miercuri', 'Joi', 'Vineri', 'Sâmbătă', 'Duminică']
+    
+    # Formatare dată: "2 Mai 2025"
+    start_day = days_ro[start_dt.weekday()]
+    start_date = start_dt.strftime("%d %B %Y").lstrip('0')  # Remove leading zero
+    
+    # Moment zi pentru START
+    if start_dt.hour >= 20:
+        moment = "seara"
+    elif start_dt.hour >= 12:
+        moment = "după ora 12"
+    else:
+        moment = "dimineața"
+    
+    # Verificare dacă înregistrare întreruptă
+    # Întreruptă = se termină înainte de 00:00 (miezul nopții) zilei următoare
+    next_midnight = start_dt.replace(hour=0, minute=0, second=0) + timedelta(days=1)
+    is_interrupted = end_dt < next_midnight
+    status = " (întreruptă înainte de ora 12 noaptea)" if is_interrupted else ""
+    
+    # Formatare END
+    end_day = days_ro[end_dt.weekday()]
+    end_date = end_dt.strftime("%d %B %Y").lstrip('0')
+    
+    title = (
+        f"Înregistrare din {start_day} {start_date} {moment} "
+        f"ora {start_dt.strftime('%H:%M')} până în {end_day} {end_date} "
+        f"ora {end_dt.strftime('%H:%M')}{status} - Aparat {device_num}"
+    )
+    
+    return title
+```
+
+**Test Cases - Exemple Concrete:**
+
+| Fișier CSV | Start | End | Titlu Așteptat |
+|------------|-------|-----|----------------|
+| `Checkme O2 0331_20251015203510.csv` | Marți 15 Oct 20:35 | Miercuri 16 Oct 06:31 | `Înregistrare din Marți 15 Octombrie 2025 seara ora 20:35 până în Miercuri 16 Octombrie 2025 ora 06:31 - Aparat 0331` |
+| `Checkme O2 3539_20250502233000.csv` | Joi 2 Mai 23:30 | Vineri 3 Mai 06:37 | `Înregistrare din Joi 2 Mai 2025 seara ora 23:30 până în Vineri 3 Mai 2025 ora 06:37 - Aparat 3539` |
+| `Checkme O2 0563_20250507151000.csv` | Marți 7 Mai 15:10 | Marți 7 Mai 22:45 | `Înregistrare din Marți 7 Mai 2025 după ora 12 ora 15:10 până în Marți 7 Mai 2025 ora 22:45 (întreruptă înainte de ora 12 noaptea) - Aparat 0563` |
+| `Checkme O2 3539_20250510103000.csv` | Sâmbătă 10 Mai 10:30 | Sâmbătă 10 Mai 18:00 | `Înregistrare din Sâmbătă 10 Mai 2025 dimineața ora 10:30 până în Sâmbătă 10 Mai 2025 ora 18:00 (întreruptă înainte de ora 12 noaptea) - Aparat 3539` |
+
+**Exemplu REAL analizat:**
+- **Fișier:** `Checkme O2 0331_20251015203510.csv`
+- **Înregistrări:** 9,003 rânduri (aprox. 10 ore)
+- **Prima înregistrare:** `20:35:10 15/10/2025,92,78,0`
+- **Ultima înregistrare:** `06:31:38 16/10/2025,96,59,0`
+- **Frecvență:** 4 secunde între măsurători
+- **SpO2 minim detectat:** 66% (episod hipoxemie severă!)
+- **SpO2 maxim:** 96%
+- **Puls minim:** 49 bpm
+- **Puls maxim:** 79 bpm
+- **Indicator mișcare maxim:** 25 (moment cu artefacte)
+
+### 📊 Validare Date Medicale
+- **SaO2**: 0-100% (alerte < 88% - hipoxemie severă)
+- **Puls**: 30-200 bpm (alerte < 40 sau > 120 - anomalii)
+- **Timestamp**: Validare continuitate (detectare gap-uri > 10 secunde)
+- **Număr Aparat**: Format string 4 cifre: "3539", "0563", "3541", etc.
+  - Poate începe cu 0 (ex: "0563")
+  - Se stochează ca string (NU integer pentru a păstra 0-ul leading)
+  - Se extrage din filename CSV sau se atribuie manual de medic
+
+### 🖼️ Export & Branding
+- **Watermark**: Logo clinică + telefon + adresă (pe toate PNG-urile)
+- **Metadata**: ZERO informații pacient în metadata EXIF
+- **Batch Processing**: Foldere denumite `15oct2025_20h35-06h31_Aparat0331`
+- **Link Token**: UUID unic per înregistrare (nu reutilizabil, nu predictibil)
+- **PDF Parsing**: Rapoarte parsate → JSONB (fără date identificare)
+- **Denumire Export**: `15oct2025_20h35-06h31_Aparat0331.png` (fără nume pacient!)
+
+---
+
+> **"Code is read 10x more than it's written"** - Scrie cod pentru următorul dezvoltator!
+> **"Medical data is critical"** - Zero compromisuri pe validare și securitate!
+
+**Versiune:** 1.0 Pulsoximetrie | **Pentru:** Analizator Date Pulsoximetrie + Cloud Platform  
+**Tehnologie Actuală:** Python + Dash + Plotly + pandas + Kaleido  
+**Tehnologie Viitoare (Cloud):** FastAPI + PostgreSQL + Cloudflare R2 + Railway
+

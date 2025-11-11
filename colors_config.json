@@ -1,0 +1,59 @@
+{
+  "_comment": "Configurare culori pentru graficul de pulsoximetrie. Schimbă 'active_profile' pentru a selecta setul de culori dorit.",
+  
+  "active_profile": "gradient",
+  
+  "profiles": {
+    "gradient": {
+      "description": "Gradient complex cu multe culori (violet -> roșu -> portocaliu -> galben -> verde)",
+      "colorscale_min": 75,
+      "colorscale_max": 99,
+      "colorscale": [
+        [0.0,    "#6A0DAD"],
+        [0.21,   "#C42557"],
+        [0.42,   "#D62728"],
+        [0.58,   "#FF7F0E"],
+        [0.63,   "#FFB900"],
+        [0.71,   "#F0D40A"],
+        [0.79,   "#B8D627"],
+        [0.83,   "#2CA02C"],
+        [0.875,  "#1E8A34"],
+        [0.96,   "#0F652A"],
+        [1.0,    "#004D21"]
+      ]
+    },
+    
+    "simple": {
+      "description": "Doar 2 culori: roșu pentru valori joase și verde pentru valori normale",
+      "colorscale_min": 75,
+      "colorscale_max": 99,
+      "colorscale": [
+        [0.0, "#D62728"],
+        [0.62, "#D62728"],
+        [0.63, "#2CA02C"],
+        [1.0, "#2CA02C"]
+      ]
+    },
+    
+    "blue_red": {
+      "description": "Gradient simplu albastru-roșu (2 culori)",
+      "colorscale_min": 75,
+      "colorscale_max": 99,
+      "colorscale": [
+        [0.0, "#FF0000"],
+        [1.0, "#0000FF"]
+      ]
+    },
+    
+    "red_green": {
+      "description": "Tranziție directă roșu-verde (2 culori)",
+      "colorscale_min": 75,
+      "colorscale_max": 99,
+      "colorscale": [
+        [0.0, "#FF0000"],
+        [1.0, "#00FF00"]
+      ]
+    }
+  }
+}
+

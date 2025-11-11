@@ -1,0 +1,42 @@
+1. Render.com – hosting gratuit (750h/lună)
+   Pași rapizi:
+   a) Pui proiectul pe GitHub
+   b) Creezi Web Service → build: `pip install -r requirements.txt`, start: `gunicorn run:server`
+   c) Primești URL public + opțional domeniu propriu
+   Pro: foarte simplu; Contra: hibernează după 15 min de inactivitate
+
+2. Railway.app – similar, 512 MB RAM gratuit (~300h/lună)
+   a) Import repo din GitHub
+   b) Start: `python run.py` sau `gunicorn run:server`
+
+3. Fly.io – micro-VM gratuit 24/7
+   a) Instalezi `flyctl` → `fly launch --python`
+   b) `fly deploy`
+   Pro: rulează continuu; Contra: necesită Docker/CLI
+
+4. PythonAnywhere – host clasic, limitat
+   - Gratuit fără HTTPS, CPU 1h/zi
+   - Configurezi WSGI să importe `run.server`
+
+5. Streamlit Cloud – doar dacă convertezi UI la Streamlit
+   - Hosting gratuit permanent
+
+Pregătire proiect:
+• `requirements.txt` complet (dash, plotly, pandas, gunicorn etc.)
+• În `run.py`:
+   ```python
+   from app_instance import app
+   server = app.server
+   if __name__ == "__main__":
+       app.run_server(host="0.0.0.0", port=int(os.getenv("PORT", 8050)))
+   ```
+• Pe platformă poți folosi fie `python run.py`, fie `gunicorn run:server`.
+
+Recomandare:
+– Pentru început: Render (simplu, gratuit).
+– Pentru rulare 24/7: Fly.io.
+
+Pași imediat:
+1. Încarcă repo pe GitHub.
+2. Alege platforma (ex. Render) și urmează pașii.
+3. Dacă apar erori, consultă log-urile și revino pentru ajutor.

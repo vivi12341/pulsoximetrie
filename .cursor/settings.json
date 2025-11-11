@@ -1,0 +1,18 @@
+{
+  "$schema": "https://cursor.sh/schemas/settings.json",
+  "autoApplyRules": true,
+  "defaultPrompt": "Funcționează ca o echipă de 3 programatori (Alex, Maria, Vlad), 1 tester (Ioana) și 1 UI designer (Daria). Nu distruge funcționalități neimplicate. Dacă modifici un fișier .py, trimite-l complet.",
+  "rules": [
+    "./rules/CURSOR_RULE.mdc",
+    "./rules/EG.mdc",
+    "./rules/SIMPLU.mdc",
+    "./rules/TESTEAZA.mdc"
+  ],
+  "experimental": {
+    "stickyPrompts": [
+      "Păstrează integritatea aplicației.",
+      "Livrează fișiere complete când le modifici.",
+      "Adaugă loguri doar pentru debugging-ul curent."
+    ]
+  }
+}

@@ -1,0 +1,88 @@
+═══════════════════════════════════════════════════════════════
+        HARTA INTERFAȚĂ GRAFICĂ - Analizator Pulsoximetrie
+═══════════════════════════════════════════════════════════════
+
+[T1] Titlu Principal: "Analizator Pulsoximetrie Nocturnă"
+
+[NT1] Container Notificări Globale (erori/success messages)
+
+┌─────────────────────────────────────────────────────────────┐
+│ [TAB1] VIZUALIZARE INTERACTIVĂ                              │
+├─────────────────────────────────────────────────────────────┤
+│                                                             │
+│  [L1] "Pas 1: Încărcați un fișier CSV"                     │
+│  ┌─────────────────────────────────────────────────────┐   │
+│  │ [UP1] Upload Component (Drag & Drop)                │   │
+│  │       "Trageți și plasați sau Selectați fișier CSV" │   │
+│  └─────────────────────────────────────────────────────┘   │
+│                                                             │
+│  [FN1] Output Filename Container (afișează fișier încărcat) │
+│                                                             │
+│  ───────────────────────────────────────────────────────   │
+│                                                             │
+│  [L2] "Pas 2: Analizați graficul"                          │
+│  ┌─────────────────────────────────────────────────────┐   │
+│  │ [LS1] Loading Spinner (apare în timpul procesării)   │   │
+│  │ ┌───────────────────────────────────────────────┐   │   │
+│  │ │ [G1] GRAFIC INTERACTIV                        │   │   │
+│  │ │                                               │   │   │
+│  │ │  ┌─┬────────────────────────────────────────┐ │   │   │
+│  │ │  │█│ [SG1] Subplot SaO2                     │ │   │   │
+│  │ │  │█│      - Heatmap legendă (stânga)        │ │   │   │
+│  │ │  │█│      - Linie SaO2 cu gradient (dreapta)│ │   │   │
+│  │ │  ├─┼────────────────────────────────────────┤ │   │   │
+│  │ │  │ │ [SG2] Subplot Puls                     │ │   │   │
+│  │ │  │ │      - Linie Puls roșie                │ │   │   │
+│  │ │  └─┴────────────────────────────────────────┘ │   │   │
+│  │ │                                               │   │   │
+│  │ │  [ZC1] Controale Zoom (Plotly native)        │   │   │
+│  │ │  [PC1] Controale Pan                         │   │   │
+│  │ │  [RC1] Reset View                            │   │   │
+│  │ └───────────────────────────────────────────────┘   │   │
+│  └─────────────────────────────────────────────────────┘   │
+│                                                             │
+└─────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────┐
+│ [TAB2] PROCESARE ÎN LOT (BATCH)                             │
+├─────────────────────────────────────────────────────────────┤
+│                                                             │
+│  [L3] "Pas 1: Specificați căile folderelor"                │
+│  [IN1] Input Folder Path (text input full width)           │
+│  [IN2] Output Folder Path (text input full width)          │
+│                                                             │
+│  [L4] "Pas 2: Configurați durata ferestrei"                │
+│  [IN3] Window Minutes Input (number, 1-120)  [LB1] "minute"│
+│                                                             │
+│  ───────────────────────────────────────────────────────   │
+│                                                             │
+│  [L5] "Pas 3: Porniți procesarea"                          │
+│  [BTN1] "Pornește Procesarea în Lot" (buton verde)         │
+│                                                             │
+│  [ST1] Batch Status Container (feedback procesare)         │
+│                                                             │
+└─────────────────────────────────────────────────────────────┘
+
+═══════════════════════════════════════════════════════════════
+NOTAȚII COMPONENTE:
+  [T#]   = Titlu
+  [L#]   = Label/Text
+  [TAB#] = Tab
+  [G#]   = Grafic
+  [SG#]  = Subplot Grafic
+  [UP#]  = Upload
+  [IN#]  = Input
+  [BTN#] = Buton
+  [NT#]  = Notificare
+  [FN#]  = Filename display
+  [LS#]  = Loading Spinner
+  [ST#]  = Status container
+  [ZC#]  = Zoom Control
+  [PC#]  = Pan Control
+  [RC#]  = Reset Control
+  [LB#]  = Label inline
+
+MODIFICĂRI PLANIFICATE:
+  - [G1] va avea linie dinamică care se subțiază/îngroașă cu zoom
+═══════════════════════════════════════════════════════════════
+

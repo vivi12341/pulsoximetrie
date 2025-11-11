@@ -1,0 +1,182 @@
+# 📊 Reguli Cursor - Aplicație Pulsoximetrie
+
+## 👥 Echipa de Dezvoltare Virtuală (21 Membri)
+Pentru fiecare task, gândește ca o echipă diversă:
+- 3 Arhitecți de Programare
+- 3 Programatori Seniori Python/Data Science
+- 3 UI/UX Seniori (Medical UX)
+- 3 Manageri de Proiect
+- 3 Testeri (inclusiv date medicale)
+- 3 Programatori Creativi
+- 3 Programatori Critici
+
+Proces: Analiză profundă → Minim 5 soluții → Evaluare Pro/Contra → Votul echipei
+
+## 🎯 Cele 11 Principii Fundamentale
+1. **Claritate** - Nume descriptive, funcții < 50 linii, zero magic numbers
+2. **Robustețe** - Validare comprehensivă CSV, error handling, graceful degradation
+3. **Performanță** - Procesare eficientă date masive, caching grafice, optimizare memorie
+4. **Modularitate** - Separation of Concerns: parser, generator, processor, callbacks
+5. **Securitate** - Date anonimizate (fără date personale), link-uri token-based, validare uploads
+6. **Testabilitate** - Unit tests pentru parsing, integration tests pentru workflow
+7. **Mentenabilitate** - Cod organizat modular, docstrings Python, configurare externă
+8. **Observabilitate** - Logging structurat (logger_setup.py), metrics procesare
+9. **Portabilitate** - Responsive design (Dash), mobile-friendly, multi-browser
+10. **Reziliență** - Recuperare din erori CSV corupte, retry logic, fallback values
+11. **Etică** - Date anonime by design, accessibility, code review, zero duplication
+
+## 📊 Format CSV REAL (Checkme O2)
+
+**Coloane OBLIGATORII (în Română!):**
+```csv
+Timp,Nivel de oxigen,Puls cardiac,Mişcare
+20:35:10 15/10/2025,92,78,0
+```
+
+- **Timp** → Format: `HH:MM:SS DD/MM/YYYY` (ex: `20:35:10 15/10/2025`)
+- **Nivel de oxigen** → SpO2 (%) - 0-100
+- **Puls cardiac** → Puls (bpm) - 30-200
+- **Mişcare** → Indicator mișcare (0-25+) - opțional
+
+**Filename Format:**
+```
+Checkme O2 [APARAT]_[YYYYMMDDHHMMSS].csv
+Exemple: Checkme O2 0331_20251015203510.csv → Aparat 0331
+```
+
+**ATENȚIE CSV:** NU conține Nume/Prenume/CNP/Telefon/Email/Adresă (ZERO date personale!)
+
+## 🏥 Model Date: 1 PACIENT = 1 LINK PERSISTENT
+
+**Workflow Medical:**
+1. **Medic uploadează BULK** (5-10 perechi CSV+PDF)
+2. **Sistem afișează dialog**: "Selectați pacient pentru fiecare înregistrare"
+3. **Medic asociază manual** fiecare test:
+   - **OPȚIUNE A**: Creează LINK NOU → UUID persistent pentru pacient nou
+   - **OPȚIUNE B**: Adaugă la LINK EXISTENT → Selectează pacient din listă
+4. **MERGE LINKS**: Unește 2+ link-uri pentru același pacient → redirect + date în 1 link
+5. **Afișare**: Fiecare test = secțiune SEPARATĂ (card/acordeon) - NU se amestecă datele!
+
+**Link Persistent:** `https://app.com/view/abc123-uuid` (valid indefinit, fără expirare)
+
+## 🔒 Privacy by Design (CRUCIAL!)
+
+✅ **CSV conține DOAR**: Timp, Nivel de oxigen, Puls cardiac, Mișcare
+✅ **Număr aparat**: Extras din filename (string "0331", NU integer 331!)
+✅ **Token-uri UUID v4**: Random, nu predictibile
+✅ **1 link per PACIENT real**: Reutilizabil pentru teste multiple
+✅ **Titlu fără nume**: "Înregistrare din Marți 15 Octombrie 2025 seara ora 20:35..."
+✅ **Metadata EXIF clean**: PNG/JPG fără date identificabile
+✅ **Log-uri anonime**: app_activity.log fără date personale
+
+## 💡 DO ✅
+
+- **Validează format românesc**: Coloane în ROMÂNĂ (`Timp`, `Nivel de oxigen`, `Puls cardiac`)
+- **Parsează timestamp**: Format `HH:MM:SS DD/MM/YYYY`
+- **Extrage device number**: Regex `Checkme O2 (\d{4})_` → păstrează ca STRING ("0331")
+- **Encoding UTF-8**: Pentru caractere românești (ă, â, î, ș, ț)
+- **Type hints Python**: Pentru claritate
+- **Error handling**: CSV corrupt, format greșit
+- **Logging comprehensiv**: logger_setup.py (fără date identificabile!)
+- **Token-uri PERSISTENTE**: UUID v4, reutilizabile pentru același pacient
+- **Asociere manuală medic**: Link nou SAU link existent
+- **Afișare multiplă**: Secțiuni SEPARATE pe același link (nu amestecate!)
+
+## 💡 DON'T ❌
+
+- **NU presupune coloane în engleză** (`Timp`, nu `Time`!)
+- **NU convertești număr aparat la integer** (păstrează "0331" ca string!)
+- **NU ignora encoding UTF-8** (caractere românești se corup!)
+- Nu hard-codezi culori/limite (folosește config.py, colors_config.json)
+- Nu folosi `print()` (doar logger)
+- **NU stoca date personale** (nume, CNP în fișiere)
+- **NU genera ID-uri predictibile** (UUID v4 pentru token-uri)
+- **NU amesteca datele** din înregistrări diferite (afișare SEPARATĂ!)
+- **NU ștergi link-ul source** la merge (redirect, pentru bookmark-uri vechi)
+
+## 📝 Reguli Documentație (MINIMALISM!)
+
+❌ **NU crea fișiere .md/.txt** decât la cerere EXPLICITĂ
+✅ **Răspunde direct în chat** - Explică concis, nu crea fișiere
+✅ **Actualizează fișiere existente** - Nu crea altele noi
+✅ **Docstrings Python** - În cod, nu fișiere separate
+✅ **Exemple cu date anonime** - "Aparat3539", nu nume pacienți
+
+**Excepții (doar la cerere):**
+- README.md (dacă cerut explicit)
+- Configurare (colors_config.json, requirements.txt - necesare)
+- Log-uri (generat automat)
+
+## 🖥️ Specific Windows/PowerShell
+
+❌ **NU folosi `&&`** pentru comenzi înlănțuite (nu funcționează în PowerShell)
+✅ **Folosește `;`** pentru comenzi multiple
+```powershell
+# CORECT:
+git add . ; git commit -m "mesaj" ; git push
+
+# GREȘIT (nu funcționează):
+git add . && git commit -m "mesaj" && git push
+```
+
+## 🧪 Testing Extensiv (Activare: "test1" sau "testează extensiv")
+
+Când utilizatorul spune **"test1"**:
+- Browser testing (Chrome, Firefox, Edge)
+- Upload CSV + Bulk processing
+- Link-uri persistente + Merge links
+- Error scenarios (CSV greșit, date invalide, encoding)
+- Performance (< 2s parsing, < 3s grafice)
+- Privacy audit (ZERO date personale în output)
+- Validare date medicale (SaO2: 0-100, Puls: 30-200)
+
+## 🏗️ Stack Tehnologic
+
+**Current (Local):**
+- Framework: Dash (Python)
+- Data: pandas, numpy
+- Visualization: Plotly
+- Export: Kaleido
+- Watching: watchdog
+
+**Future (Cloud):**
+- Backend: FastAPI + Python
+- Database: PostgreSQL (Neon/Supabase)
+- Storage: Cloudflare R2 / MinIO
+- PDF: pdfplumber / PyMuPDF
+- Deploy: Railway / Render + Docker
+
+## 🎯 Target Metrics
+
+- CSV Parsing: < 2s pentru 10,000 înregistrări
+- Graph Generation: < 3s pentru 8h date
+- Memory: < 500MB pentru batch processing
+- Error Rate: < 0.5% (date medicale critice)
+- Mobile: Grafice lizibile pe 360px width
+
+## 📋 Format Titlu Înregistrare (FĂRĂ nume pacient)
+
+```
+Înregistrare din [Zi Săptămână] [Data] [Moment Zi] ora [HH:MM]
+până în [Zi Săptămână] [Data] ora [HH:MM] [Status] - Aparat [NNNN]
+```
+
+**Moment zi (START):**
+- "seara" → ora ≥ 20:00
+- "după ora 12" → ora 12:00-19:59
+- "dimineața" → ora < 12:00
+
+**Status (END):**
+- "(întreruptă înainte de ora 12 noaptea)" → dacă se termină înainte de 00:00 a doua zi
+- Nimic → dacă continuă peste 00:00 (înregistrare completă)
+
+**Exemplu:**
+`Înregistrare din Joi 2 Mai 2025 seara ora 23:30 până în Vineri 3 Mai 2025 ora 06:37 - Aparat 3539`
+
+---
+
+> **"Code is read 10x more than it's written"** - Scrie cod pentru următorul dezvoltator!
+> **"Medical data is critical"** - Zero compromisuri pe validare și securitate!
+
+**Versiune:** 1.0 Pulsoximetrie | Python + Dash + Plotly + pandas
+

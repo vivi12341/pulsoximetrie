@@ -1,0 +1,45 @@
+---
+alwaysApply: true
+---
+
+# 🚫 Regula Minimalism - Documentație
+
+## ❌ NU crea fișiere de documentare (.md, .txt) decât dacă utilizatorul cere EXPLICIT
+
+**Principii:**
+1. **ZERO fișiere .md/.txt noi** - Nu crea documentație decât la cerere explicită
+2. **Actualizează, nu crea** - Dacă există deja, actualizează fișierul existent în mod cât mai concis posibil
+3. **Răspunde direct** - Explică în chat, concis, nu în fișiere separate
+4. **Minimalism strict** - Dacă trebuie să scrii, scrie DOAR esențialul (max 50 linii)
+
+## ✅ Ce să faci în schimb:
+- Răspunde direct în chat cu explicații
+- Scrie cod, nu documentație
+- Dacă utilizatorul cere "documentează X", întreabă dacă vrea fișier sau explicație în chat
+- Folosește docstrings Python pentru funcții (în cod, nu fișiere separate)
+- Comentarii inline pentru logică complexă
+- **NU include exemple cu date personale** (folosește date anonime: "Aparat3539", nu "Ion Popescu")
+
+## 🎯 Excepții (doar la cerere explicită):
+- **README.md** - Dacă utilizatorul cere explicit
+- **Documente existente** - Actualizare succintă (CITESTE_MAI_INTAI.md, CORECTII_WORKFLOW_REAL.md, etc.)
+- **Configurare** - Fișiere necesare (`colors_config.json`, `requirements.txt`, etc.)
+- **Log-uri** - `output/LOGS/app_activity.log` (generat automat)
+
+## 🖥️ Specific pentru Windows/PowerShell:
+- PowerShell nu acceptă `&&` pentru comenzi înlănțuite
+- Folosește `;` sau comenzi separate pe linii diferite
+- Exemplu CORECT: `git add . ; git commit -m "mesaj" ; git push`
+- Exemplu GREȘIT: `git add . && git commit -m "mesaj" && git push`
+
+## 📝 Workflow Commit/Push:
+1. **NU face commit imediat** după modificări .md
+2. **Grupează commits** - Commit cod + documentație împreună
+3. **Prioritate cod** - Scrie cod funcțional, documentație doar la final
+4. **Teste înainte de commit** - Rulează aplicația pentru verificare
+
+## 🔒 Privacy în Documentație:
+- **Exemple cu date anonime**: Folosește "Aparat3539", "02mai2025", nu nume pacienți
+- **Screenshot-uri**: Dacă incluzi imagini, asigură-te că nu conțin date personale
+- **Log samples**: Redactează orice informație identificabilă înainte de documentare
+- **Exemple CSV**: Header + 2-3 linii cu date fictive (Date, Time, SaO2, PR)

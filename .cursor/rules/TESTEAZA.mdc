@@ -1,0 +1,135 @@
+---
+alwaysApply: true
+---
+
+
+# 🧪 Regula Testing Extensiv (la cerere explicită)
+
+**ACTIVARE:** Doar când utilizatorul cere explicit "testează extensiv" sau "test1".
+
+## 🎯 Proces de Testare Extensivă
+
+1. **Browser Testing** (Chrome, Firefox, Edge)
+   - Navighează la toate tab-urile ("Vizualizare Interactivă", "Procesare în Lot")
+   - Testează upload CSV (drag-drop + click)
+   - Verifică responsive pe mobile/tablet/desktop (360px, 768px, 1920px)
+
+2. **Funcționalități Core**
+   - **Upload CSV Checkme O2**: Format românesc (`Timp,Nivel de oxigen,Puls cardiac,Mişcare`)
+   - **Extragere Device Number**: Din filename `Checkme O2 0331_20251015203510.csv` → 0331
+   - **Parsare Timestamp**: Format `HH:MM:SS DD/MM/YYYY` → datetime
+   - **Grafic Interactiv per Înregistrare**: Zoom, pan, hover, tooltip-uri (SpO2 + Puls)
+   - **Bulk Upload + Asociere Manuală**: 
+     - Upload 10-20 fișiere (5-10 perechi CSV+PDF)
+     - Dialog "Selectați pacient pentru fiecare test"
+     - Opțiune A: "Creează Link NOU" → generează UUID persistent
+     - Opțiune B: "Adaugă la Link EXISTENT" → dropdown listă pacienți
+   - **Link-uri Persistente**: 
+     - 1 link = 1 pacient real (poate avea N teste)
+     - Link fără expirare (valid indefinit)
+     - Pacient bookmarkează link o singură dată
+   - **Afișare Multiplă Înregistrări**: 
+     - Un link → N secțiuni separate (carduri/acordeon)
+     - Fiecare test = titlu + grafic + raport SEPARAT
+     - Nu se amestecă datele între înregistrări
+   - **Merge Links**: 
+     - Funcționalitate "Unește Link-uri"
+     - Selectare 2+ link-uri → unire în unul
+     - Link source → redirect către link target
+     - Toate testele vizibile pe link-ul final
+   - **Configurare Culori**: Test switch între profile (colors_config.json)
+   - **Export Grafice per Înregistrare**: JPG/PNG cu watermark (rezoluție, titlu descriptiv)
+   - **Zoom Dinamic**: Verifică scalare grosime linie la zoom
+
+3. **Error Scenarios**
+   - **CSV format greșit**: Coloane în engleză (ar trebui în română!)
+   - **CSV coloane lipsă**: Fără "Timp" sau "Nivel de oxigen"
+   - **CSV cu date personale**: Coloane Nume/CNP (ar trebui respins automat)
+   - **Timestamp invalid**: Format greșit (nu `HH:MM:SS DD/MM/YYYY`)
+   - **Filename greșit**: Nu match pattern `Checkme O2 [NNNN]_[timestamp].csv`
+   - **Valori invalide SaO2**: < 0, > 100 (ar trebui filtrate)
+   - **Valori invalide Puls**: < 30, > 200 (ar trebui filtrate)
+   - **Fișiere prea mari**: > 50MB (înregistrare > 24h)
+   - **Encoding greșit**: Nu UTF-8 (caractere românești corupte: Mişcare → Mi?care)
+   - **Bulk upload mixed devices**: CSV-uri de la aparate diferite (0331 + 3539) → medic decide asociere
+   - **PDF fără CSV corespunzător**: PDF există dar CSV lipsește (sau invers)
+   - **Duplicate upload**: Același fișier uploadat de 2 ori (ar trebui detectat, nu test duplicate)
+   - **Merge links același link**: Încercare unire link cu el însuși (ar trebui respins)
+   - **Link inexistent**: Încercare adăugare test la link șters/invalid
+   - **Redirect loops**: După merge, link source → redirect corect (nu loop infinit)
+   - **Folder batch inexistent** / **Permission denied la scriere output**
+
+4. **Performance**
+   - CSV parsing < 2s pentru 10,000 înregistrări
+   - Graph generation < 3s pentru 8h date
+   - Batch processing 10 fișiere < 60s
+   - No memory leaks (verifică task manager)
+   - Mobile scroll smooth (60fps)
+
+5. **Date Medicale**
+   - **Validare SaO2**: 0-100% (Nivel de oxigen)
+   - **Validare Puls**: 30-200 bpm (Puls cardiac)
+   - **Mișcare**: 0-25+ (indicator artefacte)
+   - **Timestamp continuitate**: Detectare gap-uri > 10 secunde
+   - **Coloane obligatorii ROMÂNĂ**: `Timp`, `Nivel de oxigen`, `Puls cardiac`
+   - **Format timestamp**: `HH:MM:SS DD/MM/YYYY` (ex: `20:35:10 15/10/2025`)
+   - **Frecvență**: ~4 secunde între măsurători (variabilă)
+   - **Interpolation**: Verifică dacă funcționează cu frecvență variabilă
+
+6. **Anonimizare & Privacy (CRUCIAL!)**
+   - **CSV fără date personale**: Verifică că nu există coloane Nume/Prenume/CNP/Pacient
+   - **Coloane permise DOAR**: `Timp`, `Nivel de oxigen`, `Puls cardiac`, `Mişcare`
+   - **Număr aparat**: Extras din filename, NU din CSV (`Checkme O2 0331_...` → 0331)
+   - **Link-uri PERSISTENTE token-based**: 
+     - Format UUID v4 random (nu ID secvențial predictibil)
+     - **1 link per PACIENT** (reutilizabil pentru teste multiple în timp)
+     - Link fără expirare (valid indefinit)
+     - Asociere manuală medic (link nou SAU link existent)
+   - **Asociere Pacienți**: 
+     - Medic decide manual: test nou → link nou SAU test la pacient existent
+     - Ex: Aparat 0331, 15 Oct → Link ABC (Ion Popescu)
+     - Ex: Aparat 0331, 16 Oct → Adaugă la link ABC (același pacient)
+     - Ex: Aparat 3539, 20 Oct → Adaugă la link ABC (aparat diferit, același pacient!)
+   - **Log-uri clean**: Verifică că app_activity.log nu conține date identificabile din CSV
+   - **Metadata EXIF**: PNG/JPG exportate fără informații pacient
+   - **Filename-uri exportate**: Fără nume pacient - Ex: `15oct2025_20h35-06h31_Aparat0331.png`
+   - **Database**: Token-uri UUID v4 persistente (nu ID auto-increment predictibil)
+   - **UI Pagină Pacient**: 
+     - Multiple secțiuni/carduri per înregistrare (afișare SEPARATĂ)
+     - Fiecare card: titlu + grafic + raport + download
+     - Zero afișare date personale (doar date medicale + date test)
+   - **Titlu per Înregistrare**: Format descriptiv FĂRĂ nume pacient
+     - Exemplu: `Înregistrare din Marți 15 Octombrie 2025 seara ora 20:35 până în Miercuri 16 Octombrie 2025 ora 06:31 - Aparat 0331`
+   
+   **Test format titlu per înregistrare:**
+   - ✅ Ziua săptămânii corectă în română (Luni-Duminică)
+   - ✅ Data formatată: "15 Octombrie 2025" (fără zero leading)
+   - ✅ Moment zi: "seara" (≥20:00), "după ora 12" (12:00-19:59), "dimineața" (<12:00)
+   - ✅ Status întreruptă: Afișat dacă înregistrare < 00:00 (miezul nopții)
+   - ✅ Număr aparat: 4 cifre string (ex: "0331", "3539") - păstrează 0 leading!
+   
+   **Test workflow complet:**
+   - ✅ Upload 6 fișiere (3 perechi CSV+PDF)
+   - ✅ Dialog asociere: Test 1 → Link NOU (ABC), Test 2 → Link NOU (DEF), Test 3 → Link ABC (adaugă)
+   - ✅ Rezultat: 2 link-uri (ABC cu 2 teste, DEF cu 1 test)
+   - ✅ Pagină pacient ABC: 2 secțiuni SEPARATE (test 15 Oct + test 16 Oct)
+   - ✅ Merge links: Unește DEF → ABC → rezultat: 1 link cu 3 teste
+   - ✅ Link DEF → redirect către ABC (bookmark-uri vechi funcționează)
+   - ✅ Pacient vede 3 înregistrări separate pe același link (nu amestecate!)
+
+7. **Raportare**
+   - Screenshot-uri pentru probleme
+   - Console errors (Dash warnings)
+   - Log-uri din output/LOGS/app_activity.log
+   - Fișiere generate (verifică nume intuitive)
+   - **Privacy audit**: Confirmă ZERO date personale în toate output-urile
+   - Concluzie: ✅ PASS / ❌ FAIL cu detalii
+
+## ⚡ Când NU se aplică
+- La orice altă cerere decât "testează extensiv" sau "test1"
+- La implementări normale
+- La debugging simplu
+
+---
+
+**Folosire:** Spune **"test1"** sau **"testează extensiv"** pentru a activa această regulă.
