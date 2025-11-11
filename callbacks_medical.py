@@ -911,11 +911,19 @@ def toggle_images_view(grid_clicks, list_clicks, btn_ids):
     from dash import ctx
     import base64
     
+    # Verificări de siguranță
+    if not btn_ids:
+        logger.warning("toggle_images_view: btn_ids este gol")
+        return [], [], []
+    
     if not ctx.triggered_id:
+        logger.debug("toggle_images_view: Niciun trigger detectat")
         return [no_update] * len(btn_ids), [no_update] * len(btn_ids), [no_update] * len(btn_ids)
     
     triggered_token = ctx.triggered_id['index']
     triggered_type = ctx.triggered_id['type']
+    
+    logger.info(f"🔄 Toggle view: {triggered_type} pentru token {triggered_token[:8]}...")
     
     results_images = []
     results_grid_style = []
@@ -931,9 +939,13 @@ def toggle_images_view(grid_clicks, list_clicks, btn_ids):
             
             if triggered_type == 'view-grid-btn':
                 # Trecem la vizualizare GRID (ansamblu cu thumbnail-uri)
+                logger.info(f"📊 Comutare la GRID view pentru {token[:8]}...")
+                
                 if output_folder_path and os.path.exists(output_folder_path):
                     image_files = [f for f in os.listdir(output_folder_path) if f.lower().endswith(('.jpg', '.jpeg', '.png'))]
                     image_files.sort()
+                    
+                    logger.info(f"Găsite {len(image_files)} imagini în {output_folder_path}")
                     
                     grid_items = []
                     grid_items.append(
@@ -988,7 +1000,9 @@ def toggle_images_view(grid_clicks, list_clicks, btn_ids):
                             logger.error(f"Eroare la încărcarea imaginii {img_file} în grid: {e}")
                     
                     results_images.append(html.Div(grid_items, style={'textAlign': 'center'}))
+                    logger.info(f"✅ Grid generat cu {len(grid_items)-1} imagini")
                 else:
+                    logger.warning(f"⚠️ Nu există folder la: {output_folder_path}")
                     results_images.append([html.P("Nu există imagini disponibile.", style={'color': '#666', 'fontStyle': 'italic'})])
                 
                 # Stiluri butoane: Grid activ, List inactiv
@@ -1019,6 +1033,8 @@ def toggle_images_view(grid_clicks, list_clicks, btn_ids):
                 
             else:  # view-list-btn
                 # Trecem la vizualizare LIST (desfășurat - imagini mari)
+                logger.info(f"📄 Comutare la LIST view pentru {token[:8]}...")
+                
                 if output_folder_path and os.path.exists(output_folder_path):
                     image_files = [f for f in os.listdir(output_folder_path) if f.lower().endswith(('.jpg', '.jpeg', '.png'))]
                     image_files.sort()
