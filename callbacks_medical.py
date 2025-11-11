@@ -937,6 +937,41 @@ def toggle_images_view(grid_clicks, list_clicks, btn_ids):
             link_data = patient_links.get_patient_link(token, track_view=False)
             output_folder_path = link_data.get('output_folder_path') if link_data else None
             
+            # FALLBACK INTELIGENT: Dacă nu avem output_folder_path, căutăm după dată și aparat
+            if not output_folder_path or not os.path.exists(output_folder_path):
+                logger.warning(f"output_folder_path lipsă sau invalid pentru {token[:8]}... Caut automat...")
+                
+                # Extragem device number și data
+                device_num = link_data['device_name'].split('#')[-1].strip() if link_data else ''
+                recording_date = link_data.get('recording_date', '') if link_data else ''
+                
+                if device_num and recording_date:
+                    # Convertim data din YYYY-MM-DD în format folder
+                    try:
+                        from datetime import datetime
+                        date_obj = datetime.strptime(recording_date, '%Y-%m-%d')
+                        day = date_obj.day
+                        month_name = ['ian', 'feb', 'mar', 'apr', 'mai', 'iun', 
+                                     'iul', 'aug', 'sep', 'oct', 'nov', 'dec'][date_obj.month - 1]
+                        year = date_obj.year
+                        
+                        # Căutăm folder care conține această dată și aparat
+                        output_base = config.OUTPUT_DIR
+                        if os.path.exists(output_base):
+                            for folder_name in os.listdir(output_base):
+                                folder_path = os.path.join(output_base, folder_name)
+                                if os.path.isdir(folder_path):
+                                    # Verificăm dacă folderul conține device_num și data aproximativă
+                                    if device_num in folder_name and f"{day:02d}{month_name}{year}" in folder_name:
+                                        output_folder_path = folder_path
+                                        logger.info(f"✅ Găsit automat folder: {folder_name}")
+                                        break
+                    except Exception as e:
+                        logger.error(f"Eroare la căutarea automată folder: {e}")
+            
+            if not output_folder_path or not os.path.exists(output_folder_path):
+                logger.error(f"❌ Nu s-a găsit folder pentru {token[:8]}...")
+            
             if triggered_type == 'view-grid-btn':
                 # Trecem la vizualizare GRID (ansamblu cu thumbnail-uri)
                 logger.info(f"📊 Comutare la GRID view pentru {token[:8]}...")
