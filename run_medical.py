@@ -19,6 +19,7 @@ import os
 import sys
 from dotenv import load_dotenv
 from urllib.parse import urlparse
+from flask import request
 
 # Încărcăm variabilele de mediu din .env
 load_dotenv()
@@ -142,6 +143,19 @@ init_auth_manager(app)
 # Inițializăm route-urile de autentificare
 init_auth_routes(app)
 
+# === REQUEST LOGGING (production monitoring) ===
+if is_railway:
+    @app.server.before_request
+    def log_request():
+        """Log toate cererile HTTP în production pentru debugging."""
+        logger.info(f"📥 {request.method} {request.path} | IP: {request.remote_addr}")
+    
+    @app.server.after_request
+    def log_response(response):
+        """Log răspunsurile HTTP în production."""
+        logger.info(f"📤 {request.method} {request.path} → {response.status_code}")
+        return response
+
 # === CREARE UTILIZATOR ADMIN IMPLICIT (dacă nu există) ===
 with app.server.app_context():
     try:
@@ -196,19 +210,30 @@ if __name__ == '__main__':
     logger.info("  • GDPR compliant: zero date personale")
     logger.info("")
     
-    # Configurăm portul și modul (production vs development)
+    # === CONFIGURARE DEFENSIVĂ PORT & HOST ===
+    # Detectăm environment-ul CORECT (Railway = production ÎNTOTDEAUNA)
+    is_production = railway_env is not None or os.getenv('PORT') is not None
+    
+    # Port: Railway setează $PORT automat, altfel 8050 (local)
     port = int(os.getenv('PORT', 8050))
-    debug_mode = os.getenv('FLASK_ENV', 'development') == 'development'
-    host = '0.0.0.0' if not debug_mode else '127.0.0.1'
+    
+    # Debug Mode: NICIODATĂ în production!
+    debug_mode = not is_production
+    
+    # Host Binding:
+    # - Railway/Production: TREBUIE 0.0.0.0 (accesibil din exterior)
+    # - Local Development: 127.0.0.1 (securitate)
+    host = '0.0.0.0' if is_production else '127.0.0.1'
     
     logger.info(f"🌐 Aplicația pornește pe: http://{host}:{port}/")
-    logger.info(f"⚙️  Mod: {'DEVELOPMENT (debug ON)' if debug_mode else 'PRODUCTION (debug OFF)'}")
+    logger.info(f"⚙️  Environment: {'PRODUCTION' if is_production else 'DEVELOPMENT'}")
+    logger.info(f"🐛 Debug Mode: {'OFF ✅' if not debug_mode else 'ON (doar local)'}")
     
-    if debug_mode:
+    if not is_production:
         logger.info("⏹️  Apăsați CTRL+C în terminal pentru a opri serverul.")
     
     logger.info("=" * 70)
     
-    # Pornire server (debug doar în development)
+    # Pornire server
     app.run(host=host, port=port, debug=debug_mode)
 

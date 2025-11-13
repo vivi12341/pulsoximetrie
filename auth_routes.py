@@ -2,6 +2,7 @@
 # auth_routes.py
 # ------------------------------------------------------------------------------
 # ROL: Flask routes pentru autentificare:
+#      - /health (GET) - health check pentru Railway
 #      - /login (GET + POST)
 #      - /logout (GET)
 #      - /request-reset (POST) - cerere reset parolă
@@ -23,6 +24,44 @@ from auth.rate_limiter import (
     check_rate_limit, check_reset_rate_limit, record_reset_attempt,
     get_remaining_attempts, get_remaining_reset_attempts, get_reset_cooldown_minutes
 )
+
+
+# ==============================================================================
+# ROUTE: /health (Health Check pentru Railway)
+# ==============================================================================
+
+def route_health(app_server):
+    """
+    Configurează route-ul /health pentru monitoring (Railway).
+    
+    Args:
+        app_server: Instanța Flask (app.server)
+    """
+    
+    @app_server.route('/health', methods=['GET'])
+    def health_check():
+        """
+        Health check endpoint - verifică dacă aplicația rulează corect.
+        
+        Returns:
+            JSON cu status și timestamp
+        """
+        try:
+            # Testăm conexiunea la database
+            db.session.execute(db.text('SELECT 1'))
+            db_status = "healthy"
+        except Exception as e:
+            logger.error(f"❌ Health check: Database error - {e}")
+            db_status = "unhealthy"
+        
+        status = "healthy" if db_status == "healthy" else "degraded"
+        
+        return jsonify({
+            "status": status,
+            "timestamp": datetime.utcnow().isoformat(),
+            "database": db_status,
+            "service": "pulsoximetrie"
+        }), 200 if status == "healthy" else 503
 
 
 # ==============================================================================
@@ -685,15 +724,16 @@ def render_reset_password_page(token='', error=None):
 
 def init_auth_routes(app):
     """
-    Inițializează toate route-urile de autentificare.
+    Inițializează toate route-urile de autentificare + health check.
     
     Args:
         app: Instanța Dash (cu app.server = Flask)
     """
+    route_health(app.server)
     route_login(app.server)
     route_logout(app.server)
     route_request_reset(app.server)
     route_reset_password(app.server)
     
-    logger.info("✅ Route-uri autentificare inițializate: /login, /logout, /request-reset, /reset-password")
+    logger.info("✅ Route-uri inițializate: /health, /login, /logout, /request-reset, /reset-password")
 
