@@ -184,16 +184,15 @@ init_auth_manager(app)
 init_auth_routes(app)
 
 # === REQUEST LOGGING (production monitoring) ===
+# ELIMINAT: Werkzeug loggează deja toate cererile HTTP
+# Logging custom genereaza duplicate (3 linii per request!)
+# Păstrat doar pentru erori critice (4xx/5xx)
 if is_railway:
-    @app.server.before_request
-    def log_request():
-        """Log toate cererile HTTP în production pentru debugging."""
-        logger.info(f"📥 {request.method} {request.path} | IP: {request.remote_addr}")
-    
     @app.server.after_request
-    def log_response(response):
-        """Log răspunsurile HTTP în production."""
-        logger.info(f"📤 {request.method} {request.path} → {response.status_code}")
+    def log_errors_only(response):
+        """Log doar erori HTTP în production (4xx/5xx)."""
+        if response.status_code >= 400:
+            logger.warning(f"⚠️ {request.method} {request.path} → {response.status_code} | IP: {request.remote_addr}")
         return response
 
 # === CREARE UTILIZATOR ADMIN IMPLICIT (dacă nu există) ===

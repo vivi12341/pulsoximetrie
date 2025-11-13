@@ -31,6 +31,8 @@ def setup_logger():
     Logger-ul va avea două destinații (handlers):
     1. StreamHandler: Trimite log-urile către consolă (stdout), util pentru
        dezvoltare și monitorizare în timp real.
+       - PRODUCTION: WARNING level (reduce volumul)
+       - DEVELOPMENT: INFO level (verbose)
     2. RotatingFileHandler: Scrie log-urile într-un fișier. Când fișierul
        atinge o anumită dimensiune, este arhivat și se creează unul nou.
        Acest lucru previne crearea unor fișiere de log excesiv de mari.
@@ -38,6 +40,11 @@ def setup_logger():
     Returns:
         logging.Logger: Instanța de logger configurată.
     """
+    # Detectăm environment-ul (production vs development)
+    is_production = (
+        os.getenv('RAILWAY_ENVIRONMENT') is not None or 
+        os.getenv('PORT') is not None
+    )
     # Ne asigurăm că directoarele de output și de log există.
     # Le creăm dacă lipsesc, pentru a evita erori la pornire.
     try:
@@ -68,7 +75,8 @@ def setup_logger():
         encoding='utf-8'
     )
     file_handler.setFormatter(log_formatter)
-    file_handler.setLevel(logging.INFO) # Salvăm în fișier totul de la INFO în sus.
+    # File handler: INFO în development, WARNING în production (reduce I/O)
+    file_handler.setLevel(logging.WARNING if is_production else logging.INFO)
 
     # --- Configurare Handler pentru Consolă (Stream Handler) ---
     # [FIX v2.2] Forțăm encoding UTF-8 pentru consolă pe Windows
@@ -84,12 +92,14 @@ def setup_logger():
     
     console_handler = logging.StreamHandler(sys.stdout)
     console_handler.setFormatter(log_formatter)
-    console_handler.setLevel(logging.INFO) # Afișăm în consolă totul de la INFO în sus.
+    # Console handler: WARNING în production (reduce noise), INFO în development
+    console_handler.setLevel(logging.WARNING if is_production else logging.INFO)
 
     # --- Creare și Asamblare Logger Principal ---
     # Obținem logger-ul rădăcină al aplicației.
     app_logger = logging.getLogger("PulsoximetrieApp")
-    app_logger.setLevel(logging.INFO) # Nivelul minim de severitate pe care îl procesează.
+    # Logger level: INFO întotdeauna (handlers filtrează per environment)
+    app_logger.setLevel(logging.INFO)
 
     # Prevenim adăugarea multiplă de handlers dacă funcția e apelată din greșeală de mai multe ori.
     if not app_logger.handlers:
@@ -104,7 +114,12 @@ def setup_logger():
 logger = setup_logger()
 
 # Mesaj de confirmare că logger-ul a fost inițializat cu succes.
+is_prod = os.getenv('RAILWAY_ENVIRONMENT') is not None or os.getenv('PORT') is not None
 logger.info("="*50)
 logger.info("Sistemul de logging a fost inițializat cu succes.")
 logger.info(f"Log-urile vor fi salvate în fișierul: {os.path.abspath(os.path.join(config.LOGS_DIR, 'app_activity.log'))}")
+if is_prod:
+    logger.warning("⚙️  PRODUCTION MODE: Logging level = WARNING (reduce noise)")
+else:
+    logger.info("⚙️  DEVELOPMENT MODE: Logging level = INFO (verbose)")
 logger.info("="*50)
