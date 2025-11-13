@@ -41,35 +41,50 @@ def route_layout_based_on_url(search):
     Detectează dacă URL conține token și afișează layout-ul corespunzător:
     - Cu token (?token=xxx) → Layout simplificat pentru PACIENȚI
     - Fără token → Layout complet pentru MEDICI (cu tab-uri)
+    
+    DEFENSIVE: Error handling robust pentru production!
     """
-    from app_layout_new import medical_layout, patient_layout
-    
-    # Verificăm dacă există token în URL
-    if search and 'token=' in search:
-        # Extragem token-ul din URL
-        try:
-            token = search.split('token=')[1].split('&')[0]
-            logger.info(f"🔵 Acces pacient detectat cu token: {token[:8]}...")
-            
-            # Validăm token-ul
-            if patient_links.validate_token(token):
-                logger.info(f"✅ Token valid: {token[:8]}... → Afișare layout pacient")
-                return patient_layout, token
-            else:
-                logger.warning(f"⚠️ Token invalid: {token[:8]}...")
-                return html.Div([
-                    html.H2("❌ Acces Interzis", style={'color': 'red', 'textAlign': 'center', 'marginTop': '50px'}),
-                    html.P("Token-ul este invalid sau a expirat. Contactați medicul dumneavoastră.", 
-                           style={'textAlign': 'center', 'color': '#666'})
-                ], style={'padding': '50px'}), None
+    try:
+        from app_layout_new import medical_layout, patient_layout
+        
+        # Verificăm dacă există token în URL
+        if search and 'token=' in search:
+            # Extragem token-ul din URL
+            try:
+                token = search.split('token=')[1].split('&')[0]
+                logger.info(f"🔵 Acces pacient detectat cu token: {token[:8]}...")
                 
-        except Exception as e:
-            logger.error(f"Eroare la extragerea token-ului din URL: {e}", exc_info=True)
-            return medical_layout, None
-    
-    # Fără token → Layout pentru medici
-    logger.debug("🏥 Acces medic detectat (fără token) → Afișare layout complet")
-    return medical_layout, None
+                # Validăm token-ul
+                if patient_links.validate_token(token):
+                    logger.info(f"✅ Token valid: {token[:8]}... → Afișare layout pacient")
+                    return patient_layout, token
+                else:
+                    logger.warning(f"⚠️ Token invalid: {token[:8]}...")
+                    return html.Div([
+                        html.H2("❌ Acces Interzis", style={'color': 'red', 'textAlign': 'center', 'marginTop': '50px'}),
+                        html.P("Token-ul este invalid sau a expirat. Contactați medicul dumneavoastră.", 
+                               style={'textAlign': 'center', 'color': '#666'})
+                    ], style={'padding': '50px'}), None
+                    
+            except Exception as e:
+                logger.error(f"Eroare la extragerea token-ului din URL: {e}", exc_info=True)
+                return medical_layout, None
+        
+        # Fără token → Layout pentru medici
+        logger.debug("🏥 Acces medic detectat (fără token) → Afișare layout complet")
+        return medical_layout, None
+        
+    except Exception as e:
+        # FALLBACK: Dacă layout-ul nu se poate încărca, returnăm mesaj de eroare
+        logger.critical(f"❌ EROARE CRITICĂ la încărcarea layout-ului: {e}", exc_info=True)
+        error_layout = html.Div([
+            html.H1("⚠️ Eroare Inițializare", style={'color': 'red', 'textAlign': 'center', 'marginTop': '100px'}),
+            html.P(f"Aplicația nu s-a putut inițializa corect.", 
+                   style={'textAlign': 'center', 'fontSize': '18px', 'color': '#666'}),
+            html.P(f"Eroare tehnică: {str(e)}", 
+                   style={'textAlign': 'center', 'fontSize': '14px', 'color': '#999', 'fontFamily': 'monospace'})
+        ], style={'padding': '50px'})
+        return error_layout, None
 
 
 def format_recording_date_ro(recording_date, start_time, end_time):

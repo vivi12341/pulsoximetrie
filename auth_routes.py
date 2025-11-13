@@ -62,6 +62,38 @@ def route_health(app_server):
             "database": db_status,
             "service": "pulsoximetrie"
         }), 200 if status == "healthy" else 503
+    
+    @app_server.route('/debug-info', methods=['GET'])
+    def debug_info():
+        """
+        Debug endpoint - informații despre aplicație (doar pentru troubleshooting).
+        """
+        import os
+        
+        info = {
+            "environment": os.getenv('RAILWAY_ENVIRONMENT', 'local'),
+            "flask_env": os.getenv('FLASK_ENV', 'development'),
+            "port": os.getenv('PORT', 'not set'),
+            "database_connected": False,
+            "folders_exist": {
+                "output": os.path.exists('output'),
+                "patient_data": os.path.exists('patient_data'),
+                "batch_sessions": os.path.exists('batch_sessions'),
+                "doctor_settings": os.path.exists('doctor_settings')
+            },
+            "files_exist": {
+                "patient_links.json": os.path.exists('patient_links.json'),
+                "settings.json": os.path.exists('doctor_settings/default/settings.json')
+            }
+        }
+        
+        try:
+            db.session.execute(db.text('SELECT 1'))
+            info["database_connected"] = True
+        except Exception as e:
+            info["database_error"] = str(e)
+        
+        return jsonify(info), 200
 
 
 # ==============================================================================

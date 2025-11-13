@@ -24,6 +24,46 @@ from flask import request
 # Încărcăm variabilele de mediu din .env
 load_dotenv()
 
+# === CREARE AUTOMATĂ FOLDERE NECESARE (PRODUCTION) ===
+# În Docker/Railway, containerul e fresh la fiecare deploy!
+required_folders = [
+    'output',
+    'output/LOGS',
+    'patient_data',
+    'batch_sessions',
+    'doctor_settings',
+    'doctor_settings/default'
+]
+
+for folder in required_folders:
+    os.makedirs(folder, exist_ok=True)
+
+# Creăm settings.json implicit dacă lipsește (pentru production)
+default_settings_path = 'doctor_settings/default/settings.json'
+if not os.path.exists(default_settings_path):
+    import json
+    default_settings = {
+        "footer_info": "Platformă Pulsoximetrie\nTel: Contact\nEmail: contact@example.com",
+        "apply_logo_to_images": False,
+        "apply_logo_to_pdf": False,
+        "apply_logo_to_site": False,
+        "logo_position": "top-right",
+        "logo_size": "medium"
+    }
+    with open(default_settings_path, 'w', encoding='utf-8') as f:
+        json.dump(default_settings, f, indent=2, ensure_ascii=False)
+    print(f"✅ Settings implicit creat: {default_settings_path}")
+
+print(f"✅ Foldere inițializate: {', '.join(required_folders)}")
+
+# Creăm patient_links.json dacă lipsește
+patient_links_path = 'patient_links.json'
+if not os.path.exists(patient_links_path):
+    import json
+    with open(patient_links_path, 'w', encoding='utf-8') as f:
+        json.dump({}, f, indent=2)
+    print(f"✅ patient_links.json creat")
+
 # === VERIFICARE CRITICĂ DATABASE_URL ÎNAINTE DE ORICE IMPORT ===
 print("=" * 80)
 print("🔍 VERIFICARE INIȚIALĂ ENVIRONMENT")
