@@ -46,30 +46,33 @@ Click pe serviciul tău → Tab `Variables` → Adaugă următoarele:
 # === CRITICAL - SECRET KEY ===
 SECRET_KEY=59c000b06aec1abba3d430179706eb29d47d78e2910db340d58e186aca053a4a
 
-# === ENVIRONMENT ===
-FLASK_ENV=production
-
-# === APP URL (actualizează după deploy cu URL-ul real de la Railway) ===
-APP_URL=https://pulsoximetrie-production.up.railway.app
-
 # === ADMIN (credențiale inițiale - SCHIMBĂ parola după login!) ===
 ADMIN_EMAIL=admin@pulsoximetrie.ro
 ADMIN_PASSWORD=Admin123!Change
 ADMIN_NAME=Administrator
 
-# === EMAIL BREVO (opțional - pentru reset parolă) ===
+# === SESIUNI ===
+SESSION_COOKIE_SECURE=True
+PERMANENT_SESSION_LIFETIME=30
+
+# === OPȚIONAL - EMAIL BREVO (pentru reset parolă) ===
 BREVO_API_KEY=xkeysib-your-key-here
 SENDER_EMAIL=noreply@pulsoximetrie.ro
 SENDER_NAME=Platformă Pulsoximetrie
 
-# === SESIUNI ===
-SESSION_COOKIE_SECURE=True
-PERMANENT_SESSION_LIFETIME=30
+# === OPȚIONAL - Actualizează după deploy ===
+APP_URL=https://pulsoximetrie-production.up.railway.app
+FLASK_ENV=production
 ```
 
-**⚠️ ATENȚIE:** 
-- `DATABASE_URL` este setat AUTOMAT de Railway când adaugi PostgreSQL
-- `PORT` este setat AUTOMAT de Railway (nu trebuie adăugat manual)
+**✅ VARIABILE SETATE AUTOMAT DE RAILWAY:**
+- `DATABASE_URL` - Setat automat când adaugi PostgreSQL ✅
+- `PORT` - Setat automat (nu trebuie adăugat manual) ✅
+- `RAILWAY_ENVIRONMENT` - Setat automat la "production" ✅
+
+**⚠️ IMPORTANT:**
+- Aplicația detectează AUTOMAT Railway prin `RAILWAY_ENVIRONMENT`
+- `FLASK_ENV=production` este OPȚIONAL (aplicația funcționează și fără el)
 
 ### 3️⃣ Verifică Fișierele de Configurare
 

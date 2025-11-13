@@ -24,50 +24,93 @@ from urllib.parse import urlparse
 load_dotenv()
 
 # === VERIFICARE CRITICĂ DATABASE_URL ÎNAINTE DE ORICE IMPORT ===
-is_production = os.getenv('FLASK_ENV', 'development') == 'production'
+print("=" * 80)
+print("🔍 VERIFICARE INIȚIALĂ ENVIRONMENT")
+print("=" * 80)
+
+# Detectăm environment-ul
+flask_env = os.getenv('FLASK_ENV', 'development')
+railway_env = os.getenv('RAILWAY_ENVIRONMENT')  # Railway setează asta automat
 database_url = os.getenv('DATABASE_URL')
 
-if is_production:
-    print("=" * 80)
-    print("🚨 RAILWAY PRODUCTION MODE - VERIFICARE DATABASE_URL")
+print(f"FLASK_ENV: {flask_env}")
+print(f"RAILWAY_ENVIRONMENT: {railway_env or 'nu este setat'}")
+print(f"DATABASE_URL: {'SETAT' if database_url else 'NU ESTE SETAT'}")
+
+# Detectăm dacă suntem pe Railway (production)
+is_railway = railway_env is not None or flask_env == 'production'
+
+if is_railway:
+    print("")
+    print("🚨 DETECTAT: Aplicația rulează pe RAILWAY (PRODUCTION)")
     print("=" * 80)
     
     if not database_url:
-        print("❌ EROARE CRITICĂ: DATABASE_URL nu este setat!")
         print("")
-        print("SOLUȚIE URGENTĂ:")
-        print("1. Mergi la Railway Dashboard")
-        print("2. Click pe proiectul 'pulsoximetrie'")
-        print("3. Click '+ New' → 'Database' → 'Add PostgreSQL'")
-        print("4. Railway va seta automat DATABASE_URL")
-        print("5. Aplicația va reporni și va funcționa!")
+        print("❌❌❌ EROARE CRITICĂ ❌❌❌")
+        print("")
+        print("DATABASE_URL NU este setat!")
+        print("")
+        print("╔════════════════════════════════════════════════════════════╗")
+        print("║  SOLUȚIE URGENTĂ (30 secunde):                            ║")
+        print("╠════════════════════════════════════════════════════════════╣")
+        print("║  1. Mergi la Railway Dashboard                            ║")
+        print("║  2. Click pe proiectul 'pulsoximetrie'                    ║")
+        print("║  3. Click butonul '+ New' (sus dreapta)                   ║")
+        print("║  4. Selectează 'Database' → 'Add PostgreSQL'              ║")
+        print("║  5. Railway va seta automat DATABASE_URL                  ║")
+        print("║  6. Aplicația va reporni AUTOMAT și va funcționa!         ║")
+        print("╚════════════════════════════════════════════════════════════╝")
+        print("")
         print("=" * 80)
         sys.exit(1)
     
-    # Verificăm dacă e localhost (PostgreSQL nu e configurat corect)
+    # Verificăm dacă e localhost (greșit în Railway)
     try:
         parsed = urlparse(database_url)
-        if parsed.hostname == 'localhost' or parsed.hostname == '127.0.0.1':
-            print("❌ EROARE: DATABASE_URL folosește localhost în production!")
-            print(f"   DATABASE_URL detectat: {database_url}")
+        hostname = parsed.hostname
+        
+        if hostname in ['localhost', '127.0.0.1', '::1']:
             print("")
-            print("CAUZĂ: PostgreSQL nu este adăugat în Railway!")
+            print("❌❌❌ EROARE CONFIGURARE ❌❌❌")
             print("")
-            print("SOLUȚIE:")
-            print("1. Adaugă PostgreSQL în Railway Dashboard")
-            print("2. Railway va genera automat DATABASE_URL corect")
+            print(f"DATABASE_URL folosește localhost: {hostname}")
+            print("")
+            print("CAUZĂ: PostgreSQL NU este adăugat în Railway!")
+            print("       (DATABASE_URL ar trebui să fie railway.internal)")
+            print("")
+            print("╔════════════════════════════════════════════════════════════╗")
+            print("║  SOLUȚIE:                                                 ║")
+            print("╠════════════════════════════════════════════════════════════╣")
+            print("║  1. Șterge variabila DATABASE_URL din Railway Variables   ║")
+            print("║  2. Adaugă PostgreSQL: + New → Database → PostgreSQL     ║")
+            print("║  3. Railway va genera DATABASE_URL corect (automat)       ║")
+            print("╚════════════════════════════════════════════════════════════╝")
+            print("")
             print("=" * 80)
             sys.exit(1)
+            
+        print(f"✅ DATABASE_URL valid: postgresql://{hostname}")
+        
     except Exception as e:
-        print(f"⚠️ Warning: Nu pot parsa DATABASE_URL: {e}")
+        print(f"⚠️ WARNING: Eroare la parsarea DATABASE_URL: {e}")
+        print("   Încerc să continui oricum...")
     
-    print(f"✅ DATABASE_URL valid detectat: {urlparse(database_url).hostname}")
     print("=" * 80)
+    
 else:
-    # Development mode - folosim fallback
+    # Development local
+    print("")
+    print("ℹ️  DEVELOPMENT MODE (local)")
+    print("=" * 80)
+    
     if not database_url:
         database_url = 'postgresql://postgres:postgres@localhost:5432/pulsoximetrie'
-        print(f"ℹ️  Development mode: folosesc PostgreSQL local")
+        print(f"📍 Folosesc PostgreSQL local: localhost:5432")
+    else:
+        print(f"📍 DATABASE_URL custom: {urlparse(database_url).hostname}")
+    
+    print("=" * 80)
 
 # Importăm componentele esențiale DUPĂ verificare
 from logger_setup import logger
