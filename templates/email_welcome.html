@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="ro">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bun Venit</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            margin: 0;
+            padding: 0;
+            background-color: #f4f4f4;
+        }
+        .container {
+            max-width: 600px;
+            margin: 20px auto;
+            background: white;
+            border-radius: 10px;
+            overflow: hidden;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        .header {
+            background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
+            color: white;
+            padding: 30px 20px;
+            text-align: center;
+        }
+        .header h1 {
+            margin: 0;
+            font-size: 28px;
+            font-weight: 600;
+        }
+        .header .emoji {
+            font-size: 48px;
+            margin-bottom: 10px;
+        }
+        .content {
+            padding: 40px 30px;
+            background: white;
+        }
+        .content p {
+            margin: 15px 0;
+            font-size: 15px;
+            line-height: 1.8;
+        }
+        .credentials-box {
+            background: #f8f9fa;
+            border: 2px solid #11998e;
+            border-radius: 8px;
+            padding: 20px;
+            margin: 25px 0;
+        }
+        .credentials-box h3 {
+            margin: 0 0 15px 0;
+            color: #11998e;
+            font-size: 18px;
+        }
+        .credential-item {
+            background: white;
+            padding: 12px;
+            margin: 10px 0;
+            border-radius: 5px;
+            border-left: 4px solid #11998e;
+        }
+        .credential-item strong {
+            color: #2c3e50;
+            display: block;
+            font-size: 12px;
+            margin-bottom: 5px;
+        }
+        .credential-item code {
+            background: #e8f5f3;
+            padding: 8px 12px;
+            border-radius: 4px;
+            font-family: 'Courier New', monospace;
+            font-size: 14px;
+            color: #11998e;
+            display: inline-block;
+        }
+        .button-container {
+            text-align: center;
+            margin: 35px 0;
+        }
+        .button {
+            display: inline-block;
+            padding: 15px 40px;
+            background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
+            color: white !important;
+            text-decoration: none;
+            border-radius: 50px;
+            font-size: 16px;
+            font-weight: 600;
+            box-shadow: 0 4px 15px rgba(17, 153, 142, 0.4);
+            transition: all 0.3s ease;
+        }
+        .button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(17, 153, 142, 0.6);
+        }
+        .warning-box {
+            background: #fff3cd;
+            border-left: 5px solid #ffc107;
+            padding: 20px;
+            margin: 25px 0;
+            border-radius: 5px;
+        }
+        .warning-box strong {
+            color: #856404;
+            font-size: 16px;
+        }
+        .warning-box p {
+            margin: 10px 0 0 0;
+            color: #856404;
+        }
+        .features-box {
+            background: #f0f8ff;
+            border-radius: 8px;
+            padding: 20px;
+            margin: 25px 0;
+        }
+        .features-box h3 {
+            margin: 0 0 15px 0;
+            color: #2980b9;
+            font-size: 18px;
+        }
+        .feature-item {
+            padding: 10px 0;
+            border-bottom: 1px solid #d6eaf8;
+        }
+        .feature-item:last-child {
+            border-bottom: none;
+        }
+        .feature-item strong {
+            color: #2980b9;
+        }
+        .footer {
+            background: #f8f9fa;
+            padding: 25px;
+            text-align: center;
+            color: #6c757d;
+            font-size: 13px;
+            border-top: 1px solid #e0e0e0;
+        }
+        .footer p {
+            margin: 8px 0;
+        }
+        @media only screen and (max-width: 600px) {
+            .container {
+                margin: 10px;
+                border-radius: 5px;
+            }
+            .header {
+                padding: 20px 15px;
+            }
+            .header h1 {
+                font-size: 22px;
+            }
+            .header .emoji {
+                font-size: 38px;
+            }
+            .content {
+                padding: 25px 20px;
+            }
+            .button {
+                padding: 12px 30px;
+                font-size: 14px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <div class="header">
+            <div class="emoji">🎉</div>
+            <h1>Bun Venit!</h1>
+        </div>
+        
+        <!-- Content -->
+        <div class="content">
+            <p>Bună, <strong>{{ doctor_name }}</strong>!</p>
+            
+            <p>Contul tău a fost creat cu succes pe <strong>Platforma Pulsoximetrie</strong>. 
+               Suntem bucuroși să te avem în echipa noastră!</p>
+            
+            <!-- Credentials -->
+            <div class="credentials-box">
+                <h3>🔐 Datele Tale de Autentificare</h3>
+                
+                <div class="credential-item">
+                    <strong>EMAIL:</strong>
+                    <code>{{ doctor_email }}</code>
+                </div>
+                
+                {% if temporary_password %}
+                <div class="credential-item">
+                    <strong>PAROLĂ TEMPORARĂ:</strong>
+                    <code>{{ temporary_password }}</code>
+                </div>
+                {% endif %}
+            </div>
+            
+            {% if temporary_password %}
+            <!-- Warning about temporary password -->
+            <div class="warning-box">
+                <strong>⚠️ IMPORTANT - ACȚIUNE NECESARĂ:</strong>
+                <p>Aceasta este o <strong>parolă temporară</strong>. Din motive de securitate, 
+                   te rugăm să o schimbi <strong>imediat</strong> după prima autentificare!</p>
+            </div>
+            {% endif %}
+            
+            <!-- Login Button -->
+            <div class="button-container">
+                <a href="{{ login_link }}" class="button">
+                    🔐 Autentifică-te Acum
+                </a>
+            </div>
+            
+            <!-- Features -->
+            <div class="features-box">
+                <h3>📊 Ce poți face pe platformă:</h3>
+                
+                <div class="feature-item">
+                    <strong>📁 Procesare Batch</strong> - Încarcă multiple fișiere CSV simultan
+                </div>
+                
+                <div class="feature-item">
+                    <strong>🔗 Link-uri Pacienți</strong> - Generează link-uri persistente pentru fiecare pacient
+                </div>
+                
+                <div class="feature-item">
+                    <strong>📈 Vizualizare Date</strong> - Analizează date pulsoximetrie în timp real
+                </div>
+                
+                <div class="feature-item">
+                    <strong>📄 Export Rapoarte</strong> - Generează și descarcă rapoarte PDF
+                </div>
+                
+                <div class="feature-item">
+                    <strong>🎨 Personalizare</strong> - Adaugă logo-ul tău pe rapoarte
+                </div>
+            </div>
+            
+            <p>Dacă întâmpini probleme sau ai întrebări, nu ezita să contactezi administratorul platformei.</p>
+            
+            <p style="margin-top: 30px; text-align: center; color: #777; font-style: italic;">
+                Îți dorim o experiență plăcută pe platformă! 🚀
+            </p>
+        </div>
+        
+        <!-- Footer -->
+        <div class="footer">
+            <p><strong>Platformă Pulsoximetrie</strong></p>
+            <p>© 2025 Toate drepturile rezervate</p>
+            <p style="margin-top: 15px;">Acest email a fost trimis automat. Nu răspunde la acest mesaj.</p>
+        </div>
+    </div>
+</body>
+</html>
+

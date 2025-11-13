@@ -1,0 +1,22 @@
+# ==============================================================================
+# ENV_TEMPLATE.txt - Template Variabile de Mediu
+# ==============================================================================
+# INSTRUCȚIUNI:
+# 1. Copiați acest fișier ca `.env` în rădăcina proiectului
+# 2. Completați valorile reale (NU commitați .env în Git!)
+# 3. Asigurați-vă că .env este în .gitignore
+# ==============================================================================
+
+SECRET_KEY=your-very-secret-random-key-here-replace-this-64-chars-long
+FLASK_ENV=development
+DATABASE_URL=postgresql://postgres:postgres@localhost:5432/pulsoximetrie
+BREVO_API_KEY=xkeysib-your-brevo-api-key-here
+SENDER_EMAIL=noreply@pulsoximetrie.ro
+SENDER_NAME=Platformă Pulsoximetrie
+APP_URL=http://localhost:8050
+
+# ==============================================================================
+# GENERARE SECRET_KEY:
+# python -c "import secrets; print(secrets.token_hex(32))"
+# ==============================================================================
+
