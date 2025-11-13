@@ -100,17 +100,26 @@ if __name__ == '__main__':
     logger.info("  📈  Tab Vizualizare : Analiză interactivă CSV (original)")
     logger.info("  🔄  Tab Batch       : Procesare în lot imagini (original)")
     logger.info("")
-    logger.info("🌐 Aplicația va fi disponibilă la: http://127.0.0.1:8050/")
-    logger.info("")
     logger.info("📚 ARHITECTURĂ:")
     logger.info("  • 1 PACIENT = 1 LINK PERSISTENT (UUID)")
     logger.info("  • Storage local: patient_data/{token}/")
     logger.info("  • Metadata: patient_links.json")
     logger.info("  • GDPR compliant: zero date personale")
     logger.info("")
-    logger.info("⏹️  Apăsați CTRL+C în terminal pentru a opri serverul.")
+    
+    # Configurăm portul și modul (production vs development)
+    port = int(os.getenv('PORT', 8050))
+    debug_mode = os.getenv('FLASK_ENV', 'development') == 'development'
+    host = '0.0.0.0' if not debug_mode else '127.0.0.1'
+    
+    logger.info(f"🌐 Aplicația pornește pe: http://{host}:{port}/")
+    logger.info(f"⚙️  Mod: {'DEVELOPMENT (debug ON)' if debug_mode else 'PRODUCTION (debug OFF)'}")
+    
+    if debug_mode:
+        logger.info("⏹️  Apăsați CTRL+C în terminal pentru a opri serverul.")
+    
     logger.info("=" * 70)
     
-    # Pornire server de dezvoltare cu debug activat
-    app.run(debug=True)
+    # Pornire server (debug doar în development)
+    app.run(host=host, port=port, debug=debug_mode)
 
