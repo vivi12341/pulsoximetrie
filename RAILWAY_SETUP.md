@@ -1,6 +1,21 @@
 # 🚂 Configurare Railway - Platformă Pulsoximetrie
 
-## 📋 CREDENȚIALE GENERATE PENTRU TINEAm generat automat următoarele credențiale:
+## 🚨 DACĂ APLICAȚIA CRASHEAZĂ ACUM
+
+**Eroare: "connection to server at localhost failed"?**
+
+👉 **Citește urgent:** [`RAILWAY_DATABASE_SETUP.md`](RAILWAY_DATABASE_SETUP.md)
+
+**Soluția scurtă:** Adaugă PostgreSQL în Railway Dashboard (30 secunde):
+1. Click pe proiect → `+ New` → `Database` → `Add PostgreSQL`
+2. Railway setează automat `DATABASE_URL`
+3. Aplicația repornește automat și funcționează! ✅
+
+---
+
+## 📋 CREDENȚIALE GENERATE PENTRU TINE
+
+Am generat automat următoarele credențiale:
 
 ### 🔑 SECRET_KEY (GENERAT AUTOMAT - SIGUR)
 ```

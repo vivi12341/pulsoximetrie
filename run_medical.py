@@ -24,19 +24,30 @@ load_dotenv()
 # Importăm componentele esențiale în ordinea corectă
 from logger_setup import logger
 from app_instance import app
+from database_health import (
+    get_database_url_with_fallback,
+    log_database_info,
+    test_database_connection
+)
 
 # === INIȚIALIZARE DATABASE & AUTHENTICATION ===
 from auth.models import db, init_db, create_admin_user
 from auth.auth_manager import init_auth_manager
 from auth_routes import init_auth_routes
 
+# === CONFIGURARE DATABASE CU VERIFICĂRI DEFENSIVE ===
+# În production: DATABASE_URL OBLIGATORIU (strict_mode=True)
+# În development: fallback la PostgreSQL local
+is_production = os.getenv('FLASK_ENV', 'development') == 'production'
+database_url = get_database_url_with_fallback(strict_mode=is_production)
+
 # Configurăm Flask pentru database
-app.server.config['SQLALCHEMY_DATABASE_URI'] = os.getenv(
-    'DATABASE_URL',
-    'postgresql://postgres:postgres@localhost:5432/pulsoximetrie'
-)
+app.server.config['SQLALCHEMY_DATABASE_URI'] = database_url
 app.server.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.server.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'dev-secret-key-change-in-production')
+
+# Logging info database
+log_database_info(database_url)
 
 # Configurăm sesiuni
 app.server.config['SESSION_COOKIE_SECURE'] = os.getenv('SESSION_COOKIE_SECURE', 'False') == 'True'
@@ -46,6 +57,18 @@ app.server.config['PERMANENT_SESSION_LIFETIME'] = int(os.getenv('PERMANENT_SESSI
 
 # Inițializăm database-ul
 init_db(app)
+
+# === VERIFICARE CONEXIUNE DATABASE ===
+is_connected, connection_message = test_database_connection(app.server)
+logger.info(connection_message)
+
+if not is_connected and is_production:
+    logger.error("🚨 PRODUCTION: Nu pot continua fără conexiune database validă!")
+    logger.error("Verifică că PostgreSQL este adăugat în Railway și DATABASE_URL este setat.")
+    import sys
+    sys.exit(1)
+elif not is_connected:
+    logger.warning("⚠️ Development: Database connection failed, dar continui pentru debugging...")
 
 # Inițializăm Flask-Login
 init_auth_manager(app)
