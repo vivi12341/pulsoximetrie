@@ -256,9 +256,11 @@ def init_db(app):
     Args:
         app: Instanța Flask/Dash
     """
-    db.init_app(app)
+    # Folosim app.server pentru că Dash wraps Flask
+    flask_app = app.server if hasattr(app, 'server') else app
+    db.init_app(flask_app)
     
-    with app.server.app_context():
+    with flask_app.app_context():
         # Creăm toate tabelele
         db.create_all()
         
