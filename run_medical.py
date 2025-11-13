@@ -16,38 +16,72 @@
 # ==============================================================================
 
 import os
+import sys
 from dotenv import load_dotenv
+from urllib.parse import urlparse
 
 # Încărcăm variabilele de mediu din .env
 load_dotenv()
 
-# Importăm componentele esențiale în ordinea corectă
+# === VERIFICARE CRITICĂ DATABASE_URL ÎNAINTE DE ORICE IMPORT ===
+is_production = os.getenv('FLASK_ENV', 'development') == 'production'
+database_url = os.getenv('DATABASE_URL')
+
+if is_production:
+    print("=" * 80)
+    print("🚨 RAILWAY PRODUCTION MODE - VERIFICARE DATABASE_URL")
+    print("=" * 80)
+    
+    if not database_url:
+        print("❌ EROARE CRITICĂ: DATABASE_URL nu este setat!")
+        print("")
+        print("SOLUȚIE URGENTĂ:")
+        print("1. Mergi la Railway Dashboard")
+        print("2. Click pe proiectul 'pulsoximetrie'")
+        print("3. Click '+ New' → 'Database' → 'Add PostgreSQL'")
+        print("4. Railway va seta automat DATABASE_URL")
+        print("5. Aplicația va reporni și va funcționa!")
+        print("=" * 80)
+        sys.exit(1)
+    
+    # Verificăm dacă e localhost (PostgreSQL nu e configurat corect)
+    try:
+        parsed = urlparse(database_url)
+        if parsed.hostname == 'localhost' or parsed.hostname == '127.0.0.1':
+            print("❌ EROARE: DATABASE_URL folosește localhost în production!")
+            print(f"   DATABASE_URL detectat: {database_url}")
+            print("")
+            print("CAUZĂ: PostgreSQL nu este adăugat în Railway!")
+            print("")
+            print("SOLUȚIE:")
+            print("1. Adaugă PostgreSQL în Railway Dashboard")
+            print("2. Railway va genera automat DATABASE_URL corect")
+            print("=" * 80)
+            sys.exit(1)
+    except Exception as e:
+        print(f"⚠️ Warning: Nu pot parsa DATABASE_URL: {e}")
+    
+    print(f"✅ DATABASE_URL valid detectat: {urlparse(database_url).hostname}")
+    print("=" * 80)
+else:
+    # Development mode - folosim fallback
+    if not database_url:
+        database_url = 'postgresql://postgres:postgres@localhost:5432/pulsoximetrie'
+        print(f"ℹ️  Development mode: folosesc PostgreSQL local")
+
+# Importăm componentele esențiale DUPĂ verificare
 from logger_setup import logger
 from app_instance import app
-from database_health import (
-    get_database_url_with_fallback,
-    log_database_info,
-    test_database_connection
-)
 
 # === INIȚIALIZARE DATABASE & AUTHENTICATION ===
 from auth.models import db, init_db, create_admin_user
 from auth.auth_manager import init_auth_manager
 from auth_routes import init_auth_routes
 
-# === CONFIGURARE DATABASE CU VERIFICĂRI DEFENSIVE ===
-# În production: DATABASE_URL OBLIGATORIU (strict_mode=True)
-# În development: fallback la PostgreSQL local
-is_production = os.getenv('FLASK_ENV', 'development') == 'production'
-database_url = get_database_url_with_fallback(strict_mode=is_production)
-
 # Configurăm Flask pentru database
 app.server.config['SQLALCHEMY_DATABASE_URI'] = database_url
 app.server.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.server.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'dev-secret-key-change-in-production')
-
-# Logging info database
-log_database_info(database_url)
 
 # Configurăm sesiuni
 app.server.config['SESSION_COOKIE_SECURE'] = os.getenv('SESSION_COOKIE_SECURE', 'False') == 'True'
@@ -56,19 +90,8 @@ app.server.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
 app.server.config['PERMANENT_SESSION_LIFETIME'] = int(os.getenv('PERMANENT_SESSION_LIFETIME', '30')) * 24 * 3600
 
 # Inițializăm database-ul
+logger.info(f"📊 Inițializare database: {urlparse(database_url).scheme}://{urlparse(database_url).hostname or 'local'}")
 init_db(app)
-
-# === VERIFICARE CONEXIUNE DATABASE ===
-is_connected, connection_message = test_database_connection(app.server)
-logger.info(connection_message)
-
-if not is_connected and is_production:
-    logger.error("🚨 PRODUCTION: Nu pot continua fără conexiune database validă!")
-    logger.error("Verifică că PostgreSQL este adăugat în Railway și DATABASE_URL este setat.")
-    import sys
-    sys.exit(1)
-elif not is_connected:
-    logger.warning("⚠️ Development: Database connection failed, dar continui pentru debugging...")
 
 # Inițializăm Flask-Login
 init_auth_manager(app)

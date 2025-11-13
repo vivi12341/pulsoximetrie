@@ -2,12 +2,24 @@
 
 ## 🚨 PROBLEMA ACTUALĂ
 
-Aplicația crashează cu eroarea:
+Aplicația crashează IMEDIAT cu mesajul:
+```
+🚨 RAILWAY PRODUCTION MODE - VERIFICARE DATABASE_URL
+❌ EROARE CRITICĂ: DATABASE_URL nu este setat!
+```
+
+SAU:
+
 ```
 psycopg2.OperationalError: connection to server at "localhost" failed
 ```
 
 **CAUZA:** PostgreSQL nu este adăugat în Railway!
+
+**NOI VERIFICĂRI DEFENSIVE:**
+- Aplicația NU mai permite pornirea fără DATABASE_URL valid în production
+- Mesaje clare în logs înainte de crash
+- Oprire imediată cu sys.exit(1) pentru a preveni crash loops
 
 ---
 

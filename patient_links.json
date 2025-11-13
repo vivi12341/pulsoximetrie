@@ -3,7 +3,7 @@
     "device_name": "Checkme O2 #3539",
     "notes": "Procesare automată batch - Checkme O2 3539_20251007230437.csv",
     "created_at": "2025-11-11T12:33:47.518500",
-    "last_accessed": "2025-11-11T12:57:45.543809",
+    "last_accessed": "2025-11-12T21:11:51.956904",
     "is_active": true,
     "recordings_count": 0,
     "recording_date": "2025-10-07",
@@ -12,26 +12,35 @@
     "medical_notes": "Apnee obstructivă de somn severă. SpO2 scăzut noaptea (85-92%). Recomandat CPAP. Follow-up în 2 săptămâni pentru evaluare eficiență tratament.",
     "sent_status": true,
     "sent_at": "2025-11-11T12:38:09.605805",
-    "view_count": 4,
+    "view_count": 7,
     "first_viewed_at": "2025-11-11T12:56:12.463505",
-    "last_viewed_at": "2025-11-11T12:57:45.530962",
-    "notes_updated_at": "2025-11-11T12:38:09.599814"
+    "last_viewed_at": "2025-11-12T05:14:34.644416",
+    "notes_updated_at": "2025-11-11T12:38:09.599814",
+    "pdf_paths": [
+      "patient_data\\cbd8f122-a7e4-4829-ae7b-91cd3df24855\\pdfs\\Checkme O2 0331_70_100_20251015203510.pdf"
+    ],
+    "output_folder_path": "patient_data/cbd8f122-a7e4-4829-ae7b-91cd3df24855/images"
   },
   "56ae5494-25c9-49ef-98f1-d8bf67a64548": {
     "device_name": "Checkme O2 #3539",
     "notes": "Procesare automată batch - Checkme O2 3539_20251014203224.csv",
     "created_at": "2025-11-11T12:35:41.624158",
-    "last_accessed": "2025-11-11T19:30:51.747962",
+    "last_accessed": "2025-11-13T17:28:00.339464",
     "is_active": true,
     "recordings_count": 0,
     "recording_date": "2025-10-14",
     "start_time": "20:32",
     "end_time": "04:45",
-    "medical_notes": "",
+    "medical_notes": "gygy",
     "sent_status": false,
     "sent_at": null,
-    "view_count": 42,
+    "view_count": 192,
     "first_viewed_at": "2025-11-11T12:58:40.124376",
-    "last_viewed_at": "2025-11-11T14:10:08.894832"
+    "last_viewed_at": "2025-11-13T17:28:00.336469",
+    "pdf_paths": [
+      "patient_data/56ae5494-25c9-49ef-98f1-d8bf67a64548/pdfs/Checkme_O2_Test.pdf"
+    ],
+    "notes_updated_at": "2025-11-12T17:35:42.030535",
+    "output_folder_path": "patient_data/56ae5494-25c9-49ef-98f1-d8bf67a64548/images"
   }
 }
