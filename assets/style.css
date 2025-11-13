@@ -1,1 +1,27 @@
-/* Stiluri CSS custom, dacă sunt necesare. */ 
+/* Stiluri CSS custom, dacă sunt necesare. */
+
+/* ===== Stiluri pentru Butoane Toggle Grupare ===== */
+.group-toggle-button:hover {
+    opacity: 0.9;
+    transform: translateX(5px);
+    box-shadow: 0 4px 8px rgba(0,0,0,0.15) !important;
+}
+
+.group-toggle-button:active {
+    transform: translateX(5px) scale(0.98);
+}
+
+/* Animație pentru tranziție smooth */
+.group-toggle-button {
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Îmbunătățire contrast pentru grupuri expandate */
+.group-toggle-button[style*="background-color: rgb(52, 152, 219)"] {
+    background: linear-gradient(135deg, #3498db 0%, #2980b9 100%) !important;
+}
+
+/* Îmbunătățire contrast pentru grupuri collapsed */
+.group-toggle-button[style*="background-color: rgb(236, 240, 241)"] {
+    background: linear-gradient(135deg, #ecf0f1 0%, #d5dbdb 100%) !important;
+} 

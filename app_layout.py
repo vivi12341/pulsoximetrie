@@ -100,7 +100,7 @@ layout = html.Div(
                                     id='input-folder-path',
                                     type='text',
                                     value='',  # [FIX] Controlled input de la început
-                                    placeholder='Cale folder intrare (ex: C:\\DateOximetrie\\Intrare)',
+                                    placeholder='Cale folder intrare (ex: C:\\DatePulsoximetrie\\Intrare)',
                                     style={'width': '100%', 'padding': '10px', 'marginBottom': '10px'}
                                 ),
                                 dcc.Input(

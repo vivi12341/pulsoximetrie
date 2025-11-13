@@ -188,7 +188,160 @@ python run_medical.py
 
 ---
 
-**STATUS FINAL**: Problema identificată parțial. Fix-uri temporare aplicate. Necesită investigație continuă pentru identificarea punctului exact de blocare în crearea componentelor UI pentru primul link din grup.
+---
 
-**PENTRU VIITOR**: Verifică dacă problema apare și la alte grupări (Pe Săptămâni) sau doar la "Pe Luni".
+## ✅ SOLUȚIE FINALĂ (12 Noiembrie 2025)
+
+### Cauza Root
+
+**Eroare de indentare critică** la linia **1026** din `callbacks_medical.py`:
+- Linia 1027-1344 erau DEZINDENTATE prematur
+- Tot codul pentru crearea `expanded_content` și `row_container` era **ÎN AFARA loop-ului `for`**
+- Rezultat: Codul se executa doar **ODATĂ** pentru **ultimul token** din lista `group_links`
+
+### Fix-ul Aplicat
+
+1. **Re-indentat liniile 1027-1327** cu +4 spații (în interiorul loop-ului)
+2. **Corectat blocul `try-except-else`** (linii 1036-1161):
+   - Linia 1101 `else:` aliniată corect cu `if output_folder_path` (linia 1040)
+   - Conținutul blocului `else` indentat corect
+3. **Menținut liniile 1329-1344** cu indentare corectă (în loop, dar ÎN AFARA `if is_expanded`)
+
+### Rezultate Testare
+
+✅ **Grupare "Pe Luni"**: Ambele înregistrări (56ae5494 și cbd8f122) apar corect  
+✅ **Grupare "Pe Săptămâni"**: Funcționează perfect (Săptămâna 41 și 42)  
+✅ **Grupare "Pe Zile"**: Funcționează perfect (14/10 și 07/10)  
+
+### Commit Final
+
+```bash
+git add callbacks_medical.py INVESTIGATIE_GRUPARE_LUNI.md
+git commit -m "FIX: Corectare indentare critică în callbacks_medical.py - grupare Pe Luni
+- Fix indentare linii 1026-1344 (în interiorul loop for)
+- Corectare blocuri try-except-else pentru imagini
+- Toate grupările funcționează corect acum (Pe Zile/Săptămâni/Luni)"
+```
+
+**STATUS FINAL**: ✅ **PROBLEMA REZOLVATĂ COMPLET**  
+**Data rezolvare**: 12 Noiembrie 2025, ora 22:30  
+**Tokens folosiți**: ~81K / 1M  
+**Fișiere modificate**: `callbacks_medical.py` (corectări indentare)
+
+---
+
+## 🔴 REGRESIE DETECTATĂ - 13 Noiembrie 2025
+
+### Problema Raportată (DIN NOU!)
+Utilizatorul a raportat că înregistrarea din **14 octombrie 2025** nu se deschide când selectează vizualizare pe **zile** sau **săptămâni**.
+
+**Comportament**: Înregistrarea din 7 octombrie funcționează, dar cea din 14 octombrie nu se deschide când dai click pe ea.
+
+### Investigație Profundă
+
+#### 1. Verificare patient_links.json
+✅ **FIX 1**: Ambele înregistrări lipseau câmpul `output_folder_path`:
+```json
+"56ae5494-25c9-49ef-98f1-d8bf67a64548": {
+  "output_folder_path": "patient_data/56ae5494-25c9-49ef-98f1-d8bf67a64548/images"  // ← ADĂUGAT
+}
+```
+
+#### 2. Verificare Indentare Critică (callbacks_medical.py)
+❌ **PROBLEMĂ CRITICĂ IDENTIFICATĂ**: Liniile 1346-1361 aveau **8 spații** în loc de **12 spații**!
+
+**Structura GREȘITĂ** (identificată cu verificare spații):
+```
+909: [8 spații] for group_name, group_links in sorted(...):  # LOOP GRUPURI
+974:   [12 spații] for idx, link_data in enumerate(...):     # LOOP LINK-URI
+1344:     [16 spații] group_rows.append(row_container)       # ✅ Corect
+1349: [8 spații] if group_rows and not is_group_collapsed:   # ❌ ÎN AFARA AMBELOR LOOP-URI!
+```
+
+**Consecință**: Verificarea `if group_rows and not is_group_collapsed` se execută **o singură dată la sfârșit**, nu pentru **fiecare grup** individual!
+
+**Rezultat observat în log-uri**:
+```
+🔍 Grup 'Octombrie 2025': are 2 link-uri în group_links
+  ↳ APPEND row_container pentru token 56ae5494... ✓
+  ↳ APPEND row_container pentru token cbd8f122... ✓
+🔍 Înainte de verificare: len(group_rows)=2  ← SE EXECUTĂ DUPĂ TOATE GRUPURILE!
+```
+
+### Fix Final Aplicat
+
+**Corectare linii 1346-1361**: Indentat cu +4 spații (de la 8 la 12):
+
+```python
+# ÎNAINTE (GREȘIT - 8 spații):
+        if group_rows and not is_group_collapsed:
+            rows.append(group_container)
+
+# DUPĂ (CORECT - 12 spații):
+            if group_rows and not is_group_collapsed:
+                rows.append(group_container)
+```
+
+**Structura CORECTĂ** după fix:
+```
+909: [8 spații] for group_name, group_links in sorted(...):  # LOOP GRUPURI
+974:   [12 spații] for idx, link_data in enumerate(...):     # LOOP LINK-URI
+1344:     [16 spații] group_rows.append(row_container)       # ✅ Corect
+1349:   [12 spații] if group_rows and not is_group_collapsed: # ✅ CORECT ACUM!
+```
+
+### Rezultate Testare (13 Noiembrie 2025, ora 17:55)
+
+**Test Automatizat** (`test_grupare_completa.py`):
+```
+✅ Test 1: Grupare PE ZILE - PASSED (2/2 înregistrări)
+✅ Test 2: Grupare PE SĂPTĂMÂNI - PASSED (2/2 înregistrări)
+✅ Test 3: Grupare PE LUNI - PASSED (2/2 înregistrări)
+✅ Verificare Critică: Toate înregistrările vizibile în fiecare mod
+```
+
+**Comandă verificare indentare**:
+```powershell
+$lines = Get-Content callbacks_medical.py -Encoding UTF8
+for ($i = 1343; $i -lt 1363; $i++) { 
+  $line = $lines[$i]
+  $spaces = ($line -replace '^( *)(.*)', '$1').Length
+  Write-Host "$($i+1):[$spaces spaces]"
+}
+```
+
+**Rezultat**:
+```
+1344: [16 spaces] ✅ group_rows.append(row_container)
+1345: [12 spaces] ✅ (linie goală)
+1346: [12 spaces] ✅ # Wrappăm toate înregistrările...
+1349: [12 spaces] ✅ if group_rows and not is_group_collapsed:
+1362: [8 spaces]  ✅ (linie goală - în afara ambelor loop-uri)
+```
+
+### Lecții Învățate
+
+1. **Verificare Indentare Sistematică**: Folosește comenzi PowerShell pentru a măsura spațiile exact
+2. **Testing Automatizat**: Creează teste care verifică gruparea, nu doar procesarea
+3. **Log-uri Detaliate**: Log-urile existente au ajutat enorm să identificăm că ambele link-uri se procesează, dar verificarea nu se face corect
+4. **Regresia**: Fix-ul inițial de pe 12 noiembrie a corectat o parte din indentare, dar a lăsat verificarea finală dezindentată greșit
+
+### Commit Final (13 Noiembrie 2025)
+
+```bash
+git add callbacks_medical.py patient_links.json INVESTIGATIE_GRUPARE_LUNI.md
+git commit -m "FIX FINAL: Corectare indentare critică callbacks_medical.py linia 1349
+
+- Fix indentare linia 1349: 8→12 spații (if group_rows and not is_group_collapsed)
+- Liniile 1346-1361 acum corect indentate (în loop grupuri, dar ÎN AFARA loop link-uri)
+- Adăugat output_folder_path în patient_links.json pentru ambele înregistrări
+- Testare automată: TOATE testele PASSED (grupare zile/săptămâni/luni)
+- Regresie rezolvată: înregistrarea din 14 octombrie acum vizibilă"
+```
+
+**STATUS FINAL**: ✅ **PROBLEMA REZOLVATĂ DEFINITIV**  
+**Data rezolvare finală**: 13 Noiembrie 2025, ora 17:56  
+**Tokens folosiți**: ~60K / 1M  
+**Fișiere modificate**: `callbacks_medical.py`, `patient_links.json`  
+**Test automatizat creat**: `test_grupare_completa.py` (va fi șters după commit)
 

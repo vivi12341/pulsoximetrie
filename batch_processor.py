@@ -30,6 +30,7 @@ from logger_setup import logger
 from data_parser import parse_csv_data
 from plot_generator import create_plot
 from patient_links import generate_patient_link
+import batch_session_manager
 
 # --- Mapare Luni în Română ---
 MONTH_NAMES_RO = {
@@ -130,6 +131,99 @@ def generate_intuitive_folder_name(df: pd.DataFrame, original_filename: str) -> 
         logger.warning(f"Se folosește numele fallback: '{fallback_name}'")
         return fallback_name
 
+def process_associated_pdf(input_folder: str, csv_filename: str, device_number: str, token: str) -> bool:
+    """
+    Caută și procesează PDF-ul asociat unui CSV în același folder.
+    
+    Logica de matching:
+    - Același device number (ex: "3539", "0331")
+    - Format: "Checkme O2 {device}_*.pdf" sau similar
+    
+    Args:
+        input_folder: Folder unde se caută PDF-ul
+        csv_filename: Numele fișierului CSV (pentru referință)
+        device_number: Numărul aparatului (ex: "3539")
+        token: Token-ul pacientului pentru salvare
+        
+    Returns:
+        bool: True dacă PDF găsit și procesat cu succes
+    """
+    try:
+        # Listăm toate PDF-urile din folder
+        pdf_files = [f for f in os.listdir(input_folder) if f.lower().endswith('.pdf')]
+        
+        if not pdf_files:
+            logger.debug(f"Nu există PDF-uri în folderul {input_folder}")
+            return False
+        
+        # Căutăm PDF cu același device number
+        matching_pdf = None
+        for pdf_file in pdf_files:
+            # Verificăm dacă device_number apare în numele PDF-ului
+            if device_number in pdf_file:
+                matching_pdf = pdf_file
+                break
+        
+        if not matching_pdf:
+            logger.debug(f"Nu s-a găsit PDF asociat pentru device #{device_number}")
+            return False
+        
+        # Avem PDF potrivit - procesăm
+        pdf_path = os.path.join(input_folder, matching_pdf)
+        logger.info(f"📄 Găsit PDF asociat: {matching_pdf} pentru device #{device_number}")
+        
+        # Citim PDF-ul
+        with open(pdf_path, 'rb') as f:
+            pdf_content = f.read()
+        
+        # Salvăm PDF-ul pentru pacient
+        from patient_links import save_pdf_for_link, save_pdf_parsed_data
+        saved_path = save_pdf_for_link(token, pdf_content, matching_pdf)
+        
+        if not saved_path:
+            logger.error(f"Eroare la salvarea PDF-ului {matching_pdf}")
+            return False
+        
+        # Parsăm PDF-ul
+        try:
+            from pdf_parser import parse_checkme_o2_report, PDF_SUPPORT
+            
+            if not PDF_SUPPORT:
+                logger.warning("pdfplumber nu este instalat - skip parsing PDF")
+                return True  # PDF salvat, dar nu parsat
+            
+            # Creăm fișier temporar pentru parsing
+            import tempfile
+            with tempfile.NamedTemporaryFile(suffix='.pdf', delete=False) as tmp_file:
+                tmp_file.write(pdf_content)
+                tmp_pdf_path = tmp_file.name
+            
+            try:
+                # Parsăm PDF-ul
+                parsed_data = parse_checkme_o2_report(tmp_pdf_path)
+                
+                # Salvăm datele parsate
+                if save_pdf_parsed_data(token, saved_path, parsed_data):
+                    logger.info(f"✅ PDF {matching_pdf} parsat și salvat pentru token {token[:8]}...")
+                    return True
+                else:
+                    logger.warning(f"Eroare la salvarea datelor parsate pentru {matching_pdf}")
+                    return False
+                    
+            finally:
+                # Ștergem fișierul temporar
+                if os.path.exists(tmp_pdf_path):
+                    os.remove(tmp_pdf_path)
+                    
+        except Exception as parse_error:
+            logger.error(f"Eroare la parsarea PDF {matching_pdf}: {parse_error}")
+            return False  # Salvat dar nu parsat
+        
+    except Exception as e:
+        logger.error(f"Eroare la procesarea PDF asociat: {e}", exc_info=True)
+        return False
+
+
 def generate_intuitive_image_name(df_slice: pd.DataFrame, device_number: str) -> str:
     """
     Generează un nume intuitiv pentru fișierele imagine salvate în batch.
@@ -177,17 +271,19 @@ def generate_intuitive_image_name(df_slice: pd.DataFrame, device_number: str) ->
         end_str = df_slice.index.max().strftime('%H%M%S')
         return f"grafic_{start_str}_pana_la_{end_str}.jpg"
 
-def run_batch_job(input_folder: str, output_folder: str, window_minutes: int) -> List[Dict]:
+def run_batch_job(input_folder: str, output_folder: str, window_minutes: int, session_id: str = None) -> List[Dict]:
     """
     Execută procesul de generare în lot a imaginilor cu grafice.
     
     [NEW v4.0] Generează automat link-uri persistente pentru fiecare CSV procesat.
+    [NEW v6.0] Tracking progres cu batch_session_manager pentru reluare automată.
 
     Args:
         input_folder (str): Calea către folderul care conține fișierele CSV.
         output_folder (str): Calea către folderul rădăcină unde vor fi salvate
                              rezultatele.
         window_minutes (int): Durata în minute a fiecărei "felii" de grafic.
+        session_id (str, optional): UUID sesiune pentru tracking progres.
                              
     Returns:
         List[Dict]: Listă cu link-urile generate (token, device, date, etc.)
@@ -223,6 +319,14 @@ def run_batch_job(input_folder: str, output_folder: str, window_minutes: int) ->
         for file_name in csv_files:
             file_path = os.path.join(input_folder, file_name)
             logger.info(f"--- Procesare fișier: {file_name} ---")
+            
+            # [NEW v6.0] Actualizăm status la "processing" pentru tracking
+            if session_id:
+                batch_session_manager.update_file_status(
+                    session_id, 
+                    file_name, 
+                    "processing"
+                )
 
             try:
                 # Citim conținutul fișierului
@@ -276,6 +380,13 @@ def run_batch_job(input_folder: str, output_folder: str, window_minutes: int) ->
                     )
                     logger.info(f"Salvat imaginea: {image_file_name}")
                     
+                    # Aplicăm logo-ul medicului pe imagine (dacă este configurat)
+                    try:
+                        from plot_generator import apply_logo_to_image
+                        apply_logo_to_image(image_full_path)
+                    except Exception as logo_error:
+                        logger.warning(f"Nu s-a putut aplica logo pe {image_file_name}: {logo_error}")
+                    
                     # Trecem la următoarea felie
                     current_slice_start = current_slice_end
 
@@ -309,6 +420,14 @@ def run_batch_job(input_folder: str, output_folder: str, window_minutes: int) ->
                             links[token]['original_filename'] = file_name
                             save_patient_links(links)
                         
+                        # [NEW v5.0] Căutăm și procesăm PDF asociat (același folder, același device)
+                        try:
+                            pdf_processed = process_associated_pdf(input_folder, file_name, device_number, token)
+                            if pdf_processed:
+                                logger.info(f"📄 PDF asociat procesat pentru {device_display_name}")
+                        except Exception as pdf_error:
+                            logger.warning(f"Nu s-a putut procesa PDF asociat pentru '{file_name}': {pdf_error}")
+                        
                         generated_links.append({
                             "token": token,
                             "device_name": device_display_name,
@@ -321,6 +440,17 @@ def run_batch_job(input_folder: str, output_folder: str, window_minutes: int) ->
                             "images_count": slice_count - 1
                         })
                         logger.info(f"🔗 Link generat automat: {token[:8]}... pentru {device_display_name}")
+                        
+                        # [NEW v6.0] Actualizăm status la "completed" pentru tracking
+                        if session_id:
+                            pdf_name = f"Checkme O2 {device_number}*.pdf" if pdf_processed else None
+                            batch_session_manager.update_file_status(
+                                session_id, 
+                                file_name, 
+                                "completed",
+                                token=token,
+                                pdf_associated=pdf_name
+                            )
                     else:
                         logger.warning(f"Nu s-a putut genera link pentru '{file_name}'")
                         
@@ -330,9 +460,28 @@ def run_batch_job(input_folder: str, output_folder: str, window_minutes: int) ->
             except ValueError as e:
                 # Prindem erorile de la data_parser (ex: CSV invalid)
                 logger.error(f"EROARE la procesarea fișierului '{file_name}': {e}. Se trece la următorul fișier.")
+                
+                # [NEW v6.0] Actualizăm status la "failed" pentru tracking
+                if session_id:
+                    batch_session_manager.update_file_status(
+                        session_id, 
+                        file_name, 
+                        "failed",
+                        error=str(e)
+                    )
+                    
             except Exception as e:
                 # Prindem orice altă eroare neașteptată
                 logger.critical(f"EROARE CRITICĂ neașteptată la procesarea fișierului '{file_name}': {e}", exc_info=True)
+                
+                # [NEW v6.0] Actualizăm status la "failed" pentru tracking
+                if session_id:
+                    batch_session_manager.update_file_status(
+                        session_id, 
+                        file_name, 
+                        "failed",
+                        error=str(e)
+                    )
 
     except Exception as e:
         logger.critical(f"O eroare critică a oprit procesul de batch: {e}", exc_info=True)

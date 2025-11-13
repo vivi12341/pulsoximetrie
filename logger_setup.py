@@ -88,7 +88,7 @@ def setup_logger():
 
     # --- Creare și Asamblare Logger Principal ---
     # Obținem logger-ul rădăcină al aplicației.
-    app_logger = logging.getLogger("OximetrieApp")
+    app_logger = logging.getLogger("PulsoximetrieApp")
     app_logger.setLevel(logging.INFO) # Nivelul minim de severitate pe care îl procesează.
 
     # Prevenim adăugarea multiplă de handlers dacă funcția e apelată din greșeală de mai multe ori.

@@ -30,6 +30,7 @@ layout = html.Div(
         dcc.Store(id='loaded-data-store'),
         dcc.Store(id='current-patient-token'),
         dcc.Store(id='url-token-detected'),  # Nou: detectare token din URL
+        dcc.Store(id='collapsed-groups-store', data=[]),  # Store pentru grupuri collapsed
         
         # Container notificări globale
         html.Div(id="global-notification-container"),
@@ -43,7 +44,7 @@ layout = html.Div(
 medical_layout = html.Div([
     # Header
     html.H1(
-        "📊 Platformă Pulsoximetrie Medicală",
+        "📊 Platformă Pulsoximetrie",
         id="app-title",
         style={'textAlign': 'center', 'color': '#333', 'marginBottom': '30px'}
     ),
@@ -69,83 +70,432 @@ medical_layout = html.Div([
                                     style={'color': '#2c3e50', 'marginBottom': '10px'}
                                 ),
                                 html.P(
-                                    "Încărcați mai multe fișiere CSV simultan. Link-urile se generează AUTOMAT după procesare.",
-                                    style={'color': '#7f8c8d', 'marginBottom': '30px', 'fontSize': '14px'}
+                                    "Încărcați mai multe fișiere CSV + PDF simultan din același folder. Link-urile se generează AUTOMAT după procesare.",
+                                    style={'color': '#7f8c8d', 'marginBottom': '10px', 'fontSize': '14px'}
                                 ),
+                                
+                                # Info box cu instrucțiuni
+                                html.Div([
+                                    html.Strong("💡 Cum funcționează:", style={'display': 'block', 'marginBottom': '10px', 'color': '#2980b9'}),
+                                    html.Ul([
+                                        html.Li("Puneți CSV-uri + PDF-uri în același folder (ex: bach data/)"),
+                                        html.Li("PDF-urile cu același device number se asociază automat cu CSV-urile"),
+                                        html.Li("Sistemul procesează tot și generează link-uri persistente"),
+                                        html.Li("Găsiți rezultatele în tab-ul 'Vizualizare Date'")
+                                    ], style={'fontSize': '13px', 'color': '#555', 'lineHeight': '1.8'})
+                                ], style={
+                                    'padding': '15px',
+                                    'backgroundColor': '#e8f4f8',
+                                    'borderRadius': '8px',
+                                    'border': '1px solid #3498db',
+                                    'marginBottom': '25px'
+                                }),
                                 
                                 # Store pentru refresh automat
                                 dcc.Store(id='admin-refresh-trigger', data=0),
                                 
+                                # === SELECTOR MOD PROCESARE ===
                                 html.Div([
-                                    html.Div([
-                                        html.Label("📂 Folder intrare CSV:", style={'fontWeight': 'bold', 'display': 'block', 'marginBottom': '5px'}),
-                                        dcc.Input(
-                                            id='admin-batch-input-folder',
-                                            type='text',
-                                            value='',
-                                            placeholder='Ex: C:\\DateMedicale\\CSV_Intrare',
-                                            style={'width': '100%', 'padding': '12px', 'marginBottom': '15px', 'border': '1px solid #bdc3c7', 'borderRadius': '5px'}
-                                        ),
-                                        
-                                        html.Label("📂 Folder ieșire imagini:", style={'fontWeight': 'bold', 'display': 'block', 'marginBottom': '5px'}),
-                                        dcc.Input(
-                                            id='admin-batch-output-folder',
-                                            type='text',
-                                            value='',
-                                            placeholder=f'Implicit: .\\{config.OUTPUT_DIR}',
-                                            style={'width': '100%', 'padding': '12px', 'marginBottom': '15px', 'border': '1px solid #bdc3c7', 'borderRadius': '5px'}
-                                        ),
-                                        
+                                    html.H4("🔧 Selectați modul de lucru:", style={'color': '#2c3e50', 'marginBottom': '15px'}),
+                                    dcc.RadioItems(
+                                        id='admin-batch-mode-selector',
+                                        options=[
+                                            {'label': '📁 Mod Local (Folder pe disk)', 'value': 'local'},
+                                            {'label': '☁️ Mod Online (Upload fișiere)', 'value': 'upload'}
+                                        ],
+                                        value='upload',  # Default: upload (pentru internet)
+                                        inline=True,
+                                        style={'marginBottom': '20px'},
+                                        labelStyle={'marginRight': '25px', 'fontSize': '14px', 'fontWeight': 'bold'}
+                                    )
+                                ], style={'marginBottom': '25px', 'padding': '15px', 'backgroundColor': '#f8f9fa', 'borderRadius': '8px', 'border': '1px solid #ddd'}),
+                                
+                                # === MOD LOCAL (FOLDER) ===
+                                html.Div(
+                                    id='admin-batch-local-mode',
+                                    children=[
+                                        html.Label("📂 Folder intrare (CSV + PDF):", style={'fontWeight': 'bold', 'display': 'block', 'marginBottom': '5px'}),
                                         html.Div([
-                                            html.Label("⏱️ Durată fereastră (minute):", style={'fontWeight': 'bold', 'marginRight': '10px'}),
                                             dcc.Input(
-                                                id='admin-batch-window-minutes',
-                                                type='number',
-                                                value=config.DEFAULT_WINDOW_MINUTES,
-                                                min=1,
-                                                max=120,
-                                                step=1,
-                                                style={'padding': '10px', 'width': '80px', 'border': '1px solid #bdc3c7', 'borderRadius': '5px'}
-                                            )
-                                        ], style={'marginBottom': '20px'}),
-                                        
-                                        html.Button(
-                                            '🚀 Pornește Procesare Batch + Generare Link-uri',
-                                            id='admin-start-batch-button',
-                                            n_clicks=0,
-                                            style={
-                                                'width': '100%',
-                                                'padding': '15px',
-                                                'fontSize': '16px',
-                                                'fontWeight': 'bold',
-                                                'backgroundColor': '#27ae60',
-                                                'color': 'white',
-                                                'border': 'none',
-                                                'borderRadius': '5px',
+                                                id='admin-batch-input-folder',
+                                                type='text',
+                                                value='',
+                                                placeholder='Ex: bach data SAU de modificat reguli',
+                                                style={'width': '100%', 'padding': '12px', 'border': '1px solid #bdc3c7', 'borderRadius': '5px 5px 0 0'}
+                                            ),
+                                            html.Div([
+                                                html.Small("💡 Foldere disponibile: ", style={'fontWeight': 'bold', 'marginRight': '10px'}),
+                                                html.Code("bach data", style={'padding': '5px 10px', 'backgroundColor': '#e8f4f8', 'borderRadius': '3px', 'marginRight': '5px', 'fontSize': '12px'}),
+                                                html.Code("de modificat reguli", style={'padding': '5px 10px', 'backgroundColor': '#e8f4f8', 'borderRadius': '3px', 'marginRight': '5px', 'fontSize': '12px'}),
+                                                html.Code("intrare", style={'padding': '5px 10px', 'backgroundColor': '#e8f4f8', 'borderRadius': '3px', 'fontSize': '12px'})
+                                            ], style={'padding': '10px', 'backgroundColor': '#f8f9fa', 'borderRadius': '0 0 5px 5px', 'border': '1px solid #bdc3c7', 'borderTop': 'none'})
+                                        ], style={'marginBottom': '15px'})
+                                    ],
+                                    style={'display': 'none'}  # Ascuns inițial
+                                ),
+                                
+                                # === MOD ONLINE (UPLOAD FIȘIERE) ===
+                                html.Div(
+                                    id='admin-batch-upload-mode',
+                                    children=[
+                                        html.Label("📤 Selectați fișiere CSV + PDF:", style={'fontWeight': 'bold', 'display': 'block', 'marginBottom': '10px'}),
+                                        dcc.Upload(
+                                            id='admin-batch-file-upload',
+                                            children=html.Div([
+                                                html.I(className='fas fa-cloud-upload-alt', style={'fontSize': '48px', 'color': '#3498db', 'marginBottom': '15px'}),
+                                                html.H4('📁 Click sau drag & drop fișiere aici', style={'margin': '0', 'color': '#2c3e50'}),
+                                                html.P('Suportă CSV + PDF (multiple fișiere simultan)', style={'margin': '10px 0 0 0', 'color': '#7f8c8d', 'fontSize': '13px'}),
+                                                html.Small('💡 Încărcați CSV-uri și PDF-uri împreună pentru asociere automată', style={'color': '#95a5a6', 'fontSize': '12px'})
+                                            ], style={
+                                                'textAlign': 'center',
+                                                'padding': '40px',
+                                                'border': '2px dashed #3498db',
+                                                'borderRadius': '10px',
+                                                'backgroundColor': '#ecf0f1',
                                                 'cursor': 'pointer',
-                                                'marginBottom': '15px'
-                                            }
+                                                'transition': 'all 0.3s ease'
+                                            }),
+                                            multiple=True,  # Upload multiple fișiere
+                                            accept='.csv,.pdf',  # Doar CSV și PDF
+                                            style={'marginBottom': '20px'}
                                         ),
                                         
-                                        dcc.Loading(
-                                            id="admin-batch-loading",
-                                            type="default",
-                                            children=html.Div(id='admin-batch-result', style={'marginTop': '15px'})
-                                        )
+                                        # === LISTĂ FIȘIERE UPLOADATE ===
+                                        html.Div(
+                                            id='admin-batch-uploaded-files-list',
+                                            children=[
+                                                html.P("📭 Nu există fișiere încărcate încă.", style={
+                                                    'textAlign': 'center',
+                                                    'color': '#95a5a6',
+                                                    'padding': '20px',
+                                                    'backgroundColor': '#f8f9fa',
+                                                    'borderRadius': '5px',
+                                                    'border': '1px dashed #bdc3c7'
+                                                })
+                                            ]
+                                        ),
+                                        
+                                        # === STORE PENTRU FIȘIERE UPLOADATE ===
+                                        dcc.Store(id='admin-batch-uploaded-files-store', data=[])
+                                    ],
+                                    style={'display': 'block', 'marginBottom': '20px'}  # Vizibil inițial
+                                ),
+                                
+                                # === CONFIGURARE GENERALĂ ===
+                                html.Label("📂 Folder ieșire imagini:", style={'fontWeight': 'bold', 'display': 'block', 'marginBottom': '5px'}),
+                                dcc.Input(
+                                    id='admin-batch-output-folder',
+                                    type='text',
+                                    value='',
+                                    placeholder=f'Implicit: .\\{config.OUTPUT_DIR}',
+                                    style={'width': '100%', 'padding': '12px', 'marginBottom': '15px', 'border': '1px solid #bdc3c7', 'borderRadius': '5px'}
+                                ),
+                                
+                                html.Div([
+                                    html.Label("⏱️ Durată fereastră (minute):", style={'fontWeight': 'bold', 'marginRight': '10px'}),
+                                    dcc.Input(
+                                        id='admin-batch-window-minutes',
+                                        type='number',
+                                        value=config.DEFAULT_WINDOW_MINUTES,
+                                        min=1,
+                                        max=120,
+                                        step=1,
+                                        style={'padding': '10px', 'width': '80px', 'border': '1px solid #bdc3c7', 'borderRadius': '5px'}
+                                    )
+                                ], style={'marginBottom': '20px'}),
+                                
+                                html.Button(
+                                    '🚀 Pornește Procesare Batch + Generare Link-uri',
+                                    id='admin-start-batch-button',
+                                    n_clicks=0,
+                                    style={
+                                        'width': '100%',
+                                        'padding': '15px',
+                                        'fontSize': '16px',
+                                        'fontWeight': 'bold',
+                                        'backgroundColor': '#27ae60',
+                                        'color': 'white',
+                                        'border': 'none',
+                                        'borderRadius': '5px',
+                                        'cursor': 'pointer',
+                                        'marginBottom': '15px'
+                                    }
+                                ),
+                                
+                                # === BARĂ PROGRES + INDICATOR STATUS ===
+                                html.Div(
+                                            id='admin-batch-progress-container',
+                                            children=[
+                                                html.Div([
+                                                    html.Span("📊 Progres procesare:", style={'fontWeight': 'bold', 'marginRight': '10px'}),
+                                                    html.Span(id='admin-batch-progress-text', children="0 / 0 fișiere", style={'fontSize': '14px', 'color': '#2c3e50'})
+                                                ], style={'marginBottom': '10px'}),
+                                                
+                                                # Bară progres vizuală
+                                                html.Div([
+                                                    html.Div(
+                                                        id='admin-batch-progress-bar',
+                                                        style={
+                                                            'height': '30px',
+                                                            'width': '0%',
+                                                            'backgroundColor': '#27ae60',
+                                                            'borderRadius': '5px',
+                                                            'transition': 'width 0.3s ease',
+                                                            'display': 'flex',
+                                                            'alignItems': 'center',
+                                                            'justifyContent': 'center',
+                                                            'color': 'white',
+                                                            'fontWeight': 'bold',
+                                                            'fontSize': '12px'
+                                                        }
+                                                    )
+                                                ], style={
+                                                    'width': '100%',
+                                                    'height': '30px',
+                                                    'backgroundColor': '#ecf0f1',
+                                                    'borderRadius': '5px',
+                                                    'marginBottom': '10px',
+                                                    'overflow': 'hidden'
+                                                }),
+                                                
+                                                # Status detaliat
+                                                html.Div(id='admin-batch-status-detail', style={
+                                                    'fontSize': '13px',
+                                                    'color': '#7f8c8d',
+                                                    'padding': '10px',
+                                                    'backgroundColor': '#f8f9fa',
+                                                    'borderRadius': '5px',
+                                                    'border': '1px solid #e0e0e0'
+                                                })
+                                            ],
+                                    style={'display': 'none', 'marginBottom': '20px'}  # Ascuns inițial
+                                ),
+                                
+                                dcc.Loading(
+                                    id="admin-batch-loading",
+                                    type="default",
+                                    children=html.Div(id='admin-batch-result', style={'marginTop': '15px'})
+                                ),
+                                
+                                # === ISTORIC SESIUNI BATCH ===
+                                html.Div([
+                                    html.H4("📜 Istoric Sesiuni Batch", style={'color': '#2c3e50', 'marginTop': '30px', 'marginBottom': '15px'}),
+                                    html.P(
+                                        "Ultimele sesiuni de procesare. Reluați sesiunile întrerupte cu un click.",
+                                        style={'fontSize': '13px', 'color': '#7f8c8d', 'marginBottom': '15px'}
+                                    ),
+                                    html.Div(id='admin-batch-sessions-history', children=[
+                                        html.P("🔍 Nu există sesiuni batch încă.", style={'textAlign': 'center', 'color': '#95a5a6', 'padding': '20px'})
                                     ])
                                 ], style={
-                                    'padding': '25px', 
-                                    'backgroundColor': '#fff', 
+                                    'marginTop': '30px',
+                                    'padding': '20px',
+                                    'backgroundColor': '#f8f9fa',
+                                    'borderRadius': '8px',
+                                    'border': '1px solid #e0e0e0'
+                                }),
+                                
+                                # === INTERVAL PENTRU REFRESH PROGRES ===
+                                dcc.Interval(
+                                    id='admin-batch-progress-interval',
+                                    interval=1000,  # 1 secundă
+                                    n_intervals=0,
+                                    disabled=True  # Activat doar când procesare activă
+                                ),
+                                
+                                # === STORE PENTRU SESSION ID ===
+                                dcc.Store(id='admin-batch-session-id', data=None)
+                            ]
+                        )
+                    ],
+                ),
+                
+                # ==========================================
+                # TAB 2: SETĂRI DOCTOR (NOU)
+                # ==========================================
+                dcc.Tab(
+                    label="⚙️ Setări",
+                    value='tab-settings',
+                    children=[
+                        html.Div(
+                            className="tab-content",
+                            style={'padding': '30px', 'backgroundColor': '#f5f7fa'},
+                            children=[
+                                html.H2(
+                                    "⚙️ Setări Personalizare", 
+                                    style={'color': '#2c3e50', 'marginBottom': '10px'}
+                                ),
+                                html.P(
+                                    "Personalizați aspectul platformei cu sigla cabinetului și informații footer.",
+                                    style={'color': '#7f8c8d', 'marginBottom': '30px', 'fontSize': '14px'}
+                                ),
+                                
+                                # === SECȚIUNE LOGO ===
+                                html.Div([
+                                    html.H3("🖼️ Sigla Cabinetului", style={'color': '#2980b9', 'marginBottom': '15px'}),
+                                    html.P(
+                                        "Încărcați sigla cabinetului dumneavoastră. Aceasta va fi aplicată pe grafice, imagini și rapoarte PDF.",
+                                        style={'color': '#555', 'fontSize': '13px', 'marginBottom': '15px'}
+                                    ),
+                                    
+                                    # Upload logo
+                                    html.Div([
+                                        html.Label("📤 Selectați fișier imagine:", style={'fontWeight': 'bold', 'display': 'block', 'marginBottom': '10px'}),
+                                        dcc.Upload(
+                                            id='settings-logo-upload',
+                                            children=html.Div([
+                                                html.I(className='fas fa-image', style={'fontSize': '36px', 'color': '#3498db', 'marginBottom': '10px'}),
+                                                html.H4('📁 Click sau drag & drop logo aici', style={'margin': '0', 'color': '#2c3e50', 'fontSize': '14px'}),
+                                                html.P('Suportă: PNG, JPG, GIF, WebP (Max 5MB)', style={'margin': '5px 0 0 0', 'color': '#7f8c8d', 'fontSize': '12px'})
+                                            ], style={
+                                                'textAlign': 'center',
+                                                'padding': '30px',
+                                                'border': '2px dashed #3498db',
+                                                'borderRadius': '8px',
+                                                'backgroundColor': '#ecf0f1',
+                                                'cursor': 'pointer'
+                                            }),
+                                            accept='.png,.jpg,.jpeg,.gif,.webp',
+                                            max_size=5*1024*1024  # 5MB
+                                        )
+                                    ], style={'marginBottom': '20px'}),
+                                    
+                                    # Preview logo curent
+                                    html.Div(id='settings-logo-preview-container', children=[
+                                        html.P("📭 Nu ați încărcat încă un logo.", style={
+                                            'textAlign': 'center',
+                                            'color': '#95a5a6',
+                                            'padding': '20px',
+                                            'backgroundColor': '#f8f9fa',
+                                            'borderRadius': '5px',
+                                            'border': '1px dashed #bdc3c7'
+                                        })
+                                    ], style={'marginBottom': '20px'}),
+                                    
+                                    # Opțiuni aplicare logo
+                                    html.Div([
+                                        html.Label("🎯 Unde să se aplice logo-ul:", style={'fontWeight': 'bold', 'display': 'block', 'marginBottom': '10px'}),
+                                        dcc.Checklist(
+                                            id='settings-logo-apply-options',
+                                            options=[
+                                                {'label': ' 🖼️ Pe imaginile generate', 'value': 'images'},
+                                                {'label': ' 📄 Pe documentele PDF', 'value': 'pdf'},
+                                                {'label': ' 🌐 Pe site (deasupra titlului)', 'value': 'site'}
+                                            ],
+                                            value=['images', 'pdf', 'site'],
+                                            style={'fontSize': '14px'},
+                                            labelStyle={'display': 'block', 'marginBottom': '8px'}
+                                        )
+                                    ], style={'marginBottom': '20px'}),
+                                    
+                                    # Buton ștergere logo
+                                    html.Button(
+                                        '🗑️ Șterge Logo',
+                                        id='settings-delete-logo-button',
+                                        n_clicks=0,
+                                        style={
+                                            'padding': '10px 20px',
+                                            'fontSize': '14px',
+                                            'backgroundColor': '#e74c3c',
+                                            'color': 'white',
+                                            'border': 'none',
+                                            'borderRadius': '5px',
+                                            'cursor': 'pointer'
+                                        }
+                                    )
+                                    
+                                ], style={
+                                    'padding': '25px',
+                                    'backgroundColor': '#fff',
                                     'borderRadius': '10px',
-                                    'boxShadow': '0 2px 8px rgba(0,0,0,0.1)'
-                                })
+                                    'boxShadow': '0 2px 8px rgba(0,0,0,0.1)',
+                                    'marginBottom': '30px'
+                                }),
+                                
+                                # === SECȚIUNE FOOTER ===
+                                html.Div([
+                                    html.H3("📝 Informații Footer", style={'color': '#2980b9', 'marginBottom': '15px'}),
+                                    html.P(
+                                        "Adăugați informații care vor apărea în josul fiecărei pagini (contact, adresă, program, etc.).",
+                                        style={'color': '#555', 'fontSize': '13px', 'marginBottom': '15px'}
+                                    ),
+                                    
+                                    html.Label("📄 Text footer:", style={'fontWeight': 'bold', 'display': 'block', 'marginBottom': '5px'}),
+                                    html.Small([
+                                        "💡 Puteți folosi link-uri: ",
+                                        html.Code('<a href="https://exemplu.ro">Text link</a>', style={'backgroundColor': '#e8f4f8', 'padding': '2px 5px', 'borderRadius': '3px', 'fontSize': '11px'}),
+                                        html.Br(),
+                                        "sau scrieți URL-uri direct (vor deveni automat clickable)"
+                                    ], style={'color': '#666', 'fontSize': '11px', 'marginBottom': '8px', 'display': 'block'}),
+                                    dcc.Textarea(
+                                        id='settings-footer-textarea',
+                                        placeholder='Ex: Dr. Popescu Ion | Cabinet Medical | Tel: 0721234567 | Website: https://cabinet-medical.ro | Program: Luni-Vineri 9:00-17:00',
+                                        style={
+                                            'width': '100%',
+                                            'height': '120px',
+                                            'padding': '12px',
+                                            'fontSize': '13px',
+                                            'border': '1px solid #bdc3c7',
+                                            'borderRadius': '5px',
+                                            'fontFamily': 'Arial, sans-serif',
+                                            'resize': 'vertical'
+                                        }
+                                    ),
+                                    
+                                    # Preview footer
+                                    html.Div([
+                                        html.Label("👁️ Preview:", style={'fontWeight': 'bold', 'display': 'block', 'marginBottom': '8px', 'marginTop': '15px'}),
+                                        html.Div(
+                                            id='settings-footer-preview',
+                                            children=[
+                                                html.P("Footer-ul va apărea aici după ce scrieți text...", 
+                                                      style={'color': '#95a5a6', 'fontStyle': 'italic', 'fontSize': '12px'})
+                                            ],
+                                            style={
+                                                'padding': '15px',
+                                                'backgroundColor': '#f8f9fa',
+                                                'borderRadius': '8px',
+                                                'border': '1px solid #e0e0e0',
+                                                'minHeight': '50px',
+                                                'textAlign': 'center'
+                                            }
+                                        )
+                                    ]),
+                                    
+                                    html.Button(
+                                        '💾 Salvează Footer',
+                                        id='settings-save-footer-button',
+                                        n_clicks=0,
+                                        style={
+                                            'padding': '12px 25px',
+                                            'fontSize': '14px',
+                                            'fontWeight': 'bold',
+                                            'backgroundColor': '#27ae60',
+                                            'color': 'white',
+                                            'border': 'none',
+                                            'borderRadius': '5px',
+                                            'cursor': 'pointer',
+                                            'marginTop': '15px'
+                                        }
+                                    )
+                                    
+                                ], style={
+                                    'padding': '25px',
+                                    'backgroundColor': '#fff',
+                                    'borderRadius': '10px',
+                                    'boxShadow': '0 2px 8px rgba(0,0,0,0.1)',
+                                    'marginBottom': '30px'
+                                }),
+                                
+                                # Notificare status
+                                html.Div(id='settings-status-notification', style={'marginTop': '20px'})
                             ]
                         )
                     ]
                 ),
                 
                 # ==========================================
-                # TAB 2: VIZUALIZARE DATE (NOU - CU ACCORDION)
+                # TAB 3: VIZUALIZARE DATE (NOU - CU ACCORDION)
                 # ==========================================
                 dcc.Tab(
                     label="📊 Vizualizare Date",
@@ -175,15 +525,123 @@ medical_layout = html.Div([
                                             'verticalAlign': 'middle'
                                         }
                                     )
-                                ], style={'marginBottom': '10px'}),
+                                ], style={'marginBottom': '20px'}),
+                                
+                                # === PANOU FILTRARE TEMPORALĂ ===
+                                html.Div([
+                                    html.H4("📅 Filtrare Cronologică", style={'color': '#2980b9', 'marginBottom': '15px'}),
+                                    
+                                    # Butoane rapide
+                                    html.Div([
+                                        html.Label("⚡ Acces Rapid:", style={'fontWeight': 'bold', 'display': 'block', 'marginBottom': '10px', 'color': '#555'}),
+                                        html.Div([
+                                            html.Button('📅 Azi', id='filter-today', n_clicks=0, 
+                                                style={'padding': '8px 15px', 'marginRight': '8px', 'backgroundColor': '#27ae60', 'color': 'white', 'border': 'none', 'borderRadius': '5px', 'cursor': 'pointer', 'fontSize': '13px', 'fontWeight': 'bold'}),
+                                            html.Button('⏮️ Ieri', id='filter-yesterday', n_clicks=0,
+                                                style={'padding': '8px 15px', 'marginRight': '8px', 'backgroundColor': '#3498db', 'color': 'white', 'border': 'none', 'borderRadius': '5px', 'cursor': 'pointer', 'fontSize': '13px', 'fontWeight': 'bold'}),
+                                            html.Button('📆 1 Săptămână', id='filter-week', n_clicks=0,
+                                                style={'padding': '8px 15px', 'marginRight': '8px', 'backgroundColor': '#9b59b6', 'color': 'white', 'border': 'none', 'borderRadius': '5px', 'cursor': 'pointer', 'fontSize': '13px', 'fontWeight': 'bold'}),
+                                            html.Button('📅 1 Lună', id='filter-month', n_clicks=0,
+                                                style={'padding': '8px 15px', 'marginRight': '8px', 'backgroundColor': '#e67e22', 'color': 'white', 'border': 'none', 'borderRadius': '5px', 'cursor': 'pointer', 'fontSize': '13px', 'fontWeight': 'bold'}),
+                                            html.Button('🗓️ 1 An', id='filter-year', n_clicks=0,
+                                                style={'padding': '8px 15px', 'backgroundColor': '#e74c3c', 'color': 'white', 'border': 'none', 'borderRadius': '5px', 'cursor': 'pointer', 'fontSize': '13px', 'fontWeight': 'bold'}),
+                                        ], style={'marginBottom': '20px'})
+                                    ]),
+                                    
+                                    # Calendar pentru selecție interval personalizat
+                                    html.Div([
+                                        html.Label("🗓️ Interval Personalizat:", style={'fontWeight': 'bold', 'display': 'block', 'marginBottom': '10px', 'color': '#555'}),
+                                        html.Div([
+                                            html.Div([
+                                                html.Label("De la:", style={'fontWeight': 'bold', 'marginBottom': '5px', 'display': 'block', 'fontSize': '13px'}),
+                                                dcc.DatePickerSingle(
+                                                    id='date-picker-start',
+                                                    placeholder='Selectează data început',
+                                                    display_format='DD/MM/YYYY',
+                                                    first_day_of_week=1,
+                                                    style={'marginRight': '15px'}
+                                                )
+                                            ], style={'display': 'inline-block', 'marginRight': '20px'}),
+                                            html.Div([
+                                                html.Label("Până la:", style={'fontWeight': 'bold', 'marginBottom': '5px', 'display': 'block', 'fontSize': '13px'}),
+                                                dcc.DatePickerSingle(
+                                                    id='date-picker-end',
+                                                    placeholder='Selectează data sfârșit',
+                                                    display_format='DD/MM/YYYY',
+                                                    first_day_of_week=1
+                                                )
+                                            ], style={'display': 'inline-block'}),
+                                            html.Button(
+                                                '🔍 Filtrează',
+                                                id='apply-date-filter',
+                                                n_clicks=0,
+                                                style={
+                                                    'padding': '8px 20px',
+                                                    'marginLeft': '20px',
+                                                    'backgroundColor': '#2ecc71',
+                                                    'color': 'white',
+                                                    'border': 'none',
+                                                    'borderRadius': '5px',
+                                                    'cursor': 'pointer',
+                                                    'fontSize': '13px',
+                                                    'fontWeight': 'bold',
+                                                    'verticalAlign': 'bottom'
+                                                }
+                                            ),
+                                            html.Button(
+                                                '❌ Resetare',
+                                                id='clear-date-filter',
+                                                n_clicks=0,
+                                                style={
+                                                    'padding': '8px 20px',
+                                                    'marginLeft': '10px',
+                                                    'backgroundColor': '#95a5a6',
+                                                    'color': 'white',
+                                                    'border': 'none',
+                                                    'borderRadius': '5px',
+                                                    'cursor': 'pointer',
+                                                    'fontSize': '13px',
+                                                    'fontWeight': 'bold',
+                                                    'verticalAlign': 'bottom'
+                                                }
+                                            )
+                                        ], style={'marginTop': '10px'})
+                                    ]),
+                                    
+                                    # Grupare/Sortare
+                                    html.Div([
+                                        html.Hr(style={'margin': '20px 0'}),
+                                        html.Label("📊 Grupare:", style={'fontWeight': 'bold', 'display': 'block', 'marginBottom': '10px', 'color': '#555'}),
+                                        dcc.RadioItems(
+                                            id='date-grouping',
+                                            options=[
+                                                {'label': '📅 Pe Zile', 'value': 'day'},
+                                                {'label': '📆 Pe Săptămâni', 'value': 'week'},
+                                                {'label': '🗓️ Pe Luni', 'value': 'month'}
+                                            ],
+                                            value='day',
+                                            inline=True,
+                                            labelStyle={'marginRight': '20px', 'fontSize': '13px'}
+                                        )
+                                    ], style={'marginTop': '15px'})
+                                    
+                                ], style={
+                                    'padding': '20px',
+                                    'backgroundColor': '#fff',
+                                    'borderRadius': '10px',
+                                    'boxShadow': '0 2px 8px rgba(0,0,0,0.1)',
+                                    'marginBottom': '25px',
+                                    'border': '2px solid #3498db'
+                                }),
                                 
                                 html.P(
-                                    "Click pe o linie pentru a vedea detaliile complete: grafic, imagini, PDF și notițe medicale.",
-                                    style={'color': '#7f8c8d', 'marginBottom': '30px', 'fontSize': '14px'}
+                                    "Click pe o linie pentru a vedea detaliile complete: grafic, imagini, PDF și notițe.",
+                                    style={'color': '#7f8c8d', 'marginBottom': '20px', 'fontSize': '14px'}
                                 ),
                                 
-                                # Store pentru tracking expandare
+                                # Store-uri pentru tracking
                                 dcc.Store(id='expanded-row-id', data=None),
+                                dcc.Store(id='active-date-filter', data=None),
                                 
                                 # Container pentru lista de înregistrări
                                 dcc.Loading(
@@ -194,251 +652,35 @@ medical_layout = html.Div([
                             ]
                         )
                     ]
-                ),
-                
-                # ==========================================
-                # TAB 2: PACIENT
-                # ==========================================
-                dcc.Tab(
-                    label="👤 Pacient",
-                    value='tab-patient',
-                    children=[
-                        html.Div(
-                            className="tab-content",
-                            style={'padding': '30px'},
-                            children=[
-                                html.H2("Acces Pacient", style={'color': '#2c3e50'}),
-                                
-                                # Input Token
-                                html.Div([
-                                    html.P("Introduceți codul primit de la medic pentru a accesa înregistrările:"),
-                                    dcc.Input(
-                                        id='patient-token-input',
-                                        type='text',
-                                        value='',
-                                        placeholder='Ex: a8f9d2b1-3c4e-4d5e-8f9a...',
-                                        style={'width': '100%', 'padding': '15px', 'fontSize': '16px', 'marginBottom': '20px'}
-                                    ),
-                                    html.Button(
-                                        '🔓 Accesează Înregistrări',
-                                        id='patient-access-button',
-                                        n_clicks=0,
-                                        style={
-                                            'padding': '15px 30px',
-                                            'fontSize': '16px',
-                                            'backgroundColor': '#27ae60',
-                                            'color': 'white',
-                                            'border': 'none',
-                                            'borderRadius': '5px',
-                                            'cursor': 'pointer'
-                                        }
-                                    ),
-                                    html.Div(id='patient-access-result', style={'marginTop': '20px'})
-                                ], style={'padding': '20px', 'backgroundColor': '#ecf0f1', 'borderRadius': '10px', 'marginBottom': '30px'}),
-                                
-                                # Conținut pacient (afișat după acces)
-                                html.Div(
-                                    id='patient-content-container',
-                                    style={'display': 'none'},
-                                    children=[
-                                        # Sub-tabs pentru pacient
-                                        dcc.Tabs(
-                                            id="patient-sub-tabs",
-                                            value='patient-recordings',
-                                            children=[
-                                                # Sub-tab 1: Înregistrările Mele
-                                                dcc.Tab(
-                                                    label="📁 Înregistrările Mele",
-                                                    value='patient-recordings',
-                                                    children=[
-                                                        html.Div(
-                                                            style={'padding': '20px'},
-                                                            children=[
-                                                                html.H3("Înregistrările Dumneavoastră Stocate"),
-                                                                html.Div(id='patient-recordings-list')
-                                                            ]
-                                                        )
-                                                    ]
-                                                ),
-                                                
-                                                # Sub-tab 2: Explorează CSV
-                                                dcc.Tab(
-                                                    label="🔍 Explorează CSV",
-                                                    value='patient-explore',
-                                                    children=[
-                                                        html.Div(
-                                                            style={'padding': '20px'},
-                                                            children=[
-                                                                html.H3("Explorare CSV Temporară"),
-                                                                html.P("Încărcați un fișier CSV pentru vizualizare temporară (nu se salvează)."),
-                                                                
-                                                                dcc.Upload(
-                                                                    id='patient-explore-upload',
-                                                                    children=html.Div([
-                                                                        '📁 Trageți CSV aici sau click pentru selectare'
-                                                                    ]),
-                                                                    style={
-                                                                        'width': '100%',
-                                                                        'height': '80px',
-                                                                        'lineHeight': '80px',
-                                                                        'borderWidth': '2px',
-                                                                        'borderStyle': 'dashed',
-                                                                        'borderRadius': '10px',
-                                                                        'textAlign': 'center',
-                                                                        'backgroundColor': '#fff3cd',
-                                                                        'marginBottom': '20px'
-                                                                    },
-                                                                    multiple=False
-                                                                ),
-                                                                
-                                                                html.Div(
-                                                                    "⚠️ Graficul este temporar și nu va fi salvat.",
-                                                                    style={
-                                                                        'padding': '10px',
-                                                                        'backgroundColor': '#fff3cd',
-                                                                        'border': '1px solid #ffc107',
-                                                                        'borderRadius': '5px',
-                                                                        'marginBottom': '20px'
-                                                                    }
-                                                                ),
-                                                                
-                                                                dcc.Loading(
-                                                                    id="patient-explore-loading",
-                                                                    type="default",
-                                                                    children=dcc.Graph(
-                                                                        id='patient-explore-graph',
-                                                                        figure=go.Figure()
-                                                                    )
-                                                                )
-                                                            ]
-                                                        )
-                                                    ]
-                                                )
-                                            ]
-                                        )
-                                    ]
-                                )
-                            ]
-                        )
-                    ]
-                ),
-                
-                # ==========================================
-                # TAB 3: VIZUALIZARE INTERACTIVĂ (ORIGINAL)
-                # ==========================================
-                dcc.Tab(
-                    label="📈 Vizualizare Interactivă",
-                    value='tab-visualize',
-                    children=[
-                        html.Div(
-                            className="tab-content",
-                            style={'padding': '20px'},
-                            children=[
-                                html.H4("Pas 1: Încărcați un fișier CSV", style={'marginTop': '20px'}),
-                                dcc.Upload(
-                                    id='upload-data-component',
-                                    children=html.Div([
-                                        'Trageți și plasați sau ',
-                                        html.A('Selectați un fișier CSV')
-                                    ]),
-                                    style={
-                                        'width': '100%', 'height': '60px', 'lineHeight': '60px',
-                                        'borderWidth': '1px', 'borderStyle': 'dashed',
-                                        'borderRadius': '5px', 'textAlign': 'center', 'margin': '10px 0'
-                                    },
-                                    multiple=False
-                                ),
-                                html.Div(id='output-filename-container'),
-                                
-                                html.Hr(),
-
-                                html.H4("Pas 2: Analizați graficul", style={'marginTop': '20px'}),
-                                
-                                dcc.Loading(
-                                    id="loading-spinner",
-                                    type="default",
-                                    children=dcc.Graph(
-                                        id='interactive-graph',
-                                        figure=go.Figure()
-                                    )
-                                )
-                            ]
-                        )
-                    ]
-                ),
-                
-                # ==========================================
-                # TAB 4: PROCESARE ÎN LOT (ORIGINAL)
-                # ==========================================
-                dcc.Tab(
-                    label="🔄 Procesare în Lot (Batch)",
-                    value='tab-batch',
-                    children=[
-                        html.Div(
-                            className="tab-content",
-                            style={'padding': '20px'},
-                            children=[
-                                html.H4("Pas 1: Specificați căile folderelor", style={'marginTop': '20px'}),
-                                html.P("Introduceți căile complete către folderele de intrare și ieșire."),
-                                
-                                dcc.Input(
-                                    id='input-folder-path',
-                                    type='text',
-                                    value='',
-                                    placeholder='Cale folder intrare (ex: C:\\DateOximetrie\\Intrare)',
-                                    style={'width': '100%', 'padding': '10px', 'marginBottom': '10px'}
-                                ),
-                                dcc.Input(
-                                    id='output-folder-path',
-                                    type='text',
-                                    value='',
-                                    placeholder=f'Cale folder ieșire (implicit: .\\{config.OUTPUT_DIR})',
-                                    style={'width': '100%', 'padding': '10px', 'marginBottom': '20px'}
-                                ),
-
-                                html.H4("Pas 2: Configurați durata ferestrei", style={'marginTop': '20px'}),
-                                html.Div(style={'display': 'flex', 'alignItems': 'center'}, children=[
-                                    dcc.Input(
-                                        id='window-minutes-input',
-                                        type='number',
-                                        value=config.DEFAULT_WINDOW_MINUTES,
-                                        min=1,
-                                        max=120,
-                                        step=1,
-                                        style={'padding': '10px', 'width': '100px'}
-                                    ),
-                                    html.Span("minute", style={'marginLeft': '10px'})
-                                ]),
-
-                                html.Hr(style={'margin': '30px 0'}),
-
-                                html.H4("Pas 3: Porniți procesarea", style={'marginTop': '20px'}),
-                                html.Button(
-                                    'Pornește Procesarea în Lot',
-                                    id='start-batch-button',
-                                    n_clicks=0,
-                                    style={
-                                        'width': '100%', 'padding': '15px', 'fontSize': '18px',
-                                        'backgroundColor': '#28a745', 'color': 'white',
-                                        'border': 'none', 'borderRadius': '5px', 'cursor': 'pointer'
-                                    }
-                                ),
-                                
-                                html.Div(
-                                    id='batch-status-container',
-                                    style={'marginTop': '20px', 'padding': '15px', 'border': '1px solid #ddd', 'borderRadius': '5px', 'backgroundColor': '#f8f9fa', 'whiteSpace': 'pre-wrap'}
-                                )
-                            ]
-                        )
-                    ]
                 )
             ]
+        ),
+    
+    # Footer cu informații medicului (afișat pe toate paginile medicului)
+    html.Div([
+        html.Hr(style={'margin': '50px 0 30px 0', 'borderColor': '#e0e0e0'}),
+        
+        # Footer personalizat medic (va fi populat dinamic)
+        html.Div(id='medical-footer-container', style={'marginBottom': '20px'}),
+        
+        # Footer standard
+        html.P(
+            "🔒 Platformă securizată conform GDPR - Date anonimizate by design",
+            style={'textAlign': 'center', 'color': '#95a5a6', 'fontSize': '12px', 'marginBottom': '5px'}
+        ),
+        html.P(
+            "© 2025 Platformă Pulsoximetrie - Powered by Python + Dash + Plotly",
+            style={'textAlign': 'center', 'color': '#bdc3c7', 'fontSize': '11px'}
         )
-    ]
+    ], style={'marginTop': '60px', 'paddingBottom': '30px'})
+]
 )
 
 # --- Layout pentru PACIENȚI (simplificat, fără tab-uri) ---
 patient_layout = html.Div([
+    # Logo medicului (deasupra headerului) - va fi populat dinamic
+    html.Div(id='patient-logo-container', style={'textAlign': 'center', 'marginBottom': '20px'}),
+    
     # Header simplificat
     html.Div([
         html.H1(
@@ -446,7 +688,7 @@ patient_layout = html.Div([
             style={'textAlign': 'center', 'color': '#2c3e50', 'marginBottom': '10px'}
         ),
         html.P(
-            "Vizualizați datele dumneavoastră medicale",
+            "Vizualizați datele dumneavoastră",
             style={'textAlign': 'center', 'color': '#7f8c8d', 'marginBottom': '30px', 'fontSize': '16px'}
         )
     ]),
@@ -481,6 +723,11 @@ patient_layout = html.Div([
     # Footer cu informații
     html.Div([
         html.Hr(style={'margin': '40px 0'}),
+        
+        # Footer personalizat medic (va fi populat dinamic)
+        html.Div(id='patient-footer-container', style={'marginBottom': '20px'}),
+        
+        # Footer standard
         html.P(
             "🔒 Datele dumneavoastră sunt confidențiale și securizate conform GDPR.",
             style={'textAlign': 'center', 'color': '#95a5a6', 'fontSize': '12px'}
@@ -489,6 +736,9 @@ patient_layout = html.Div([
             "Pentru întrebări, contactați medicul dumneavoastră.",
             style={'textAlign': 'center', 'color': '#95a5a6', 'fontSize': '12px'}
         )
-    ], style={'marginTop': '40px'})
+    ], style={'marginTop': '40px'}),
+    
+    # ===== ELEMENT DUMMY pentru DEBUGGING în CONSOLĂ BROWSER =====
+    html.Div(id='dummy-output-for-debug', style={'display': 'none'})
 ])
 

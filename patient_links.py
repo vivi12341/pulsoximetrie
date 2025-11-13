@@ -559,6 +559,222 @@ def get_all_links_for_admin() -> List[Dict]:
 
 
 # ==============================================================================
+# FUNCȚII PDF - GESTIONARE RAPOARTE PDF
+# ==============================================================================
+
+def save_pdf_for_link(token: str, pdf_content: bytes, pdf_filename: str) -> Optional[str]:
+    """
+    Salvează un raport PDF pentru un link de pacient.
+    
+    Args:
+        token: UUID-ul pacientului
+        pdf_content: Conținutul binar al fișierului PDF
+        pdf_filename: Numele original al fișierului PDF
+        
+    Returns:
+        str: Calea relativă către PDF-ul salvat sau None dacă eroare
+    """
+    try:
+        # Creăm folderul pdfs/ pentru acest pacient
+        patient_folder = os.path.join(PATIENT_DATA_DIR, token)
+        pdfs_folder = os.path.join(patient_folder, "pdfs")
+        os.makedirs(pdfs_folder, exist_ok=True)
+        
+        # Sanitizăm numele fișierului
+        import re
+        safe_filename = re.sub(r'[^\w\s\-\.]', '_', pdf_filename)
+        
+        # Adăugăm timestamp pentru unicitate
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        name_parts = os.path.splitext(safe_filename)
+        unique_filename = f"{name_parts[0]}_{timestamp}{name_parts[1]}"
+        
+        # Calea completă
+        pdf_path = os.path.join(pdfs_folder, unique_filename)
+        
+        # Salvăm fișierul
+        with open(pdf_path, 'wb') as f:
+            f.write(pdf_content)
+        
+        # Returnăm calea relativă (pentru portabilitate)
+        relative_path = os.path.join("pdfs", unique_filename)
+        
+        logger.info(f"📄 PDF salvat pentru {token[:8]}...: {unique_filename} ({len(pdf_content)} bytes)")
+        return relative_path
+        
+    except Exception as e:
+        logger.error(f"Eroare la salvarea PDF pentru {token}: {e}", exc_info=True)
+        return None
+
+
+def save_pdf_parsed_data(token: str, pdf_path: str, parsed_data: Dict) -> bool:
+    """
+    Salvează datele parsate din PDF în fișierul de metadata al pacientului.
+    
+    Args:
+        token: UUID-ul pacientului
+        pdf_path: Calea relativă către PDF
+        parsed_data: Dicționar cu date parsate din PDF (de la pdf_parser)
+        
+    Returns:
+        bool: True dacă salvarea a reușit
+    """
+    try:
+        patient_folder = os.path.join(PATIENT_DATA_DIR, token)
+        pdfs_metadata_file = os.path.join(patient_folder, "pdfs_metadata.json")
+        
+        # Încărcăm metadata existentă sau creăm una nouă
+        pdfs_metadata = {}
+        if os.path.exists(pdfs_metadata_file):
+            with open(pdfs_metadata_file, 'r', encoding='utf-8') as f:
+                pdfs_metadata = json.load(f)
+        
+        # Adăugăm/actualizăm datele pentru acest PDF
+        pdfs_metadata[pdf_path] = {
+            "pdf_path": pdf_path,
+            "parsed_at": datetime.now().isoformat(),
+            "data": parsed_data
+        }
+        
+        # Salvăm metadata
+        with open(pdfs_metadata_file, 'w', encoding='utf-8') as f:
+            json.dump(pdfs_metadata, f, indent=2, ensure_ascii=False)
+        
+        # Actualizăm și link-ul principal cu calea PDF
+        links = load_patient_links()
+        if token in links:
+            if 'pdf_paths' not in links[token]:
+                links[token]['pdf_paths'] = []
+            if pdf_path not in links[token]['pdf_paths']:
+                links[token]['pdf_paths'].append(pdf_path)
+            save_patient_links(links)
+        
+        logger.info(f"✅ Metadata PDF salvată pentru {token[:8]}...: {pdf_path}")
+        return True
+        
+    except Exception as e:
+        logger.error(f"Eroare la salvarea metadata PDF pentru {token}: {e}", exc_info=True)
+        return False
+
+
+def get_pdf_data_for_link(token: str, pdf_path: str = None) -> Optional[Dict]:
+    """
+    Preia datele parsate din PDF pentru un link de pacient.
+    
+    Args:
+        token: UUID-ul pacientului
+        pdf_path: Calea relativă către PDF (opțional - dacă None, returnează toate PDF-urile)
+        
+    Returns:
+        Dict: Date parsate din PDF sau None dacă nu există
+    """
+    try:
+        patient_folder = os.path.join(PATIENT_DATA_DIR, token)
+        pdfs_metadata_file = os.path.join(patient_folder, "pdfs_metadata.json")
+        
+        if not os.path.exists(pdfs_metadata_file):
+            logger.debug(f"Nu există PDF-uri pentru {token[:8]}...")
+            return None
+        
+        with open(pdfs_metadata_file, 'r', encoding='utf-8') as f:
+            pdfs_metadata = json.load(f)
+        
+        if pdf_path:
+            # Returnăm doar PDF-ul specificat
+            return pdfs_metadata.get(pdf_path)
+        else:
+            # Returnăm toate PDF-urile
+            return pdfs_metadata
+        
+    except Exception as e:
+        logger.error(f"Eroare la citirea metadata PDF pentru {token}: {e}", exc_info=True)
+        return None
+
+
+def get_all_pdfs_for_link(token: str) -> List[Dict]:
+    """
+    Preia toate PDF-urile asociate unui link de pacient.
+    
+    Args:
+        token: UUID-ul pacientului
+        
+    Returns:
+        List[Dict]: Listă cu toate PDF-urile și metadata lor
+    """
+    try:
+        all_pdfs = get_pdf_data_for_link(token)
+        
+        if not all_pdfs:
+            return []
+        
+        # Convertim dict în list pentru UI
+        result = []
+        for pdf_path, metadata in all_pdfs.items():
+            result.append({
+                "pdf_path": pdf_path,
+                "parsed_at": metadata.get("parsed_at"),
+                "data": metadata.get("data", {})
+            })
+        
+        # Sortăm după data parsing (cele mai recente primele)
+        result.sort(key=lambda x: x.get('parsed_at', ''), reverse=True)
+        
+        logger.debug(f"Găsite {len(result)} PDF-uri pentru {token[:8]}...")
+        return result
+        
+    except Exception as e:
+        logger.error(f"Eroare la listarea PDF-urilor pentru {token}: {e}", exc_info=True)
+        return []
+
+
+def delete_pdf_from_link(token: str, pdf_path: str) -> bool:
+    """
+    Șterge un PDF și metadata asociată dintr-un link de pacient.
+    
+    Args:
+        token: UUID-ul pacientului
+        pdf_path: Calea relativă către PDF
+        
+    Returns:
+        bool: True dacă ștergerea a reușit
+    """
+    try:
+        patient_folder = os.path.join(PATIENT_DATA_DIR, token)
+        
+        # Ștergem fișierul fizic
+        full_pdf_path = os.path.join(patient_folder, pdf_path)
+        if os.path.exists(full_pdf_path):
+            os.remove(full_pdf_path)
+            logger.info(f"🗑️ PDF șters: {full_pdf_path}")
+        
+        # Ștergem din metadata
+        pdfs_metadata_file = os.path.join(patient_folder, "pdfs_metadata.json")
+        if os.path.exists(pdfs_metadata_file):
+            with open(pdfs_metadata_file, 'r', encoding='utf-8') as f:
+                pdfs_metadata = json.load(f)
+            
+            if pdf_path in pdfs_metadata:
+                del pdfs_metadata[pdf_path]
+                
+                with open(pdfs_metadata_file, 'w', encoding='utf-8') as f:
+                    json.dump(pdfs_metadata, f, indent=2, ensure_ascii=False)
+        
+        # Actualizăm link-ul principal
+        links = load_patient_links()
+        if token in links and 'pdf_paths' in links[token]:
+            if pdf_path in links[token]['pdf_paths']:
+                links[token]['pdf_paths'].remove(pdf_path)
+                save_patient_links(links)
+        
+        logger.info(f"✅ PDF șters complet pentru {token[:8]}...: {pdf_path}")
+        return True
+        
+    except Exception as e:
+        logger.error(f"Eroare la ștergerea PDF pentru {token}: {e}", exc_info=True)
+        return False
+
+
+# ==============================================================================
 # INIȚIALIZARE
 # ==============================================================================
 

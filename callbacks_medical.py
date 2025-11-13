@@ -1023,342 +1023,342 @@ def load_data_view_with_accordion(n_clicks_refresh, trigger, expand_clicks, togg
                         'marginBottom': '10px'
                     }
                 )
-            
-            logger.info(f"  ↳ Compact_row creat pentru {token[:8]}, acum expanded_content...")
-            
-            # === DETALII EXPANDATE (vizibil doar când is_expanded=True) ===
-            expanded_content = None
-            if is_expanded:
-                # Încărcăm imaginile pentru rândul expandat
-                images_content = [html.P("Nu există imagini disponibile.", style={'color': '#666', 'fontStyle': 'italic'})]
                 
-                # Încercăm să găsim folderul cu imagini pentru această înregistrare
-                try:
-                    # Verificăm dacă avem calea stocată în metadata
-                    output_folder_path = link_data.get('output_folder_path')
+                logger.info(f"  ↳ Compact_row creat pentru {token[:8]}, acum expanded_content...")
+                
+                # === DETALII EXPANDATE (vizibil doar când is_expanded=True) ===
+                expanded_content = None
+                if is_expanded:
+                    # Încărcăm imaginile pentru rândul expandat
+                    images_content = [html.P("Nu există imagini disponibile.", style={'color': '#666', 'fontStyle': 'italic'})]
                     
-                    if output_folder_path and os.path.exists(output_folder_path):
-                        # Găsim imaginile din folder
-                        image_files = [f for f in os.listdir(output_folder_path) if f.lower().endswith(('.jpg', '.jpeg', '.png'))]
+                    # Încercăm să găsim folderul cu imagini pentru această înregistrare
+                    try:
+                        # Verificăm dacă avem calea stocată în metadata
+                        output_folder_path = link_data.get('output_folder_path')
                         
-                        if image_files:
-                            # Sortăm imaginile alfabetic
-                            image_files.sort()
-                            
-                            # Creăm galerie de imagini
-                            images_content = []
-                            images_count = len(image_files)
-                            
-                            # Adăugăm header cu număr imagini
-                            images_content.append(
-                                html.P(
-                                    f"📊 {images_count} imagini generate",
-                                    style={'fontSize': '14px', 'color': '#2c3e50', 'fontWeight': 'bold', 'marginBottom': '15px'}
-                                )
-                            )
-                            
-                            # Creăm vizualizarea desfășurată (LIST VIEW - default)
-                            for img_file in image_files:
-                                img_path = os.path.join(output_folder_path, img_file)
-                                try:
-                                    with open(img_path, 'rb') as img_f:
-                                        img_data = base64.b64encode(img_f.read()).decode()
-                                        images_content.append(
-                                            html.Div([
-                                                html.Img(
-                                                    src=f'data:image/jpeg;base64,{img_data}',
-                                                    style={
-                                                        'width': '100%',
-                                                        'maxWidth': '900px',
-                                                        'borderRadius': '8px',
-                                                        'boxShadow': '0 2px 8px rgba(0,0,0,0.15)',
-                                                        'marginBottom': '10px',
-                                                        'border': '1px solid #ddd',
-                                                        'display': 'block',
-                                                        'marginLeft': 'auto',
-                                                        'marginRight': 'auto'
-                                                    }
-                                                ),
-                                                html.P(
-                                                    img_file,
-                                                    style={
-                                                        'fontSize': '13px',
-                                                        'color': '#7f8c8d',
-                                                        'textAlign': 'center',
-                                                        'marginBottom': '25px',
-                                                        'fontFamily': 'monospace'
-                                                    }
+                        if output_folder_path and os.path.exists(output_folder_path):
+                                # Găsim imaginile din folder
+                                image_files = [f for f in os.listdir(output_folder_path) if f.lower().endswith(('.jpg', '.jpeg', '.png'))]
+                                
+                                if image_files:
+                                    # Sortăm imaginile alfabetic
+                                    image_files.sort()
+                                    
+                                    # Creăm galerie de imagini
+                                    images_content = []
+                                    images_count = len(image_files)
+                                    
+                                    # Adăugăm header cu număr imagini
+                                    images_content.append(
+                                        html.P(
+                                            f"📊 {images_count} imagini generate",
+                                            style={'fontSize': '14px', 'color': '#2c3e50', 'fontWeight': 'bold', 'marginBottom': '15px'}
+                                        )
+                                    )
+                                    
+                                    # Creăm vizualizarea desfășurată (LIST VIEW - default)
+                                    for img_file in image_files:
+                                        img_path = os.path.join(output_folder_path, img_file)
+                                        try:
+                                            with open(img_path, 'rb') as img_f:
+                                                img_data = base64.b64encode(img_f.read()).decode()
+                                                images_content.append(
+                                                    html.Div([
+                                                        html.Img(
+                                                            src=f'data:image/jpeg;base64,{img_data}',
+                                                            style={
+                                                                'width': '100%',
+                                                                'maxWidth': '900px',
+                                                                'borderRadius': '8px',
+                                                                'boxShadow': '0 2px 8px rgba(0,0,0,0.15)',
+                                                                'marginBottom': '10px',
+                                                                'border': '1px solid #ddd',
+                                                                'display': 'block',
+                                                                'marginLeft': 'auto',
+                                                                'marginRight': 'auto'
+                                                            }
+                                                        ),
+                                                        html.P(
+                                                            img_file,
+                                                            style={
+                                                                'fontSize': '13px',
+                                                                'color': '#7f8c8d',
+                                                                'textAlign': 'center',
+                                                                'marginBottom': '25px',
+                                                                'fontFamily': 'monospace'
+                                                            }
+                                                        )
+                                                    ], className='image-item', **{'data-img-src': f'data:image/jpeg;base64,{img_data}', 'data-img-name': img_file})
                                                 )
-                                            ], className='image-item', **{'data-img-src': f'data:image/jpeg;base64,{img_data}', 'data-img-name': img_file})
-                                        )
-                                except Exception as img_err:
-                                    logger.error(f"Eroare la încărcarea imaginii {img_file}: {img_err}")
+                                        except Exception as img_err:
+                                            logger.error(f"Eroare la încărcarea imaginii {img_file}: {img_err}")
+                                else:
+                                    images_content = [html.P(
+                                        f"Nu s-au găsit imagini în folderul: {output_folder_path}",
+                                        style={'color': '#e74c3c', 'fontStyle': 'italic'}
+                                    )]
                         else:
-                            images_content = [html.P(
-                                f"Nu s-au găsit imagini în folderul: {output_folder_path}",
-                                style={'color': '#e74c3c', 'fontStyle': 'italic'}
-                            )]
-                    else:
-                        # Fallback: încercăm să găsim folderul după numărul aparatului
-                        output_base = config.OUTPUT_DIR
-                        if os.path.exists(output_base):
-                            device_num = link_data['device_name'].split('#')[-1] if '#' in link_data['device_name'] else ''
-                            
-                            for folder_name in os.listdir(output_base):
-                                folder_path = os.path.join(output_base, folder_name)
-                                if os.path.isdir(folder_path) and device_num in folder_name:
-                                    image_files = [f for f in os.listdir(folder_path) if f.lower().endswith(('.jpg', '.jpeg', '.png'))]
-                                    if image_files:
-                                        image_files.sort()
-                                        images_content = []
-                                        
-                                        images_content.append(
-                                            html.P(
-                                                f"📊 {len(image_files)} imagini găsite (căutare automată)",
-                                                style={'fontSize': '14px', 'color': '#f39c12', 'fontWeight': 'bold', 'marginBottom': '15px'}
+                            # Fallback: încercăm să găsim folderul după numărul aparatului
+                            output_base = config.OUTPUT_DIR
+                            if os.path.exists(output_base):
+                                device_num = link_data['device_name'].split('#')[-1] if '#' in link_data['device_name'] else ''
+                                
+                                for folder_name in os.listdir(output_base):
+                                    folder_path = os.path.join(output_base, folder_name)
+                                    if os.path.isdir(folder_path) and device_num in folder_name:
+                                        image_files = [f for f in os.listdir(folder_path) if f.lower().endswith(('.jpg', '.jpeg', '.png'))]
+                                        if image_files:
+                                            image_files.sort()
+                                            images_content = []
+                                            
+                                            images_content.append(
+                                                html.P(
+                                                    f"📊 {len(image_files)} imagini găsite (căutare automată)",
+                                                    style={'fontSize': '14px', 'color': '#f39c12', 'fontWeight': 'bold', 'marginBottom': '15px'}
+                                                )
                                             )
-                                        )
-                                        
-                                        for img_file in image_files:
-                                            img_path = os.path.join(folder_path, img_file)
-                                            try:
-                                                with open(img_path, 'rb') as img_f:
-                                                    img_data = base64.b64encode(img_f.read()).decode()
-                                                    images_content.append(
-                                                        html.Div([
-                                                            html.Img(
-                                                                src=f'data:image/jpeg;base64,{img_data}',
-                                                                style={
-                                                                    'width': '100%',
-                                                                    'maxWidth': '900px',
-                                                                    'borderRadius': '8px',
-                                                                    'boxShadow': '0 2px 8px rgba(0,0,0,0.15)',
-                                                                    'marginBottom': '10px',
-                                                                    'border': '1px solid #ddd'
-                                                                }
-                                                            ),
-                                                            html.P(
-                                                                img_file,
-                                                                style={
-                                                                    'fontSize': '13px',
-                                                                    'color': '#7f8c8d',
-                                                                    'textAlign': 'center',
-                                                                    'marginBottom': '25px',
-                                                                    'fontFamily': 'monospace'
-                                                                }
-                                                            )
-                                                        ])
-                                                    )
-                                            except Exception as img_err:
-                                                logger.error(f"Eroare la încărcarea imaginii {img_file}: {img_err}")
-                                        break
+                                            
+                                            for img_file in image_files:
+                                                img_path = os.path.join(folder_path, img_file)
+                                                try:
+                                                    with open(img_path, 'rb') as img_f:
+                                                        img_data = base64.b64encode(img_f.read()).decode()
+                                                        images_content.append(
+                                                            html.Div([
+                                                                html.Img(
+                                                                    src=f'data:image/jpeg;base64,{img_data}',
+                                                                    style={
+                                                                        'width': '100%',
+                                                                        'maxWidth': '900px',
+                                                                        'borderRadius': '8px',
+                                                                        'boxShadow': '0 2px 8px rgba(0,0,0,0.15)',
+                                                                        'marginBottom': '10px',
+                                                                        'border': '1px solid #ddd'
+                                                                    }
+                                                                ),
+                                                                html.P(
+                                                                    img_file,
+                                                                    style={
+                                                                        'fontSize': '13px',
+                                                                        'color': '#7f8c8d',
+                                                                        'textAlign': 'center',
+                                                                        'marginBottom': '25px',
+                                                                        'fontFamily': 'monospace'
+                                                                    }
+                                                                )
+                                                            ])
+                                                        )
+                                                except Exception as img_err:
+                                                    logger.error(f"Eroare la încărcarea imaginii {img_file}: {img_err}")
+                                            break
+                    
+                    except Exception as e:
+                        logger.error(f"Eroare la căutarea imaginilor pentru {token[:8]}...: {e}", exc_info=True)
+                        images_content = [html.P(
+                            f"⚠️ Eroare la încărcarea imaginilor: {str(e)}",
+                            style={'color': '#e74c3c', 'fontStyle': 'italic'}
+                        )]
+                    
+                    expanded_content = html.Div([
+                        html.Hr(style={'margin': '15px 0', 'border': 'none', 'borderTop': '2px solid #bdc3c7'}),
                         
-                except Exception as e:
-                    logger.error(f"Eroare la căutarea imaginilor pentru {token[:8]}...: {e}", exc_info=True)
-                    images_content = [html.P(
-                        f"⚠️ Eroare la încărcarea imaginilor: {str(e)}",
-                        style={'color': '#e74c3c', 'fontStyle': 'italic'}
-                    )]
-                
-                expanded_content = html.Div([
-                    html.Hr(style={'margin': '15px 0', 'border': 'none', 'borderTop': '2px solid #bdc3c7'}),
-                    
-                    # Secțiune grafic interactiv (TODO: va fi implementat cu CSV stocat)
-                    html.Div([
-                        html.H4("📈 Grafic Interactiv", style={'color': '#2980b9', 'marginBottom': '10px'}),
-                        html.P(
-                            "Graficul interactiv va fi disponibil după implementarea stocării CSV-urilor.",
-                            style={'color': '#666', 'fontStyle': 'italic', 'fontSize': '14px'}
-                        )
-                    ], style={'marginBottom': '25px', 'padding': '20px', 'backgroundColor': '#f8f9fa', 'borderRadius': '8px'}),
-                    
-                    # Secțiune imagini generate cu toggle view
-                    html.Div([
-                        # Header cu butoane toggle
-                        html.Div([
-                            html.H4("🖼️ Imagini Generate", style={'color': '#2980b9', 'marginBottom': '0', 'display': 'inline-block', 'marginRight': '20px'}),
+                        # Secțiune grafic interactiv (TODO: va fi implementat cu CSV stocat)
                             html.Div([
-                                html.Button(
-                                    '📊 Ansamblu',
-                                    id={'type': 'view-grid-btn', 'index': token},
-                                    n_clicks=0,
+                                html.H4("📈 Grafic Interactiv", style={'color': '#2980b9', 'marginBottom': '10px'}),
+                                html.P(
+                                    "Graficul interactiv va fi disponibil după implementarea stocării CSV-urilor.",
+                                    style={'color': '#666', 'fontStyle': 'italic', 'fontSize': '14px'}
+                                )
+                            ], style={'marginBottom': '25px', 'padding': '20px', 'backgroundColor': '#f8f9fa', 'borderRadius': '8px'}),
+                            
+                            # Secțiune imagini generate cu toggle view
+                            html.Div([
+                                # Header cu butoane toggle
+                                html.Div([
+                                    html.H4("🖼️ Imagini Generate", style={'color': '#2980b9', 'marginBottom': '0', 'display': 'inline-block', 'marginRight': '20px'}),
+                                    html.Div([
+                                        html.Button(
+                                            '📊 Ansamblu',
+                                            id={'type': 'view-grid-btn', 'index': token},
+                                            n_clicks=0,
+                                            style={
+                                                'padding': '8px 20px',
+                                                'marginRight': '10px',
+                                                'backgroundColor': '#95a5a6',
+                                                'color': 'white',
+                                                'border': 'none',
+                                                'borderRadius': '5px',
+                                                'cursor': 'pointer',
+                                                'fontSize': '13px',
+                                                'fontWeight': 'bold',
+                                                'transition': 'all 0.2s'
+                                            }
+                                        ),
+                                        html.Button(
+                                            '📄 Desfășurat',
+                                            id={'type': 'view-list-btn', 'index': token},
+                                            n_clicks=0,
+                                            style={
+                                                'padding': '8px 20px',
+                                                'backgroundColor': '#27ae60',
+                                                'color': 'white',
+                                                'border': 'none',
+                                                'borderRadius': '5px',
+                                                'cursor': 'pointer',
+                                                'fontSize': '13px',
+                                                'fontWeight': 'bold',
+                                                'transition': 'all 0.2s',
+                                                'boxShadow': '0 2px 4px rgba(0,0,0,0.2)'
+                                            }
+                                        )
+                                    ], style={'display': 'inline-block', 'verticalAlign': 'middle'})
+                                ], style={'marginBottom': '15px', 'display': 'flex', 'alignItems': 'center', 'justifyContent': 'space-between'}),
+                                
+                                # Container pentru imagini (va fi populat dinamic)
+                                html.Div(
+                                    id={'type': 'images-display-container', 'index': token},
+                                    children=images_content
+                                )
+                            ], style={'marginBottom': '25px'}),
+                            
+                            # Secțiune raport PDF
+                            html.Div([
+                                html.H4("📄 Raport PDF", style={'color': '#2980b9', 'marginBottom': '10px'}),
+                                
+                                # Upload nou PDF
+                                html.Div([
+                                    dcc.Upload(
+                                        id={'type': 'pdf-upload', 'index': token},
+                                        children=html.Div([
+                                            '📁 Click pentru a încărca raport PDF (Checkme O2)'
+                                        ]),
+                                        style={
+                                            'width': '100%',
+                                            'height': '60px',
+                                            'lineHeight': '60px',
+                                            'borderWidth': '2px',
+                                            'borderStyle': 'dashed',
+                                            'borderRadius': '8px',
+                                            'textAlign': 'center',
+                                            'backgroundColor': '#e8f5e9',
+                                            'color': '#27ae60',
+                                            'cursor': 'pointer',
+                                            'fontWeight': 'bold'
+                                        },
+                                        multiple=False
+                                    ),
+                                    html.Div(
+                                        id={'type': 'pdf-upload-feedback', 'index': token},
+                                        style={'marginTop': '10px'}
+                                    )
+                                ], style={'marginBottom': '20px'}),
+                                
+                                # Afișare PDF-uri existente (încărcat dinamic la expandare)
+                                html.Div(
+                                    id={'type': 'pdf-display-container', 'index': token},
+                                    children=render_pdfs_display(token, patient_links.get_all_pdfs_for_link(token))
+                                )
+                            ], style={'marginBottom': '25px', 'padding': '20px', 'backgroundColor': '#f8f9fa', 'borderRadius': '8px'}),
+                            
+                            # Secțiune interpretare
+                            html.Div([
+                                html.H4("📝 Interpretare", style={'color': '#2980b9', 'marginBottom': '10px'}),
+                                dcc.Textarea(
+                                    id={'type': 'medical-interpretation', 'index': token},
+                                    value=link_data.get('medical_notes', ''),
+                                    placeholder='Scrieți interpretarea aici (ex: Episoade de desaturare nocturnă, apnee obstructivă severă, recomand CPAP)...',
                                     style={
-                                        'padding': '8px 20px',
-                                        'marginRight': '10px',
-                                        'backgroundColor': '#95a5a6',
-                                        'color': 'white',
-                                        'border': 'none',
-                                        'borderRadius': '5px',
-                                        'cursor': 'pointer',
-                                        'fontSize': '13px',
-                                        'fontWeight': 'bold',
-                                        'transition': 'all 0.2s'
+                                        'width': '100%',
+                                        'minHeight': '120px',
+                                        'padding': '15px',
+                                        'border': '2px solid #3498db',
+                                        'borderRadius': '8px',
+                                        'fontSize': '14px',
+                                        'fontFamily': 'Arial, sans-serif'
                                     }
                                 ),
                                 html.Button(
-                                    '📄 Desfășurat',
-                                    id={'type': 'view-list-btn', 'index': token},
+                                    '💾 Salvează Interpretare',
+                                    id={'type': 'save-interpretation-btn', 'index': token},
                                     n_clicks=0,
                                     style={
-                                        'padding': '8px 20px',
+                                        'marginTop': '10px',
+                                        'padding': '10px 25px',
                                         'backgroundColor': '#27ae60',
                                         'color': 'white',
                                         'border': 'none',
                                         'borderRadius': '5px',
                                         'cursor': 'pointer',
-                                        'fontSize': '13px',
-                                        'fontWeight': 'bold',
-                                        'transition': 'all 0.2s',
-                                        'boxShadow': '0 2px 4px rgba(0,0,0,0.2)'
+                                        'fontWeight': 'bold'
+                                    }
+                                ),
+                                html.Span(
+                                    id={'type': 'save-interpretation-feedback', 'index': token},
+                                    style={'marginLeft': '15px', 'color': 'green', 'fontWeight': 'bold'}
+                                )
+                            ], style={'marginBottom': '25px'}),
+                            
+                            # Link către pacient
+                            html.Div([
+                                html.Hr(style={'margin': '20px 0'}),
+                                html.Strong("🔗 Link Pacient: ", style={'marginRight': '10px'}),
+                                dcc.Input(
+                                    value=f"http://127.0.0.1:8050/?token={token}",
+                                    readOnly=True,
+                                    style={
+                                        'width': '70%',
+                                        'padding': '8px',
+                                        'backgroundColor': '#ecf0f1',
+                                        'border': '1px solid #bdc3c7',
+                                        'borderRadius': '5px',
+                                        'fontSize': '12px',
+                                        'fontFamily': 'monospace'
                                     }
                                 )
-                            ], style={'display': 'inline-block', 'verticalAlign': 'middle'})
-                        ], style={'marginBottom': '15px', 'display': 'flex', 'alignItems': 'center', 'justifyContent': 'space-between'}),
-                        
-                        # Container pentru imagini (va fi populat dinamic)
-                        html.Div(
-                            id={'type': 'images-display-container', 'index': token},
-                            children=images_content
-                        )
-                    ], style={'marginBottom': '25px'}),
-                    
-                    # Secțiune raport PDF
-                    html.Div([
-                        html.H4("📄 Raport PDF", style={'color': '#2980b9', 'marginBottom': '10px'}),
-                        
-                        # Upload nou PDF
-                        html.Div([
-                            dcc.Upload(
-                                id={'type': 'pdf-upload', 'index': token},
-                                children=html.Div([
-                                    '📁 Click pentru a încărca raport PDF (Checkme O2)'
-                                ]),
-                                style={
-                                    'width': '100%',
-                                    'height': '60px',
-                                    'lineHeight': '60px',
-                                    'borderWidth': '2px',
-                                    'borderStyle': 'dashed',
-                                    'borderRadius': '8px',
-                                    'textAlign': 'center',
-                                    'backgroundColor': '#e8f5e9',
-                                    'color': '#27ae60',
-                                    'cursor': 'pointer',
-                                    'fontWeight': 'bold'
-                                },
-                                multiple=False
-                            ),
-                            html.Div(
-                                id={'type': 'pdf-upload-feedback', 'index': token},
-                                style={'marginTop': '10px'}
-                            )
-                        ], style={'marginBottom': '20px'}),
-                        
-                        # Afișare PDF-uri existente (încărcat dinamic la expandare)
-                        html.Div(
-                            id={'type': 'pdf-display-container', 'index': token},
-                            children=render_pdfs_display(token, patient_links.get_all_pdfs_for_link(token))
-                        )
-                    ], style={'marginBottom': '25px', 'padding': '20px', 'backgroundColor': '#f8f9fa', 'borderRadius': '8px'}),
-                    
-                    # Secțiune interpretare
-                    html.Div([
-                        html.H4("📝 Interpretare", style={'color': '#2980b9', 'marginBottom': '10px'}),
-                        dcc.Textarea(
-                            id={'type': 'medical-interpretation', 'index': token},
-                            value=link_data.get('medical_notes', ''),
-                            placeholder='Scrieți interpretarea aici (ex: Episoade de desaturare nocturnă, apnee obstructivă severă, recomand CPAP)...',
-                            style={
-                                'width': '100%',
-                                'minHeight': '120px',
-                                'padding': '15px',
-                                'border': '2px solid #3498db',
-                                'borderRadius': '8px',
-                                'fontSize': '14px',
-                                'fontFamily': 'Arial, sans-serif'
-                            }
-                        ),
-                        html.Button(
-                            '💾 Salvează Interpretare',
-                            id={'type': 'save-interpretation-btn', 'index': token},
-                            n_clicks=0,
-                            style={
-                                'marginTop': '10px',
-                                'padding': '10px 25px',
-                                'backgroundColor': '#27ae60',
-                                'color': 'white',
-                                'border': 'none',
-                                'borderRadius': '5px',
-                                'cursor': 'pointer',
-                                'fontWeight': 'bold'
-                            }
-                        ),
-                        html.Span(
-                            id={'type': 'save-interpretation-feedback', 'index': token},
-                            style={'marginLeft': '15px', 'color': 'green', 'fontWeight': 'bold'}
-                        )
-                    ], style={'marginBottom': '25px'}),
-                    
-                    # Link către pacient
-                    html.Div([
-                        html.Hr(style={'margin': '20px 0'}),
-                        html.Strong("🔗 Link Pacient: ", style={'marginRight': '10px'}),
-                        dcc.Input(
-                            value=f"http://127.0.0.1:8050/?token={token}",
-                            readOnly=True,
-                            style={
-                                'width': '70%',
-                                'padding': '8px',
-                                'backgroundColor': '#ecf0f1',
-                                'border': '1px solid #bdc3c7',
-                                'borderRadius': '5px',
-                                'fontSize': '12px',
-                                'fontFamily': 'monospace'
-                            }
-                        )
-                    ])
-                    
+                            ])
+                            
+                        ], style={
+                            'padding': '25px',
+                            'backgroundColor': '#ffffff',
+                            'borderRadius': '8px',
+                            'marginTop': '10px',
+                            'boxShadow': 'inset 0 2px 8px rgba(0,0,0,0.05)'
+                        })
+                
+                logger.info(f"  ↳ Creare row_container pentru {token[:8]}...")
+                
+                # Combinăm rândul compact + detaliile expandate (ÎN AFARA blocului if is_expanded)
+                row_container = html.Div([
+                    compact_row,
+                    expanded_content if expanded_content else None
                 ], style={
-                    'padding': '25px',
-                    'backgroundColor': '#ffffff',
-                    'borderRadius': '8px',
-                    'marginTop': '10px',
-                    'boxShadow': 'inset 0 2px 8px rgba(0,0,0,0.05)'
+                    'marginBottom': '15px',
+                    'backgroundColor': '#fff',
+                    'borderRadius': '10px',
+                    'boxShadow': '0 2px 6px rgba(0,0,0,0.1)',
+                    'overflow': 'hidden'
                 })
+                
+                logger.info(f"  ↳ APPEND row_container pentru token {token[:8]}... în group_rows")
+                group_rows.append(row_container)
             
-            logger.info(f"  ↳ Creare row_container pentru {token[:8]}...")
-            
-            # Combinăm rândul compact + detaliile expandate (ÎN AFARA blocului if is_expanded)
-            row_container = html.Div([
-                compact_row,
-                expanded_content if expanded_content else None
-            ], style={
-                'marginBottom': '15px',
-                'backgroundColor': '#fff',
-                'borderRadius': '10px',
-                'boxShadow': '0 2px 6px rgba(0,0,0,0.1)',
-                'overflow': 'hidden'
-            })
-            
-            logger.info(f"  ↳ APPEND row_container pentru token {token[:8]}... în group_rows")
-            group_rows.append(row_container)
-        
-        # Wrappăm toate înregistrările din grup într-un container
-        # DACĂ grupul NU este collapsed, adăugăm container-ul
-        logger.info(f"🔍 Înainte de verificare: len(group_rows)={len(group_rows)}, is_group_collapsed={is_group_collapsed}")
-        if group_rows and not is_group_collapsed:
-            group_container = html.Div(
-                group_rows,
-                style={
-                    'paddingLeft': '10px',
-                    'paddingRight': '10px',
-                    'marginBottom': '10px'
-                }
-            )
-            rows.append(group_container)
-            logger.info(f"✅ Adăugat container pentru grup '{group_name}' cu {len(group_rows)} înregistrări")
-        elif is_group_collapsed:
-            logger.info(f"⬇️ Grup '{group_name}' este COLLAPSED - {len(group_rows)} înregistrări ASCUNSE")
+            # Wrappăm toate înregistrările din grup într-un container
+            # DACĂ grupul NU este collapsed, adăugăm container-ul
+            logger.info(f"🔍 Înainte de verificare: len(group_rows)={len(group_rows)}, is_group_collapsed={is_group_collapsed}")
+            if group_rows and not is_group_collapsed:
+                group_container = html.Div(
+                    group_rows,
+                    style={
+                        'paddingLeft': '10px',
+                        'paddingRight': '10px',
+                        'marginBottom': '10px'
+                    }
+                )
+                rows.append(group_container)
+                logger.info(f"✅ Adăugat container pentru grup '{group_name}' cu {len(group_rows)} înregistrări")
+            elif is_group_collapsed:
+                logger.info(f"⬇️ Grup '{group_name}' este COLLAPSED - {len(group_rows)} înregistrări ASCUNSE")
         
         logger.info(f"📊 RETURNARE: Total {len(rows)} elemente în rows (grupuri + headere)")
         logger.info(f"📋 Grupuri collapsed finale: {collapsed_groups}")
@@ -2835,17 +2835,18 @@ def update_footer_preview(footer_text):
         )
     
     try:
-        # Procesăm footer-ul pentru a arăta cum va arăta cu link-urile
-        processed_footer = doctor_settings.process_footer_links(footer_text)
+        # Procesăm footer-ul pentru a obține lista de componente Dash
+        footer_components = doctor_settings.process_footer_links(footer_text)
         
-        return dash_dcc.Markdown(
-            processed_footer,
-            dangerously_allow_html=True,
+        # Returnăm un Div cu componentele procesate
+        return html.Div(
+            children=footer_components,
             style={
                 'color': '#555',
                 'fontSize': '13px',
                 'lineHeight': '1.6',
-                'margin': '0'
+                'margin': '0',
+                'whiteSpace': 'normal'
             }
         )
     except Exception as e:
@@ -2977,28 +2978,25 @@ def display_doctor_branding_for_patient(token):
         footer_component = None
         footer_text = doctor_settings.get_footer_info()
         if footer_text:
-            # Procesăm footer-ul pentru a converti URL-urile în link-uri clickable
-            processed_footer = doctor_settings.process_footer_links(footer_text)
+            # Procesăm footer-ul pentru a obține lista de componente Dash
+            footer_components = doctor_settings.process_footer_links(footer_text)
             
-            # Folosim dcc.Markdown pentru suport HTML simplu și link-uri
-            from dash import dcc as dash_dcc
-            footer_component = html.Div([
-                dash_dcc.Markdown(
-                    processed_footer,
-                    dangerously_allow_html=True,
-                    style={
-                        'textAlign': 'center',
-                        'color': '#555',
-                        'fontSize': '13px',
-                        'padding': '15px',
-                        'backgroundColor': '#f8f9fa',
-                        'borderRadius': '8px',
-                        'border': '1px solid #e0e0e0',
-                        'lineHeight': '1.6',
-                        'margin': '0'
-                    }
-                )
-            ])
+            # Creăm containerul footer cu componentele procesate
+            footer_component = html.Div(
+                children=footer_components,
+                style={
+                    'textAlign': 'center',
+                    'color': '#555',
+                    'fontSize': '13px',
+                    'padding': '15px',
+                    'backgroundColor': '#f8f9fa',
+                    'borderRadius': '8px',
+                    'border': '1px solid #e0e0e0',
+                    'lineHeight': '1.6',
+                    'margin': '0',
+                    'whiteSpace': 'normal'
+                }
+            )
             logger.debug("✅ Footer personalizat afișat pentru pacient (cu link-uri procesate)")
         
         return logo_component, footer_component
@@ -3006,6 +3004,53 @@ def display_doctor_branding_for_patient(token):
     except Exception as e:
         logger.error(f"Eroare la afișarea branding-ului pentru pacient: {e}", exc_info=True)
         return None, None
+
+
+@app.callback(
+    Output('medical-footer-container', 'children'),
+    [Input('url-token-detected', 'data')]
+)
+def display_footer_for_medical_pages(token):
+    """
+    Afișează footer-ul medicului pe paginile medicale (admin, batch, etc.).
+    Se declanșează la încărcarea paginii (indiferent de prezența token-ului).
+    """
+    import doctor_settings
+    
+    try:
+        # Încărcăm setările medicului
+        footer_text = doctor_settings.get_footer_info()
+        
+        if not footer_text:
+            return None
+        
+        # Procesăm footer-ul pentru a obține lista de componente Dash
+        footer_components = doctor_settings.process_footer_links(footer_text)
+        
+        # Creăm containerul footer cu componentele procesate
+        footer_component = html.Div(
+            children=footer_components,
+            style={
+                'textAlign': 'center',
+                'color': '#555',
+                'fontSize': '13px',
+                'padding': '15px',
+                'backgroundColor': '#f8f9fa',
+                'borderRadius': '8px',
+                'border': '1px solid #e0e0e0',
+                'lineHeight': '1.6',
+                'margin': '0 auto',
+                'maxWidth': '900px',
+                'whiteSpace': 'normal'
+            }
+        )
+        
+        logger.debug("✅ Footer personalizat afișat pe pagina medicală")
+        return footer_component
+        
+    except Exception as e:
+        logger.error(f"Eroare la afișarea footer-ului pe pagina medicală: {e}", exc_info=True)
+        return None
 
 
 logger.info("✅ Modulul callbacks_medical.py încărcat cu succes.")

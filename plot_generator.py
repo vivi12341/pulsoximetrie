@@ -16,6 +16,8 @@ import pandas as pd
 from plotly.subplots import make_subplots
 import plotly.graph_objects as go
 import numpy as np
+from PIL import Image
+import io
 
 import config
 from logger_setup import logger
@@ -179,7 +181,7 @@ def create_plot(df_slice: pd.DataFrame, file_name: str, line_width_scale: float 
     start_time = df_slice.index.min().strftime('%H:%M:%S')
     end_time = df_slice.index.max().strftime('%H:%M:%S')
     record_date = df_slice.index.min().strftime('%d/%m/%Y')
-    dynamic_title = f"Analiză Oximetrie: {record_date} (Interval: {start_time} - {end_time})"
+    dynamic_title = f"Analiză Puls-Oximetrie: {record_date} (Interval: {start_time} - {end_time})"
 
     fig.update_layout(
         title=dict(text=dynamic_title, x=0.5, font_size=layout_style['title_font_size']),
@@ -233,3 +235,170 @@ def create_plot(df_slice: pd.DataFrame, file_name: str, line_width_scale: float 
     # [WHY] Log final care confirmă că toate setările au fost aplicate cu succes.
     logger.info("Figura finală a fost creată și stilizată cu toate corecțiile de layout și stil.")
     return fig
+
+
+def apply_logo_to_image(image_path: str, doctor_id: str = "default") -> bool:
+    """
+    Aplică logo-ul medicului pe o imagine generată.
+    
+    Args:
+        image_path: Calea către imaginea pe care să se aplice logo-ul
+        doctor_id: ID-ul medicului (default: "default")
+        
+    Returns:
+        bool: True dacă logo-ul a fost aplicat cu succes
+    """
+    try:
+        import doctor_settings
+        
+        # Verificăm dacă trebuie să aplicăm logo-ul
+        if not doctor_settings.should_apply_logo_to_images(doctor_id):
+            logger.debug(f"Logo nu este activat pentru imagini (doctor {doctor_id})")
+            return False
+        
+        # Încărcăm logo-ul
+        logo_path = doctor_settings.get_doctor_logo_path(doctor_id)
+        if not logo_path:
+            logger.debug(f"Nu există logo pentru medicul {doctor_id}")
+            return False
+        
+        # Deschidem imaginea de bază
+        base_img = Image.open(image_path)
+        base_width, base_height = base_img.size
+        
+        # Deschidem logo-ul
+        logo_img = Image.open(logo_path)
+        
+        # Încărcăm setările
+        settings = doctor_settings.load_doctor_settings(doctor_id)
+        logo_position = settings.get('logo_position', 'top-right')
+        logo_size_setting = settings.get('logo_size', 'medium')
+        
+        # Calculăm dimensiunea logo-ului (proporțional cu imaginea de bază)
+        size_factors = {
+            'small': 0.08,   # 8% din lățimea imaginii
+            'medium': 0.12,  # 12% din lățimea imaginii
+            'large': 0.18    # 18% din lățimea imaginii
+        }
+        
+        max_logo_width = int(base_width * size_factors.get(logo_size_setting, 0.12))
+        
+        # Redimensionăm logo-ul menținând aspect ratio-ul
+        logo_aspect_ratio = logo_img.width / logo_img.height
+        new_logo_width = max_logo_width
+        new_logo_height = int(new_logo_width / logo_aspect_ratio)
+        
+        # Dacă logo-ul e prea înalt, ajustăm după înălțime
+        max_logo_height = int(base_height * 0.15)  # Max 15% din înălțimea imaginii
+        if new_logo_height > max_logo_height:
+            new_logo_height = max_logo_height
+            new_logo_width = int(new_logo_height * logo_aspect_ratio)
+        
+        logo_img = logo_img.resize((new_logo_width, new_logo_height), Image.Resampling.LANCZOS)
+        
+        # Calculăm poziția
+        margin = 20  # Margine în pixeli
+        positions = {
+            'top-right': (base_width - new_logo_width - margin, margin),
+            'top-left': (margin, margin),
+            'bottom-right': (base_width - new_logo_width - margin, base_height - new_logo_height - margin),
+            'bottom-left': (margin, base_height - new_logo_height - margin)
+        }
+        
+        position = positions.get(logo_position, positions['top-right'])
+        
+        # Convertim imaginea de bază în RGBA dacă nu e deja
+        if base_img.mode != 'RGBA':
+            base_img = base_img.convert('RGBA')
+        
+        # Convertim logo-ul în RGBA pentru transparență
+        if logo_img.mode != 'RGBA':
+            logo_img = logo_img.convert('RGBA')
+        
+        # Aplicăm logo-ul cu transparență
+        base_img.paste(logo_img, position, logo_img)
+        
+        # Salvăm imaginea (convertim înapoi în RGB pentru JPEG)
+        if image_path.lower().endswith('.jpg') or image_path.lower().endswith('.jpeg'):
+            base_img = base_img.convert('RGB')
+        
+        base_img.save(image_path, optimize=True, quality=95)
+        
+        logger.info(f"✅ Logo aplicat pe imaginea: {image_path} (poziție: {logo_position}, dimensiune: {new_logo_width}x{new_logo_height})")
+        return True
+        
+    except Exception as e:
+        logger.error(f"Eroare la aplicarea logo-ului pe {image_path}: {e}", exc_info=True)
+        return False
+
+
+def apply_logo_to_figure(fig: go.Figure, doctor_id: str = "default") -> go.Figure:
+    """
+    Adaugă logo-ul medicului direct în figura Plotly (pentru grafice interactive).
+    
+    Args:
+        fig: Figura Plotly
+        doctor_id: ID-ul medicului (default: "default")
+        
+    Returns:
+        go.Figure: Figura cu logo aplicat
+    """
+    try:
+        import doctor_settings
+        
+        # Verificăm dacă trebuie să aplicăm logo-ul
+        if not doctor_settings.should_apply_logo_to_images(doctor_id):
+            return fig
+        
+        # Obținem logo-ul în format base64
+        logo_base64 = doctor_settings.get_doctor_logo_base64(doctor_id)
+        if not logo_base64:
+            return fig
+        
+        # Încărcăm setările
+        settings = doctor_settings.load_doctor_settings(doctor_id)
+        logo_position = settings.get('logo_position', 'top-right')
+        logo_size_setting = settings.get('logo_size', 'medium')
+        
+        # Configurăm dimensiunea logo-ului (ca proporție din grafic)
+        size_configs = {
+            'small': {'sizex': 0.08, 'sizey': 0.08},
+            'medium': {'sizex': 0.12, 'sizey': 0.12},
+            'large': {'sizex': 0.18, 'sizey': 0.18}
+        }
+        
+        size_config = size_configs.get(logo_size_setting, size_configs['medium'])
+        
+        # Configurăm poziția (în coordonate relative 0-1)
+        position_configs = {
+            'top-right': {'xanchor': 'right', 'yanchor': 'top', 'x': 0.98, 'y': 0.98},
+            'top-left': {'xanchor': 'left', 'yanchor': 'top', 'x': 0.02, 'y': 0.98},
+            'bottom-right': {'xanchor': 'right', 'yanchor': 'bottom', 'x': 0.98, 'y': 0.02},
+            'bottom-left': {'xanchor': 'left', 'yanchor': 'bottom', 'x': 0.02, 'y': 0.02}
+        }
+        
+        position_config = position_configs.get(logo_position, position_configs['top-right'])
+        
+        # Adăugăm logo-ul ca imagine în layout
+        fig.add_layout_image(
+            dict(
+                source=logo_base64,
+                xref="paper",
+                yref="paper",
+                x=position_config['x'],
+                y=position_config['y'],
+                sizex=size_config['sizex'],
+                sizey=size_config['sizey'],
+                xanchor=position_config['xanchor'],
+                yanchor=position_config['yanchor'],
+                opacity=0.95,
+                layer="above"
+            )
+        )
+        
+        logger.info(f"✅ Logo adăugat în figura Plotly (poziție: {logo_position})")
+        return fig
+        
+    except Exception as e:
+        logger.error(f"Eroare la adăugarea logo-ului în figura Plotly: {e}", exc_info=True)
+        return fig
