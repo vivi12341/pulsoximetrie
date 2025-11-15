@@ -26,6 +26,7 @@ from batch_processor import run_batch_job
 import batch_session_manager
 import config
 from auth_ui_components import create_auth_header
+import os
 
 
 # ==============================================================================
@@ -263,6 +264,68 @@ def update_auth_header(pathname):
     except Exception as e:
         logger.error(f"Eroare la crearea header-ului de autentificare: {e}", exc_info=True)
         return html.Div()
+
+
+# ==============================================================================
+# CALLBACK COPY TO CLIPBOARD (Clientside - JavaScript)
+# ==============================================================================
+
+app.clientside_callback(
+    """
+    function(n_clicks, link_value) {
+        if (n_clicks > 0 && link_value) {
+            navigator.clipboard.writeText(link_value).then(function() {
+                console.log('✅ Link copiat în clipboard:', link_value);
+            }).catch(function(err) {
+                console.error('❌ Eroare la copiere:', err);
+            });
+        }
+        return window.dash_clientside.no_update;
+    }
+    """,
+    Output({'type': 'copy-link-batch', 'index': ALL}, 'n_clicks', allow_duplicate=True),
+    Input({'type': 'copy-link-batch', 'index': ALL}, 'n_clicks'),
+    State({'type': 'link-input-batch', 'index': ALL}, 'value'),
+    prevent_initial_call=True
+)
+
+app.clientside_callback(
+    """
+    function(n_clicks, link_value) {
+        if (n_clicks > 0 && link_value) {
+            navigator.clipboard.writeText(link_value).then(function() {
+                console.log('✅ Link copiat în clipboard:', link_value);
+            }).catch(function(err) {
+                console.error('❌ Eroare la copiere:', err);
+            });
+        }
+        return window.dash_clientside.no_update;
+    }
+    """,
+    Output({'type': 'copy-link-view', 'index': ALL}, 'n_clicks', allow_duplicate=True),
+    Input({'type': 'copy-link-view', 'index': ALL}, 'n_clicks'),
+    State({'type': 'link-input-view', 'index': ALL}, 'value'),
+    prevent_initial_call=True
+)
+
+app.clientside_callback(
+    """
+    function(n_clicks, link_value) {
+        if (n_clicks > 0 && link_value) {
+            navigator.clipboard.writeText(link_value).then(function() {
+                console.log('✅ Link copiat în clipboard:', link_value);
+            }).catch(function(err) {
+                console.error('❌ Eroare la copiere:', err);
+            });
+        }
+        return window.dash_clientside.no_update;
+    }
+    """,
+    Output({'type': 'copy-link-dashboard', 'index': ALL}, 'n_clicks', allow_duplicate=True),
+    Input({'type': 'copy-link-dashboard', 'index': ALL}, 'n_clicks'),
+    State({'type': 'link-input-dashboard', 'index': ALL}, 'value'),
+    prevent_initial_call=True
+)
 
 
 def format_recording_date_ro(recording_date, start_time, end_time):
@@ -891,18 +954,65 @@ def admin_run_batch_processing(n_clicks, batch_mode, input_folder, uploaded_file
             ], style={'padding': '20px', 'backgroundColor': '#fff3cd', 'border': '1px solid #ffc107', 'borderRadius': '10px'}), n_clicks, None, {'display': 'none'}, True, files_to_clear
         
         # Construim mesajul de succes cu lista de link-uri
+        # Obținem APP_URL din environment (Railway sau localhost)
+        app_url = os.getenv('APP_URL', 'http://127.0.0.1:8050')
+        
         link_rows = []
         for link in generated_links:
-            link_url = f"http://127.0.0.1:8050/?token={link['token']}"
+            link_url = f"{app_url}/?token={link['token']}"
             link_rows.append(
                 html.Div([
-                    html.Strong(f"📅 {link['recording_date']} | {link['start_time']} - {link['end_time']}", style={'display': 'block', 'marginBottom': '5px'}),
-                    html.Small(f"🔧 {link['device_name']} | 🖼️ {link['images_count']} imagini", style={'color': '#666', 'display': 'block', 'marginBottom': '5px'}),
+                    html.Strong(f"📅 {link['recording_date']} | {link['start_time']} - {link['end_time']}", style={'display': 'block', 'marginBottom': '8px'}),
+                    html.Small(f"🔧 {link['device_name']} | 🖼️ {link['images_count']} imagini", style={'color': '#666', 'display': 'block', 'marginBottom': '8px'}),
                     html.Div([
-                        html.Code(
-                            link_url,
-                            style={'backgroundColor': '#f0f0f0', 'padding': '5px', 'fontSize': '11px', 'display': 'block', 'wordBreak': 'break-all'}
-                        )
+                        dcc.Input(
+                            id={'type': 'link-input-batch', 'index': link['token']},
+                            value=link_url,
+                            readOnly=True,
+                            style={
+                                'width': '100%',
+                                'padding': '8px',
+                                'fontSize': '11px',
+                                'fontFamily': 'monospace',
+                                'backgroundColor': '#f0f0f0',
+                                'border': '1px solid #bdc3c7',
+                                'borderRadius': '3px',
+                                'marginBottom': '8px'
+                            }
+                        ),
+                        html.Div([
+                            html.Button(
+                                '📋 Copy',
+                                id={'type': 'copy-link-batch', 'index': link['token']},
+                                n_clicks=0,
+                                style={
+                                    'padding': '6px 15px',
+                                    'marginRight': '8px',
+                                    'backgroundColor': '#3498db',
+                                    'color': 'white',
+                                    'border': 'none',
+                                    'borderRadius': '3px',
+                                    'cursor': 'pointer',
+                                    'fontSize': '12px',
+                                    'fontWeight': 'bold'
+                                }
+                            ),
+                            html.A(
+                                '🌐 Testează în browser',
+                                href=link_url,
+                                target='_blank',
+                                style={
+                                    'padding': '6px 15px',
+                                    'backgroundColor': '#27ae60',
+                                    'color': 'white',
+                                    'textDecoration': 'none',
+                                    'borderRadius': '3px',
+                                    'fontSize': '12px',
+                                    'fontWeight': 'bold',
+                                    'display': 'inline-block'
+                                }
+                            )
+                        ], style={'display': 'flex', 'gap': '8px'})
                     ], style={'marginBottom': '5px'}),
                     html.Small(f"Token: {link['token'][:16]}...", style={'color': '#95a5a6', 'fontSize': '10px'})
                 ], style={
@@ -1495,21 +1605,56 @@ def load_data_view_with_accordion(n_clicks_refresh, trigger, expand_clicks, togg
                             # Link către pacient
                             html.Div([
                                 html.Hr(style={'margin': '20px 0'}),
-                                html.Strong("🔗 Link Pacient: ", style={'marginRight': '10px'}),
+                                html.Strong("🔗 Link Pacient: ", style={'marginRight': '10px', 'display': 'block', 'marginBottom': '10px'}),
                                 dcc.Input(
-                                    value=f"http://127.0.0.1:8050/?token={token}",
+                                    id={'type': 'link-input-view', 'index': token},
+                                    value=f"{os.getenv('APP_URL', 'http://127.0.0.1:8050')}/?token={token}",
                                     readOnly=True,
                                     style={
-                                        'width': '70%',
-                                        'padding': '8px',
+                                        'width': '100%',
+                                        'padding': '10px',
                                         'backgroundColor': '#ecf0f1',
-                                        'border': '1px solid #bdc3c7',
+                                        'border': '2px solid #bdc3c7',
                                         'borderRadius': '5px',
                                         'fontSize': '12px',
-                                        'fontFamily': 'monospace'
+                                        'fontFamily': 'monospace',
+                                        'marginBottom': '10px'
                                     }
-                                )
-                            ])
+                                ),
+                                html.Div([
+                                    html.Button(
+                                        '📋 Copy Link',
+                                        id={'type': 'copy-link-view', 'index': token},
+                                        n_clicks=0,
+                                        style={
+                                            'padding': '8px 20px',
+                                            'marginRight': '10px',
+                                            'backgroundColor': '#3498db',
+                                            'color': 'white',
+                                            'border': 'none',
+                                            'borderRadius': '5px',
+                                            'cursor': 'pointer',
+                                            'fontSize': '13px',
+                                            'fontWeight': 'bold'
+                                        }
+                                    ),
+                                    html.A(
+                                        '🌐 Testează în browser',
+                                        href=f"{os.getenv('APP_URL', 'http://127.0.0.1:8050')}/?token={token}",
+                                        target='_blank',
+                                        style={
+                                            'padding': '8px 20px',
+                                            'backgroundColor': '#27ae60',
+                                            'color': 'white',
+                                            'textDecoration': 'none',
+                                            'borderRadius': '5px',
+                                            'fontSize': '13px',
+                                            'fontWeight': 'bold',
+                                            'display': 'inline-block'
+                                        }
+                                    )
+                                ], style={'display': 'flex', 'gap': '10px'})
+                            ], style={'marginTop': '20px'})
                             
                         ], style={
                             'padding': '25px',
@@ -1600,11 +1745,14 @@ def admin_load_dashboard_table(n_clicks, trigger):
                 style={'padding': '30px', 'textAlign': 'center', 'color': '#666', 'fontStyle': 'italic', 'backgroundColor': '#f8f9fa', 'borderRadius': '5px'}
             )
         
+        # Obținem APP_URL din environment
+        app_url = os.getenv('APP_URL', 'http://127.0.0.1:8050')
+        
         # Construim carduri pentru fiecare link
         link_cards = []
         for link_data in all_links:
             token = link_data['token']
-            link_url = f"http://127.0.0.1:8050/?token={token}"
+            link_url = f"{app_url}/?token={token}"
             
             # Formatare dată citibilă în română
             date_display = "Data nespecificată"
@@ -1655,14 +1803,48 @@ def admin_load_dashboard_table(n_clicks, trigger):
                         ])
                     ], style={'display': 'flex', 'justifyContent': 'space-between', 'alignItems': 'center', 'marginBottom': '15px'}),
                     
-                    # Link-ul (copiabil)
+                    # Link-ul (copiabil) + Butoane
                     html.Div([
                         html.Label("🔗 Link Pacient:", style={'fontWeight': 'bold', 'display': 'block', 'marginBottom': '5px', 'fontSize': '14px'}),
                         dcc.Input(
+                            id={'type': 'link-input-dashboard', 'index': token},
                             value=link_url,
                             readOnly=True,
-                            style={'width': '100%', 'padding': '8px', 'backgroundColor': '#ecf0f1', 'border': '1px solid #bdc3c7', 'borderRadius': '5px', 'fontSize': '12px', 'fontFamily': 'monospace'}
-                        )
+                            style={'width': '100%', 'padding': '8px', 'backgroundColor': '#ecf0f1', 'border': '1px solid #bdc3c7', 'borderRadius': '5px', 'fontSize': '12px', 'fontFamily': 'monospace', 'marginBottom': '8px'}
+                        ),
+                        html.Div([
+                            html.Button(
+                                '📋 Copy',
+                                id={'type': 'copy-link-dashboard', 'index': token},
+                                n_clicks=0,
+                                style={
+                                    'padding': '6px 15px',
+                                    'marginRight': '8px',
+                                    'backgroundColor': '#3498db',
+                                    'color': 'white',
+                                    'border': 'none',
+                                    'borderRadius': '4px',
+                                    'cursor': 'pointer',
+                                    'fontSize': '12px',
+                                    'fontWeight': 'bold'
+                                }
+                            ),
+                            html.A(
+                                '🌐 Testează',
+                                href=link_url,
+                                target='_blank',
+                                style={
+                                    'padding': '6px 15px',
+                                    'backgroundColor': '#27ae60',
+                                    'color': 'white',
+                                    'textDecoration': 'none',
+                                    'borderRadius': '4px',
+                                    'fontSize': '12px',
+                                    'fontWeight': 'bold',
+                                    'display': 'inline-block'
+                                }
+                            )
+                        ], style={'display': 'flex', 'gap': '8px'})
                     ], style={'marginBottom': '15px'}),
                     
                     # Notițe (editabile)
