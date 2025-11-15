@@ -754,22 +754,34 @@ def handle_file_upload(list_of_contents, list_of_names, existing_files):
     Salvează fișierele temporar pentru procesare ulterioară.
     """
     # [DEFENSIVE DEBUG] Logging extensiv pentru troubleshooting
-    logger.info("=" * 80)
-    logger.info("📤 HANDLE FILE UPLOAD - Callback trigerat")
-    logger.info(f"📦 list_of_contents: {list_of_contents is not None} (length: {len(list_of_contents) if list_of_contents else 0})")
-    logger.info(f"📦 list_of_names: {list_of_names}")
-    logger.info(f"📦 existing_files (BEFORE): {existing_files}")
-    logger.info(f"📦 existing_files type: {type(existing_files)}")
-    logger.info(f"📦 existing_files length: {len(existing_files) if existing_files else 0}")
-    logger.info("=" * 80)
+    # [FIX v1] Schimbăm logger.info() în logger.warning() pentru VISIBILITY în PRODUCTION
+    logger.warning("=" * 80)
+    logger.warning("📤 HANDLE FILE UPLOAD - Callback trigerat")
+    logger.warning(f"📦 list_of_contents: {list_of_contents is not None} (length: {len(list_of_contents) if list_of_contents else 0})")
+    logger.warning(f"📦 list_of_names: {list_of_names}")
+    logger.warning(f"📦 existing_files (BEFORE): {existing_files}")
+    logger.warning(f"📦 existing_files type: {type(existing_files)}")
+    logger.warning(f"📦 existing_files length: {len(existing_files) if existing_files else 0}")
+    logger.warning("=" * 80)
     
+    # [FIX v4] Validare DEFENSIVĂ pentru contents
     if not list_of_contents:
-        logger.warning("⚠️ list_of_contents este None/False - returnez no_update")
+        logger.error("❌ list_of_contents este None/False - returnez no_update")
+        return no_update, no_update
+    
+    # [FIX v4.1] Verificare suplimentară dacă lista este goală
+    if isinstance(list_of_contents, list) and len(list_of_contents) == 0:
+        logger.error("❌ list_of_contents este listă GOALĂ - returnez no_update")
+        return no_update, no_update
+    
+    # [FIX v4.2] Verificare că list_of_names există și are aceeași lungime
+    if not list_of_names or len(list_of_names) != len(list_of_contents):
+        logger.error(f"❌ list_of_names mismatch! contents={len(list_of_contents) if list_of_contents else 0}, names={len(list_of_names) if list_of_names else 0}")
         return no_update, no_update
     
     # Inițializează lista existentă dacă e None
     if existing_files is None:
-        logger.info("🔧 Inițializez existing_files = [] (era None)")
+        logger.warning("🔧 Inițializez existing_files = [] (era None)")
         existing_files = []
     
     # Adăugăm noile fișiere
@@ -785,16 +797,16 @@ def handle_file_upload(list_of_contents, list_of_names, existing_files):
                 'size': file_size,
                 'type': file_type
             })
-            logger.info(f"  ✅ Adăugat fișier NOU: {filename} ({file_type}) - {file_size} bytes")
+            logger.warning(f"  ✅ Adăugat fișier NOU: {filename} ({file_type}) - {file_size} bytes")
         else:
             logger.warning(f"  ⚠️ Fișier duplicat (skip): {filename}")
     
     # Combinăm cu fișierele existente
     all_files = existing_files + new_files
     
-    logger.info(f"📊 REZULTAT: {len(new_files)} fișiere noi + {len(existing_files)} existente = {len(all_files)} TOTAL")
-    logger.info(f"📦 all_files (AFTER - va fi returnat la store): {[f['filename'] for f in all_files]}")
-    logger.info("=" * 80)
+    logger.warning(f"📊 REZULTAT: {len(new_files)} fișiere noi + {len(existing_files)} existente = {len(all_files)} TOTAL")
+    logger.warning(f"📦 all_files (AFTER - va fi returnat la store): {[f['filename'] for f in all_files]}")
+    logger.warning("=" * 80)
     
     # Generăm UI pentru listă fișiere
     if not all_files:
@@ -884,7 +896,7 @@ def handle_file_upload(list_of_contents, list_of_names, existing_files):
     })
     
     # [CRITICAL] Returnăm UI + Store actualizat
-    logger.info(f"🎯 RETURN: files_display (UI) + all_files ({len(all_files)} fișiere) → STORE")
+    logger.warning(f"🎯 RETURN: files_display (UI) + all_files ({len(all_files)} fișiere) → STORE")
     return files_display, all_files
 
 
@@ -970,16 +982,17 @@ def admin_run_batch_processing(n_clicks, batch_mode, input_folder, uploaded_file
         return no_update, no_update, no_update, no_update, no_update, no_update
     
     # [DEFENSIVE DEBUG] Logging extensiv pentru troubleshooting
-    logger.info("=" * 80)
-    logger.info("🚀 START BATCH PROCESSING - Verificare parametri...")
-    logger.info(f"📊 Mod selectat: {batch_mode}")
-    logger.info(f"📁 Input folder: {input_folder}")
-    logger.info(f"📁 Output folder: {output_folder}")
-    logger.info(f"⏱️ Window minutes: {window_minutes}")
-    logger.info(f"📦 Uploaded files store: {uploaded_files}")
-    logger.info(f"📦 Uploaded files type: {type(uploaded_files)}")
-    logger.info(f"📦 Uploaded files length: {len(uploaded_files) if uploaded_files else 0}")
-    logger.info("=" * 80)
+    # [FIX v1] Schimbăm logger.info() în logger.warning() pentru VISIBILITY în PRODUCTION
+    logger.warning("=" * 80)
+    logger.warning("🚀 START BATCH PROCESSING - Verificare parametri...")
+    logger.warning(f"📊 Mod selectat: {batch_mode}")
+    logger.warning(f"📁 Input folder: {input_folder}")
+    logger.warning(f"📁 Output folder: {output_folder}")
+    logger.warning(f"⏱️ Window minutes: {window_minutes}")
+    logger.warning(f"📦 Uploaded files store: {uploaded_files}")
+    logger.warning(f"📦 Uploaded files type: {type(uploaded_files)}")
+    logger.warning(f"📦 Uploaded files length: {len(uploaded_files) if uploaded_files else 0}")
+    logger.warning("=" * 80)
     
     # === VALIDARE ÎN FUNCȚIE DE MOD ===
     if batch_mode == 'local':
@@ -991,11 +1004,11 @@ def admin_run_batch_processing(n_clicks, batch_mode, input_folder, uploaded_file
             ), no_update, no_update, no_update, no_update, no_update
         
         processing_folder = input_folder
-        logger.info(f"✅ Procesare LOCALĂ din folder: {input_folder}")
+        logger.warning(f"✅ Procesare LOCALĂ din folder: {input_folder}")
         
     else:  # batch_mode == 'upload'
         # [FIX DEFENSIVE] Verificare detaliată fișiere uploadate
-        logger.info(f"🔍 Mod UPLOAD - Verificare fișiere uploadate...")
+        logger.warning(f"🔍 Mod UPLOAD - Verificare fișiere uploadate...")
         
         if not uploaded_files:
             logger.error("❌ Store 'uploaded_files' este None/False!")
@@ -1037,16 +1050,16 @@ def admin_run_batch_processing(n_clicks, batch_mode, input_folder, uploaded_file
             no_update, no_update, no_update, no_update, no_update
         
         # [SUCCESS] Fișiere detectate
-        logger.info(f"✅ Fișiere detectate în store: {len(uploaded_files)}")
+        logger.warning(f"✅ Fișiere detectate în store: {len(uploaded_files)}")
         for idx, file_data in enumerate(uploaded_files):
-            logger.info(f"   [{idx}] {file_data.get('filename', 'N/A')} ({file_data.get('type', 'N/A')}) - {file_data.get('size', 0)} bytes")
+            logger.warning(f"   [{idx}] {file_data.get('filename', 'N/A')} ({file_data.get('type', 'N/A')}) - {file_data.get('size', 0)} bytes")
         
         # Salvăm fișierele uploadate într-un folder temporar
         import tempfile
         import base64
         
         temp_folder = tempfile.mkdtemp(prefix='batch_upload_')
-        logger.info(f"📤 Salvare {len(uploaded_files)} fișiere uploadate în: {temp_folder}")
+        logger.warning(f"📤 Salvare {len(uploaded_files)} fișiere uploadate în: {temp_folder}")
         
         for file_data in uploaded_files:
             filename = file_data['filename']
@@ -1123,11 +1136,12 @@ def admin_run_batch_processing(n_clicks, batch_mode, input_folder, uploaded_file
             except Exception as cleanup_error:
                 logger.warning(f"Nu s-a putut șterge folderul temporar: {cleanup_error}")
         
-        # [CRITICAL] Golim lista de fișiere uploadate dacă e în mod upload (procesare completă)
-        files_to_clear = [] if batch_mode == 'upload' else no_update
-        logger.info(f"🗑️ Store files_to_clear: {files_to_clear} (batch_mode={batch_mode})")
-        if batch_mode == 'upload':
-            logger.info("✅ Mod UPLOAD - Golim store-ul după procesare completă")
+        # [FIX v3] NU MAI GOLIM AUTOMAT STORE-UL după procesare
+        # [WHY] Utilizatorul poate dori să proceseze din nou sau să verifice lista
+        # [SOLUTION] Butonul "🗑️ Șterge toate" permite golire manuală
+        files_to_clear = no_update  # Nu golim automat
+        logger.warning(f"🗑️ Store files_to_clear: {files_to_clear} (batch_mode={batch_mode})")
+        logger.warning("✅ Store-ul rămâne INTACT după procesare (golire manuală disponibilă)")
         
         if not generated_links:
             return html.Div([

@@ -310,10 +310,11 @@ medical_layout = html.Div([
                                 ),
                                 
                                 # === STORE PENTRU FIȘIERE UPLOADATE (AFARĂ din toggle display!) ===
-                                # CRITICAL: storage_type='session' pentru persistență între re-render-uri!
+                                # [FIX v2] Schimbat storage_type='session' → 'memory' pentru STABILITATE în Railway
+                                # [WHY] Session storage poate avea probleme cu cookies/CORS în production
                                 dcc.Store(
                                     id='admin-batch-uploaded-files-store',
-                                    storage_type='session',  # Persistă în session storage browser
+                                    storage_type='memory',  # În-memory storage (mai stabil)
                                     data=[]  # Inițializare listă goală
                                 ),
                                 
