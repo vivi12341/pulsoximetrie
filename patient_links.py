@@ -694,7 +694,11 @@ def get_all_links_for_admin() -> List[Dict]:
 
 def save_pdf_for_link(token: str, pdf_content: bytes, pdf_filename: str) -> Optional[str]:
     """
-    Salvează un raport PDF pentru un link de pacient.
+    Salvează un raport PDF pentru un link de pacient (cu R2 support).
+    
+    ARHITECTURĂ STORAGE:
+    - PRIORITATE 1: Cloudflare R2 (PERSISTENT cloud storage)
+    - FALLBACK: Local disk (EPHEMERAL pe Railway - dispare la redeploy!)
     
     Args:
         token: UUID-ul pacientului
@@ -705,10 +709,17 @@ def save_pdf_for_link(token: str, pdf_content: bytes, pdf_filename: str) -> Opti
         str: Calea relativă către PDF-ul salvat sau None dacă eroare
     """
     try:
-        # Creăm folderul pdfs/ pentru acest pacient
-        patient_folder = os.path.join(PATIENT_DATA_DIR, token)
-        pdfs_folder = os.path.join(patient_folder, "pdfs")
-        os.makedirs(pdfs_folder, exist_ok=True)
+        # === VERIFICARE R2 DISPONIBIL ===
+        r2_available = False
+        r2_url = None
+        
+        try:
+            from storage_service import upload_patient_pdf, r2_client
+            r2_available = r2_client.enabled
+            logger.info(f"🔍 R2 Status pentru PDF: {'✅ ACTIV' if r2_available else '❌ DEZACTIVAT'}")
+        except ImportError:
+            logger.warning("⚠️ storage_service.py nu este disponibil - folosim doar stocare LOCAL")
+            r2_available = False
         
         # Sanitizăm numele fișierului
         import re
@@ -719,18 +730,45 @@ def save_pdf_for_link(token: str, pdf_content: bytes, pdf_filename: str) -> Opti
         name_parts = os.path.splitext(safe_filename)
         unique_filename = f"{name_parts[0]}_{timestamp}{name_parts[1]}"
         
-        # Calea completă
-        pdf_path = os.path.join(pdfs_folder, unique_filename)
+        # === TRY CLOUDFLARE R2 FIRST (PERSISTENT) ===
+        if r2_available:
+            logger.info(f"☁️ Salvare PDF în Cloudflare R2 pentru {token[:8]}...")
+            try:
+                r2_url = upload_patient_pdf(token, pdf_content, unique_filename)
+                
+                if r2_url:
+                    logger.info(f"✅ PDF salvat în R2: {r2_url}")
+                    # Returnăm path virtual pentru referință
+                    relative_path = os.path.join("pdfs", unique_filename)
+                    return relative_path
+                else:
+                    logger.warning(f"⚠️ Upload R2 PDF eșuat, folosim fallback LOCAL")
+                    r2_available = False  # Fallback la local
+            except Exception as e:
+                logger.error(f"❌ Eroare upload PDF R2: {e} - folosim fallback LOCAL", exc_info=True)
+                r2_available = False
         
-        # Salvăm fișierul
-        with open(pdf_path, 'wb') as f:
-            f.write(pdf_content)
-        
-        # Returnăm calea relativă (pentru portabilitate)
-        relative_path = os.path.join("pdfs", unique_filename)
-        
-        logger.info(f"📄 PDF salvat pentru {token[:8]}...: {unique_filename} ({len(pdf_content)} bytes)")
-        return relative_path
+        # === FALLBACK: LOCAL STORAGE (EPHEMERAL pe Railway!) ===
+        if not r2_available or not r2_url:
+            logger.warning(f"💾 Salvare PDF LOCAL (EPHEMERAL - va dispărea la redeploy Railway!)")
+            
+            # Creăm folderul pdfs/ pentru acest pacient
+            patient_folder = os.path.join(PATIENT_DATA_DIR, token)
+            pdfs_folder = os.path.join(patient_folder, "pdfs")
+            os.makedirs(pdfs_folder, exist_ok=True)
+            
+            # Calea completă
+            pdf_path = os.path.join(pdfs_folder, unique_filename)
+            
+            # Salvăm fișierul LOCAL
+            with open(pdf_path, 'wb') as f:
+                f.write(pdf_content)
+            
+            # Returnăm calea relativă (pentru portabilitate)
+            relative_path = os.path.join("pdfs", unique_filename)
+            
+            logger.info(f"⚠️ PDF salvat LOCAL (TEMPORARY!): {unique_filename} ({len(pdf_content)} bytes)")
+            return relative_path
         
     except Exception as e:
         logger.error(f"Eroare la salvarea PDF pentru {token}: {e}", exc_info=True)
