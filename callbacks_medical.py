@@ -1965,10 +1965,7 @@ app.clientside_callback(
         console.log("🔵 [BROWSER DEBUG] collapsed_groups:", collapsed_groups);
         return window.dash_clientside.no_update;
     }
-    """,
-    Output('dummy-output-for-debug', 'children'),
-    [Input({'type': 'toggle-group-btn', 'index': ALL}, 'n_clicks')],
-    [State('collapsed-groups-store', 'data')]
+    """
 )
 
 @app.callback(
