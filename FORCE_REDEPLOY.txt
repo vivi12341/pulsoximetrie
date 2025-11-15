@@ -1,0 +1,20 @@
+FORCE REDEPLOY - Timestamp: 2025-11-15 18:35
+
+Railway deployment issue: Fix Dash 3.x (commit 88a86dd) nu e activ pe server.
+Asset timestamp shows rebuild: v3_0_5m1763224319 (newer than fix deployment).
+
+Forțăm redeploy prin modificare fișier trigger.
+
+Expected fix in wsgi.py line 151:
+```python
+from dash import html, dcc, dash_table  # ✅ Dash 3.x CORRECT
+```
+
+Browser error (CURRENT):
+```
+GET dash_html_components.v3_0_5m1763224319.min.js → 500
+Error: dash_html_components was not found
+```
+
+This file triggers Railway rebuild with correct code from master branch.
+
