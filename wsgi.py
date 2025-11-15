@@ -353,6 +353,63 @@ except Exception as e:
 # Endpoint: /health (JSON status, timestamp, callbacks count)
 
 
+# === DEBUG R2 STATUS (TEMPORARY - pentru verificare Railway) ===
+@application.route('/debug/r2-status')
+def debug_r2_status():
+    """
+    [TEMPORARY] Debug endpoint pentru verificare configurare R2 în Railway.
+    Expune status R2 + environment variables (cu credențiale MASCATE).
+    
+    DELETE AFTER: După confirmare R2 funcționează OK!
+    """
+    from flask import jsonify
+    from storage_service import get_storage_status, r2_client
+    from datetime import datetime
+    import os
+    
+    try:
+        # Status R2 din storage_service
+        status = get_storage_status()
+        
+        # Environment variables (MASCATE pentru securitate!)
+        env_vars = {
+            'R2_ENABLED': os.getenv('R2_ENABLED', 'NOT_SET'),
+            'R2_ENDPOINT': (os.getenv('R2_ENDPOINT', 'NOT_SET')[:50] + '...' 
+                          if os.getenv('R2_ENDPOINT') else 'NOT_SET'),
+            'R2_ACCESS_KEY_ID': (os.getenv('R2_ACCESS_KEY_ID', 'NOT_SET')[:8] + '...[MASKED]' 
+                               if os.getenv('R2_ACCESS_KEY_ID') else 'NOT_SET'),
+            'R2_SECRET_ACCESS_KEY': '***HIDDEN***' if os.getenv('R2_SECRET_ACCESS_KEY') else 'NOT_SET',
+            'R2_BUCKET_NAME': os.getenv('R2_BUCKET_NAME', 'NOT_SET'),
+            'R2_REGION': os.getenv('R2_REGION', 'NOT_SET')
+        }
+        
+        # Test conexiune R2 (dacă e activat)
+        r2_connection_test = "NOT_TESTED"
+        if r2_client.enabled and r2_client.client:
+            try:
+                r2_client.client.head_bucket(Bucket=r2_client.bucket_name)
+                r2_connection_test = "✅ SUCCESS - Bucket accessible"
+            except Exception as conn_err:
+                r2_connection_test = f"❌ FAILED: {str(conn_err)[:100]}"
+        elif not r2_client.enabled:
+            r2_connection_test = "⚠️ R2 DISABLED (R2_ENABLED=False or missing)"
+        
+        return jsonify({
+            'storage_status': status,
+            'environment_vars': env_vars,
+            'r2_connection_test': r2_connection_test,
+            'r2_client_enabled': r2_client.enabled,
+            'timestamp': datetime.now().isoformat()
+        })
+        
+    except Exception as e:
+        logger.error(f"❌ Debug endpoint error: {e}", exc_info=True)
+        return jsonify({
+            'error': str(e),
+            'message': 'Debug endpoint failed - check logs'
+        }), 500
+
+
 if __name__ == '__main__':
     # Development mode: pornește cu Dash server
     print("⚠️  ATENȚIE: wsgi.py e pentru PRODUCTION (Gunicorn)!")
