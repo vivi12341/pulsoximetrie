@@ -25,6 +25,152 @@ from plot_generator import create_plot
 from batch_processor import run_batch_job
 import batch_session_manager
 import config
+from auth_ui_components import create_auth_header
+
+
+# ==============================================================================
+# HELPER FUNCTIONS
+# ==============================================================================
+
+def create_login_prompt():
+    """
+    Creează o pagină de login prompt frumoasă pentru utilizatori neautentificați.
+    
+    Returns:
+        html.Div: Component Dash cu prompt de autentificare
+    """
+    return html.Div([
+        html.Div([
+            # Icon mare
+            html.Div("🔐", style={
+                'fontSize': '80px',
+                'textAlign': 'center',
+                'marginBottom': '30px'
+            }),
+            
+            # Titlu
+            html.H1(
+                "Bine ați venit!",
+                style={
+                    'textAlign': 'center',
+                    'color': '#2c3e50',
+                    'marginBottom': '15px',
+                    'fontSize': '36px'
+                }
+            ),
+            
+            # Subtitlu
+            html.P(
+                "Platformă Pulsoximetrie - Sistem Medical Securizat",
+                style={
+                    'textAlign': 'center',
+                    'color': '#7f8c8d',
+                    'fontSize': '18px',
+                    'marginBottom': '40px'
+                }
+            ),
+            
+            # Mesaj informativ
+            html.Div([
+                html.P(
+                    "Pentru a accesa platforma medicală, trebuie să vă autentificați.",
+                    style={
+                        'textAlign': 'center',
+                        'color': '#555',
+                        'fontSize': '16px',
+                        'lineHeight': '1.6',
+                        'marginBottom': '10px'
+                    }
+                ),
+                html.P(
+                    "Dacă sunteți pacient și aveți un link de acces personalizat, folosiți link-ul primit de la medicul dumneavoastră.",
+                    style={
+                        'textAlign': 'center',
+                        'color': '#777',
+                        'fontSize': '14px',
+                        'lineHeight': '1.6',
+                        'marginBottom': '40px'
+                    }
+                )
+            ], style={
+                'maxWidth': '600px',
+                'margin': '0 auto',
+                'padding': '20px',
+                'backgroundColor': '#f8f9fa',
+                'borderRadius': '10px',
+                'marginBottom': '40px'
+            }),
+            
+            # Butoane de acțiune
+            html.Div([
+                html.A(
+                    "🔐 Autentificare Medici",
+                    href='/login',
+                    style={
+                        'display': 'inline-block',
+                        'padding': '18px 40px',
+                        'background': 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                        'color': 'white',
+                        'textDecoration': 'none',
+                        'borderRadius': '50px',
+                        'fontSize': '18px',
+                        'fontWeight': '600',
+                        'boxShadow': '0 4px 20px rgba(102, 126, 234, 0.4)',
+                        'transition': 'all 0.3s ease',
+                        'marginRight': '15px',
+                        'marginBottom': '15px'
+                    }
+                ),
+            ], style={'textAlign': 'center', 'marginBottom': '30px'}),
+            
+            # Informații suplimentare
+            html.Div([
+                html.Hr(style={'margin': '30px 0', 'border': 'none', 'borderTop': '1px solid #e0e0e0'}),
+                html.P([
+                    "💡 ",
+                    html.Strong("Pentru pacienți: "),
+                    "Dacă ați primit un link personalizat de la medicul dumneavoastră (ex: ",
+                    html.Code("https://app.com/?token=abc123", style={'backgroundColor': '#e8f4f8', 'padding': '2px 8px', 'borderRadius': '3px'}),
+                    "), folosiți acel link direct. Nu este necesară autentificarea."
+                ], style={
+                    'textAlign': 'center',
+                    'color': '#666',
+                    'fontSize': '13px',
+                    'lineHeight': '1.8'
+                }),
+                html.P([
+                    "🔒 ",
+                    html.Strong("Securitate: "),
+                    "Toate datele sunt criptate și protejate conform GDPR. Platforma este 100% securizată."
+                ], style={
+                    'textAlign': 'center',
+                    'color': '#666',
+                    'fontSize': '13px',
+                    'lineHeight': '1.8',
+                    'marginTop': '15px'
+                })
+            ], style={
+                'maxWidth': '700px',
+                'margin': '0 auto',
+                'padding': '20px'
+            })
+            
+        ], style={
+            'maxWidth': '900px',
+            'margin': '0 auto',
+            'padding': '60px 30px',
+            'backgroundColor': 'white',
+            'borderRadius': '20px',
+            'boxShadow': '0 10px 50px rgba(0,0,0,0.1)'
+        })
+    ], style={
+        'minHeight': '100vh',
+        'background': 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+        'display': 'flex',
+        'alignItems': 'center',
+        'justifyContent': 'center',
+        'padding': '20px'
+    })
 
 
 # ==============================================================================
@@ -39,13 +185,14 @@ import config
 def route_layout_based_on_url(search):
     """
     Detectează dacă URL conține token și afișează layout-ul corespunzător:
-    - Cu token (?token=xxx) → Layout simplificat pentru PACIENȚI
-    - Fără token → Layout complet pentru MEDICI (cu tab-uri)
+    - Cu token (?token=xxx) → Layout simplificat pentru PACIENȚI (fără autentificare)
+    - Fără token → Layout complet pentru MEDICI (NECESITĂ AUTENTIFICARE!)
     
     DEFENSIVE: Error handling robust pentru production!
     """
     try:
         from app_layout_new import medical_layout, patient_layout
+        from flask_login import current_user
         
         # Verificăm dacă există token în URL
         if search and 'token=' in search:
@@ -68,10 +215,18 @@ def route_layout_based_on_url(search):
                     
             except Exception as e:
                 logger.error(f"Eroare la extragerea token-ului din URL: {e}", exc_info=True)
+                # Eroare la parsare token → verificăm autentificare pentru acces medic
+                if not current_user.is_authenticated:
+                    logger.debug("⚠️ Eroare parsare token + utilizator neautentificat → redirect login")
+                    return create_login_prompt(), None
                 return medical_layout, None
         
-        # Fără token → Layout pentru medici
-        logger.debug("🏥 Acces medic detectat (fără token) → Afișare layout complet")
+        # Fără token → Layout pentru medici (NECESITĂ AUTENTIFICARE!)
+        if not current_user.is_authenticated:
+            logger.debug("🔐 Acces neautentificat detectat → Afișare pagină login")
+            return create_login_prompt(), None
+        
+        logger.debug(f"🏥 Acces medic autentificat: {current_user.email} → Afișare layout complet")
         return medical_layout, None
         
     except Exception as e:
@@ -85,6 +240,29 @@ def route_layout_based_on_url(search):
                    style={'textAlign': 'center', 'fontSize': '14px', 'color': '#999', 'fontFamily': 'monospace'})
         ], style={'padding': '50px'})
         return error_layout, None
+
+
+# ==============================================================================
+# CALLBACK HEADER AUTENTIFICARE
+# ==============================================================================
+
+@app.callback(
+    Output('auth-header-container', 'children'),
+    [Input('url', 'pathname')]
+)
+def update_auth_header(pathname):
+    """
+    Actualizează header-ul de autentificare pe toate paginile medicului.
+    
+    Afișează:
+    - Buton "Autentifică-te" pentru utilizatori neautentificați
+    - Informații doctor + buton "Deconectare" pentru utilizatori autentificați
+    """
+    try:
+        return create_auth_header()
+    except Exception as e:
+        logger.error(f"Eroare la crearea header-ului de autentificare: {e}", exc_info=True)
+        return html.Div()
 
 
 def format_recording_date_ro(recording_date, start_time, end_time):

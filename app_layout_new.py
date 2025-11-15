@@ -41,8 +41,13 @@ layout = html.Div(
 )
 
 # --- Layout pentru MEDICI (cu tab-uri complete) ---
+# ACEST LAYOUT VA FI AFIȘAT DOAR DUPĂ AUTENTIFICARE!
 medical_layout = html.Div([
-    # Header
+    # Header autentificare (afișat dinamic)
+    html.Div(id='auth-header-container'),
+    
+    # Header aplicație
+    html.Div(id='app-logo-container', style={'textAlign': 'center', 'marginBottom': '15px'}),
     html.H1(
         "📊 Platformă Pulsoximetrie",
         id="app-title",
