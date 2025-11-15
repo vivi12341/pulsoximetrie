@@ -277,6 +277,41 @@ if __name__ == '__main__':
     # - Local Development: 127.0.0.1 (securitate)
     host = '0.0.0.0' if is_production else '127.0.0.1'
     
+    # [DIAGNOSTIC v2.0] Verificare callback-uri înregistrate
+    logger.warning("=" * 100)
+    logger.warning("🔍 [INIT LOG 1/5] APLICAȚIE INIȚIALIZARE - Verificare callbacks")
+    logger.warning("=" * 100)
+    
+    # Listează toate callback-urile înregistrate
+    try:
+        callback_map = app.callback_map
+        logger.warning(f"🔍 [INIT LOG 2/5] Număr total callbacks înregistrate: {len(callback_map)}")
+        
+        # Verifică dacă callback-urile critice sunt înregistrate
+        logger.warning("🔍 [INIT LOG 3/5] Verificare callback-uri critice...")
+        has_upload_callback = False
+        has_monitor_callback = False
+        
+        for cb_id, cb_data in callback_map.items():
+            if 'admin-batch-uploaded-files-store' in str(cb_data):
+                logger.warning(f"✅ [INIT LOG 3.1/5] Callback găsit: {cb_id}")
+                has_upload_callback = True
+            if 'dummy-output-for-debug' in str(cb_data):
+                logger.warning(f"✅ [INIT LOG 3.2/5] Monitor callback găsit: {cb_id}")
+                has_monitor_callback = True
+        
+        if not has_upload_callback:
+            logger.error("❌ [INIT LOG 3.3/5] CRITICAL: Upload callback NU este înregistrat!")
+        if not has_monitor_callback:
+            logger.error("❌ [INIT LOG 3.4/5] CRITICAL: Monitor callback NU este înregistrat!")
+        
+    except Exception as e:
+        logger.error(f"❌ [INIT LOG 3/5] Eroare verificare callbacks: {e}")
+    
+    logger.warning(f"🔍 [INIT LOG 4/5] PORT: {port}")
+    logger.warning(f"🔍 [INIT LOG 5/5] DEBUG MODE: {debug_mode}")
+    logger.warning("=" * 100)
+    
     logger.info(f"🌐 Aplicația pornește pe: http://{host}:{port}/")
     logger.info(f"⚙️  Environment: {'PRODUCTION' if is_production else 'DEVELOPMENT'}")
     logger.info(f"🐛 Debug Mode: {'OFF ✅' if not debug_mode else 'ON (doar local)'}")

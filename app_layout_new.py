@@ -752,7 +752,10 @@ medical_layout = html.Div([
             "© 2025 Platformă Pulsoximetrie - Powered by Python + Dash + Plotly",
             style={'textAlign': 'center', 'color': '#bdc3c7', 'fontSize': '11px'}
         )
-    ], style={'marginTop': '60px', 'paddingBottom': '30px'})
+    ], style={'marginTop': '60px', 'paddingBottom': '30px'}),
+    
+    # ===== ELEMENT DUMMY pentru DEBUGGING (MEDICAL LAYOUT) =====
+    html.Div(id='dummy-output-for-debug', style={'display': 'none'})
 ]
 )
 

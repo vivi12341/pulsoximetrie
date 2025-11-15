@@ -753,60 +753,97 @@ def handle_file_upload(list_of_contents, list_of_names, existing_files):
     Procesează fișierele uploadate și afișează lista.
     Salvează fișierele temporar pentru procesare ulterioară.
     """
-    # [DEFENSIVE DEBUG] Logging extensiv pentru troubleshooting
-    # [FIX v1] Schimbăm logger.info() în logger.warning() pentru VISIBILITY în PRODUCTION
-    logger.warning("=" * 80)
-    logger.warning("📤 HANDLE FILE UPLOAD - Callback trigerat")
-    logger.warning(f"📦 list_of_contents: {list_of_contents is not None} (length: {len(list_of_contents) if list_of_contents else 0})")
-    logger.warning(f"📦 list_of_names: {list_of_names}")
-    logger.warning(f"📦 existing_files (BEFORE): {existing_files}")
-    logger.warning(f"📦 existing_files type: {type(existing_files)}")
-    logger.warning(f"📦 existing_files length: {len(existing_files) if existing_files else 0}")
-    logger.warning("=" * 80)
+    # [DIAGNOSTIC v2.0] 20+ LOG-URI pentru identificare EXACTĂ a problemei
+    logger.warning("=" * 100)
+    logger.warning("🔍 [LOG 1/20] HANDLE_FILE_UPLOAD - CALLBACK ENTRY")
+    logger.warning("=" * 100)
     
-    # [FIX v4] Validare DEFENSIVĂ pentru contents
+    # LOG 2-4: Parametri Input
+    logger.warning(f"🔍 [LOG 2/20] INPUT list_of_contents TYPE: {type(list_of_contents)}")
+    logger.warning(f"🔍 [LOG 3/20] INPUT list_of_contents IS_NONE: {list_of_contents is None}")
+    logger.warning(f"🔍 [LOG 4/20] INPUT list_of_contents LENGTH: {len(list_of_contents) if list_of_contents else 0}")
+    
+    # LOG 5-7: Parametri State filename
+    logger.warning(f"🔍 [LOG 5/20] STATE list_of_names TYPE: {type(list_of_names)}")
+    logger.warning(f"🔍 [LOG 6/20] STATE list_of_names IS_NONE: {list_of_names is None}")
+    logger.warning(f"🔍 [LOG 7/20] STATE list_of_names VALUE: {list_of_names}")
+    
+    # LOG 8-10: Parametri State existing store
+    logger.warning(f"🔍 [LOG 8/20] STATE existing_files TYPE: {type(existing_files)}")
+    logger.warning(f"🔍 [LOG 9/20] STATE existing_files IS_NONE: {existing_files is None}")
+    logger.warning(f"🔍 [LOG 10/20] STATE existing_files LENGTH: {len(existing_files) if existing_files else 0}")
+    
+    # LOG 11: Context callback
+    from dash import ctx
+    logger.warning(f"🔍 [LOG 11/20] DASH CONTEXT triggered_id: {ctx.triggered_id}")
+    logger.warning(f"🔍 [LOG 12/20] DASH CONTEXT triggered: {ctx.triggered}")
+    
+    logger.warning("=" * 100)
+    
+    # LOG 13: Validare DEFENSIVĂ pentru contents
+    logger.warning("🔍 [LOG 13/20] START VALIDARE - Verificare list_of_contents")
+    
     if not list_of_contents:
-        logger.error("❌ list_of_contents este None/False - returnez no_update")
+        logger.error("❌ [LOG 14/20] VALIDATION FAILED: list_of_contents este None/False - RETURN no_update")
+        logger.error(f"❌ [LOG 14.1/20] Detalii: list_of_contents = {list_of_contents}")
         return no_update, no_update
     
-    # [FIX v4.1] Verificare suplimentară dacă lista este goală
+    logger.warning("✅ [LOG 14/20] VALIDATION PASSED: list_of_contents există")
+    
+    # LOG 15: Verificare suplimentară dacă lista este goală
     if isinstance(list_of_contents, list) and len(list_of_contents) == 0:
-        logger.error("❌ list_of_contents este listă GOALĂ - returnez no_update")
+        logger.error("❌ [LOG 15/20] VALIDATION FAILED: list_of_contents este listă GOALĂ - RETURN no_update")
         return no_update, no_update
     
-    # [FIX v4.2] Verificare că list_of_names există și are aceeași lungime
+    logger.warning("✅ [LOG 15/20] VALIDATION PASSED: list_of_contents are elemente")
+    
+    # LOG 16: Verificare că list_of_names există și are aceeași lungime
     if not list_of_names or len(list_of_names) != len(list_of_contents):
-        logger.error(f"❌ list_of_names mismatch! contents={len(list_of_contents) if list_of_contents else 0}, names={len(list_of_names) if list_of_names else 0}")
+        logger.error(f"❌ [LOG 16/20] VALIDATION FAILED: list_of_names mismatch! contents={len(list_of_contents) if list_of_contents else 0}, names={len(list_of_names) if list_of_names else 0}")
         return no_update, no_update
     
-    # Inițializează lista existentă dacă e None
-    if existing_files is None:
-        logger.warning("🔧 Inițializez existing_files = [] (era None)")
-        existing_files = []
+    logger.warning("✅ [LOG 16/20] VALIDATION PASSED: list_of_names match cu list_of_contents")
     
-    # Adăugăm noile fișiere
+    # LOG 17: Inițializare existing_files
+    logger.warning("🔍 [LOG 17/20] INIȚIALIZARE existing_files")
+    if existing_files is None:
+        logger.warning("🔧 [LOG 17.1/20] existing_files era None - inițializez cu []")
+        existing_files = []
+    else:
+        logger.warning(f"✅ [LOG 17.1/20] existing_files deja există cu {len(existing_files)} elemente")
+    
+    # LOG 18: Procesare fișiere
+    logger.warning("🔍 [LOG 18/20] START PROCESARE - Iterare prin list_of_contents")
     new_files = []
-    for content, filename in zip(list_of_contents, list_of_names):
+    
+    for idx, (content, filename) in enumerate(zip(list_of_contents, list_of_names)):
+        logger.warning(f"🔍 [LOG 18.{idx+1}/20] Procesez fișier [{idx}]: {filename}")
+        
         # Verificăm dacă fișierul nu există deja
-        if not any(f['filename'] == filename for f in existing_files):
+        is_duplicate = any(f['filename'] == filename for f in existing_files)
+        logger.warning(f"🔍 [LOG 18.{idx+1}.1/20] is_duplicate: {is_duplicate}")
+        
+        if not is_duplicate:
             file_size = len(content) if content else 0
             file_type = 'CSV' if filename.lower().endswith('.csv') else 'PDF'
-            new_files.append({
+            
+            file_obj = {
                 'filename': filename,
                 'content': content,
                 'size': file_size,
                 'type': file_type
-            })
-            logger.warning(f"  ✅ Adăugat fișier NOU: {filename} ({file_type}) - {file_size} bytes")
+            }
+            new_files.append(file_obj)
+            logger.warning(f"  ✅ [LOG 18.{idx+1}.2/20] Adăugat fișier NOU: {filename} ({file_type}) - {file_size} bytes")
         else:
-            logger.warning(f"  ⚠️ Fișier duplicat (skip): {filename}")
+            logger.warning(f"  ⚠️ [LOG 18.{idx+1}.2/20] Fișier duplicat (skip): {filename}")
     
-    # Combinăm cu fișierele existente
+    # LOG 19: Combinare cu existing_files
+    logger.warning(f"🔍 [LOG 19/20] COMBINARE - new_files ({len(new_files)}) + existing_files ({len(existing_files)})")
     all_files = existing_files + new_files
-    
-    logger.warning(f"📊 REZULTAT: {len(new_files)} fișiere noi + {len(existing_files)} existente = {len(all_files)} TOTAL")
-    logger.warning(f"📦 all_files (AFTER - va fi returnat la store): {[f['filename'] for f in all_files]}")
-    logger.warning("=" * 80)
+    logger.warning(f"✅ [LOG 19.1/20] all_files LENGTH după combinare: {len(all_files)}")
+    logger.warning(f"✅ [LOG 19.2/20] all_files FILENAMES: {[f['filename'] for f in all_files]}")
+    logger.warning(f"✅ [LOG 19.3/20] all_files TYPE: {type(all_files)}")
     
     # Generăm UI pentru listă fișiere
     if not all_files:
@@ -895,8 +932,17 @@ def handle_file_upload(list_of_contents, list_of_names, existing_files):
         'overflowY': 'auto'
     })
     
-    # [CRITICAL] Returnăm UI + Store actualizat
-    logger.warning(f"🎯 RETURN: files_display (UI) + all_files ({len(all_files)} fișiere) → STORE")
+    # LOG 20: RETURN FINAL
+    logger.warning("=" * 100)
+    logger.warning("🔍 [LOG 20/20] PREGĂTIRE RETURN")
+    logger.warning(f"🎯 [LOG 20.1/20] RETURN OUTPUT 1 (UI): files_display TYPE = {type(files_display)}")
+    logger.warning(f"🎯 [LOG 20.2/20] RETURN OUTPUT 2 (STORE): all_files LENGTH = {len(all_files)}")
+    logger.warning(f"🎯 [LOG 20.3/20] RETURN OUTPUT 2 (STORE): all_files TYPE = {type(all_files)}")
+    logger.warning(f"🎯 [LOG 20.4/20] RETURN OUTPUT 2 (STORE): all_files CONTENT = {[f['filename'] for f in all_files]}")
+    logger.warning("=" * 100)
+    logger.warning("🚀 [LOG 20.5/20] CALLBACK EXIT - Returnez (files_display, all_files)")
+    logger.warning("=" * 100)
+    
     return files_display, all_files
 
 
@@ -908,6 +954,38 @@ def _format_file_size(size_bytes):
         return f"{size_bytes / 1024:.1f} KB"
     else:
         return f"{size_bytes / (1024 * 1024):.1f} MB"
+
+
+# ==============================================================================
+# [DIAGNOSTIC v2.0] CALLBACK MONITORING STORE - Detectare actualizări store
+# ==============================================================================
+@app.callback(
+    Output('dummy-output-for-debug', 'children'),
+    [Input('admin-batch-uploaded-files-store', 'data')]
+)
+def monitor_store_changes(store_data):
+    """
+    [DIAGNOSTIC] Callback care monitorizează ORICE schimbare în store.
+    Acest callback se va declanșa DE FIECARE DATĂ când store-ul primește date noi.
+    """
+    logger.warning("=" * 100)
+    logger.warning("🔍 [MONITOR LOG 1/5] STORE MONITORING - CALLBACK TRIGGERED!")
+    logger.warning("=" * 100)
+    
+    logger.warning(f"🔍 [MONITOR LOG 2/5] Store data IS_NONE: {store_data is None}")
+    logger.warning(f"🔍 [MONITOR LOG 3/5] Store data TYPE: {type(store_data)}")
+    
+    if store_data:
+        logger.warning(f"✅ [MONITOR LOG 4/5] Store data LENGTH: {len(store_data)}")
+        logger.warning(f"✅ [MONITOR LOG 5/5] Store data FILENAMES: {[f.get('filename', 'N/A') for f in store_data]}")
+    else:
+        logger.error(f"❌ [MONITOR LOG 4/5] Store data este GOLI/NONE!")
+        logger.error(f"❌ [MONITOR LOG 5/5] Store data VALUE: {store_data}")
+    
+    logger.warning("=" * 100)
+    
+    # Return dummy value (nu afectează UI-ul)
+    return ""
 
 
 @app.callback(
@@ -981,18 +1059,37 @@ def admin_run_batch_processing(n_clicks, batch_mode, input_folder, uploaded_file
     if n_clicks == 0:
         return no_update, no_update, no_update, no_update, no_update, no_update
     
-    # [DEFENSIVE DEBUG] Logging extensiv pentru troubleshooting
-    # [FIX v1] Schimbăm logger.info() în logger.warning() pentru VISIBILITY în PRODUCTION
-    logger.warning("=" * 80)
-    logger.warning("🚀 START BATCH PROCESSING - Verificare parametri...")
-    logger.warning(f"📊 Mod selectat: {batch_mode}")
-    logger.warning(f"📁 Input folder: {input_folder}")
-    logger.warning(f"📁 Output folder: {output_folder}")
-    logger.warning(f"⏱️ Window minutes: {window_minutes}")
-    logger.warning(f"📦 Uploaded files store: {uploaded_files}")
-    logger.warning(f"📦 Uploaded files type: {type(uploaded_files)}")
-    logger.warning(f"📦 Uploaded files length: {len(uploaded_files) if uploaded_files else 0}")
-    logger.warning("=" * 80)
+    # [DIAGNOSTIC v2.0] LOG-URI EXTENSIVE pentru citire store
+    logger.warning("=" * 100)
+    logger.warning("🔍 [BATCH LOG 1/15] ADMIN_RUN_BATCH_PROCESSING - CALLBACK ENTRY")
+    logger.warning("=" * 100)
+    
+    # Context callback
+    from dash import ctx
+    logger.warning(f"🔍 [BATCH LOG 2/15] DASH CONTEXT triggered_id: {ctx.triggered_id}")
+    logger.warning(f"🔍 [BATCH LOG 3/15] DASH CONTEXT triggered: {ctx.triggered}")
+    
+    # Parametri
+    logger.warning(f"🔍 [BATCH LOG 4/15] INPUT n_clicks: {n_clicks}")
+    logger.warning(f"🔍 [BATCH LOG 5/15] STATE batch_mode: {batch_mode}")
+    logger.warning(f"🔍 [BATCH LOG 6/15] STATE input_folder: {input_folder}")
+    logger.warning(f"🔍 [BATCH LOG 7/15] STATE output_folder: {output_folder}")
+    logger.warning(f"🔍 [BATCH LOG 8/15] STATE window_minutes: {window_minutes}")
+    
+    # CRITIC: Verificare Store uploaded_files
+    logger.warning("=" * 100)
+    logger.warning("🔍 [BATCH LOG 9/15] CITIRE STORE 'uploaded_files' - START")
+    logger.warning(f"🔍 [BATCH LOG 10/15] uploaded_files IS_NONE: {uploaded_files is None}")
+    logger.warning(f"🔍 [BATCH LOG 11/15] uploaded_files TYPE: {type(uploaded_files)}")
+    logger.warning(f"🔍 [BATCH LOG 12/15] uploaded_files VALUE: {uploaded_files}")
+    
+    if uploaded_files:
+        logger.warning(f"🔍 [BATCH LOG 13/15] uploaded_files LENGTH: {len(uploaded_files)}")
+        logger.warning(f"🔍 [BATCH LOG 14/15] uploaded_files KEYS (first): {list(uploaded_files[0].keys()) if len(uploaded_files) > 0 else 'N/A'}")
+    else:
+        logger.error(f"❌ [BATCH LOG 13/15] uploaded_files este GOLI/NONE!")
+    
+    logger.warning("=" * 100)
     
     # === VALIDARE ÎN FUNCȚIE DE MOD ===
     if batch_mode == 'local':
@@ -1007,10 +1104,13 @@ def admin_run_batch_processing(n_clicks, batch_mode, input_folder, uploaded_file
         logger.warning(f"✅ Procesare LOCALĂ din folder: {input_folder}")
         
     else:  # batch_mode == 'upload'
-        # [FIX DEFENSIVE] Verificare detaliată fișiere uploadate
-        logger.warning(f"🔍 Mod UPLOAD - Verificare fișiere uploadate...")
+        # [DIAGNOSTIC v2.0] Verificare detaliată fișiere uploadate
+        logger.warning(f"🔍 [BATCH LOG 15/15] MOD UPLOAD - Verificare fișiere uploadate...")
         
         if not uploaded_files:
+            logger.error("=" * 100)
+            logger.error("❌ [BATCH LOG 15.1/15] CRITICAL: Store uploaded_files este None/False/Empty!")
+            logger.error("=" * 100)
             logger.error("❌ Store 'uploaded_files' este None/False!")
             logger.error(f"   Type: {type(uploaded_files)}")
             logger.error(f"   Value: {uploaded_files}")
