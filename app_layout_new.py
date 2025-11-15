@@ -822,6 +822,6 @@ patient_layout = html.Div([
     ], style={'marginTop': '40px'}),
     
     # ===== ELEMENT DUMMY pentru DEBUGGING în CONSOLĂ BROWSER =====
-    html.Div(id='dummy-output-patient-debug', style={'display': 'none'})
+    html.Div(id='dummy-output-for-debug', style={'display': 'none'})
 ])
 
