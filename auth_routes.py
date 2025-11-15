@@ -42,26 +42,50 @@ def route_health(app_server):
     def health_check():
         """
         Health check endpoint - verifică dacă aplicația rulează corect.
+        Verifică: Database connection, Storage access, Application status.
         
         Returns:
-            JSON cu status și timestamp
+            JSON cu status și timestamp (200 OK sau 503 Service Unavailable)
         """
+        health_status = {
+            'status': 'healthy',
+            'timestamp': datetime.utcnow().isoformat(),
+            'checks': {
+                'service': 'pulsoximetrie'
+            }
+        }
+        
+        # Check 1: Database connection
         try:
-            # Testăm conexiunea la database
             db.session.execute(db.text('SELECT 1'))
-            db_status = "healthy"
+            health_status['checks']['database'] = 'ok'
         except Exception as e:
+            health_status['status'] = 'unhealthy'
+            health_status['checks']['database'] = f'error: {str(e)[:100]}'
             logger.error(f"❌ Health check: Database error - {e}")
-            db_status = "unhealthy"
         
-        status = "healthy" if db_status == "healthy" else "degraded"
+        # Check 2: Storage write/read (defensive - nu blochează dacă fail)
+        try:
+            import os
+            test_file = 'output/LOGS/.health_check'
+            with open(test_file, 'w') as f:
+                f.write('ok')
+            os.remove(test_file)
+            health_status['checks']['storage'] = 'ok'
+        except Exception as e:
+            # Storage failure nu e critic (aplicația poate continua)
+            health_status['checks']['storage'] = f'degraded: {str(e)[:50]}'
+            logger.warning(f"⚠️ Health check: Storage warning - {e}")
         
-        return jsonify({
-            "status": status,
-            "timestamp": datetime.utcnow().isoformat(),
-            "database": db_status,
-            "service": "pulsoximetrie"
-        }), 200 if status == "healthy" else 503
+        # Check 3: Application callbacks (informațional)
+        try:
+            from app_instance import app as dash_app
+            health_status['checks']['callbacks'] = len(dash_app.callback_map)
+        except Exception:
+            health_status['checks']['callbacks'] = 'unknown'
+        
+        status_code = 200 if health_status['status'] == 'healthy' else 503
+        return jsonify(health_status), status_code
     
     @app_server.route('/debug-info', methods=['GET'])
     def debug_info():

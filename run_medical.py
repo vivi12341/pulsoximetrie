@@ -209,48 +209,6 @@ init_auth_manager(app)
 # Inițializăm route-urile de autentificare
 init_auth_routes(app)
 
-# === HEALTH CHECK ENDPOINT (Railway/Monitoring) ===
-@app.server.route('/health')
-def health_check():
-    """
-    Health check endpoint pentru Railway monitoring.
-    Verifică: Database connection, Storage access, Application status.
-    """
-    from flask import jsonify
-    
-    health_status = {
-        'status': 'healthy',
-        'timestamp': __import__('datetime').datetime.utcnow().isoformat(),
-        'checks': {}
-    }
-    
-    try:
-        # Check 1: Database connection
-        with app.server.app_context():
-            db.session.execute(db.text('SELECT 1'))
-            health_status['checks']['database'] = 'ok'
-    except Exception as e:
-        health_status['status'] = 'unhealthy'
-        health_status['checks']['database'] = f'error: {str(e)[:100]}'
-    
-    try:
-        # Check 2: Storage write/read
-        import os
-        test_file = 'output/LOGS/.health_check'
-        with open(test_file, 'w') as f:
-            f.write('ok')
-        os.remove(test_file)
-        health_status['checks']['storage'] = 'ok'
-    except Exception as e:
-        health_status['status'] = 'unhealthy'
-        health_status['checks']['storage'] = f'error: {str(e)[:100]}'
-    
-    # Check 3: Application callbacks
-    health_status['checks']['callbacks'] = len(app.callback_map)
-    
-    status_code = 200 if health_status['status'] == 'healthy' else 503
-    return jsonify(health_status), status_code
-
 # === REQUEST LOGGING (production monitoring) ===
 # ELIMINAT: Werkzeug loggează deja toate cererile HTTP
 # Logging custom genereaza duplicate (3 linii per request!)
