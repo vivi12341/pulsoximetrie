@@ -1,0 +1,6 @@
+# Force Railway Fresh Rebuild
+# Timestamp: 2025-11-15 21:10:00
+# Reason: Clear Docker layer cache (ghilimele simple persistent în cache vechi)
+
+Railway rebuild trigger - commit hash: ca0895a
+
