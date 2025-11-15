@@ -924,35 +924,39 @@ def _format_file_size(size_bytes):
 
 
 # ==============================================================================
-# [DIAGNOSTIC v2.0] CALLBACK MONITORING STORE - Detectare actualizări store
+# [DIAGNOSTIC v2.0] CALLBACK MONITORING STORE - DISABLED (cauza eroare Dash)
 # ==============================================================================
-@app.callback(
-    Output('dummy-output-for-debug', 'children'),
-    [Input('admin-batch-uploaded-files-store', 'data')]
-)
-def monitor_store_changes(store_data):
-    """
-    [DIAGNOSTIC] Callback care monitorizează ORICE schimbare în store.
-    Acest callback se va declanșa DE FIECARE DATĂ când store-ul primește date noi.
-    """
-    logger.warning("=" * 100)
-    logger.warning("🔍 [MONITOR LOG 1/5] STORE MONITORING - CALLBACK TRIGGERED!")
-    logger.warning("=" * 100)
-    
-    logger.warning(f"🔍 [MONITOR LOG 2/5] Store data IS_NONE: {store_data is None}")
-    logger.warning(f"🔍 [MONITOR LOG 3/5] Store data TYPE: {type(store_data)}")
-    
-    if store_data:
-        logger.warning(f"✅ [MONITOR LOG 4/5] Store data LENGTH: {len(store_data)}")
-        logger.warning(f"✅ [MONITOR LOG 5/5] Store data FILENAMES: {[f.get('filename', 'N/A') for f in store_data]}")
-    else:
-        logger.error(f"❌ [MONITOR LOG 4/5] Store data este GOLI/NONE!")
-        logger.error(f"❌ [MONITOR LOG 5/5] Store data VALUE: {store_data}")
-    
-    logger.warning("=" * 100)
-    
-    # Return dummy value (nu afectează UI-ul)
-    return ""
+# PROBLEMA: dummy-output-for-debug nu există în layout-ul inițial
+# Callback-ul referențiază un Output inexistent → Dash ERROR → blochează toate callback-urile
+# SOLUȚIE: Dezactivat temporar pentru debugging
+# 
+# @app.callback(
+#     Output('dummy-output-for-debug', 'children'),
+#     [Input('admin-batch-uploaded-files-store', 'data')]
+# )
+# def monitor_store_changes(store_data):
+#     """
+#     [DIAGNOSTIC] Callback care monitorizează ORICE schimbare în store.
+#     Acest callback se va declanșa DE FIECARE DATĂ când store-ul primește date noi.
+#     """
+#     logger.warning("=" * 100)
+#     logger.warning("🔍 [MONITOR LOG 1/5] STORE MONITORING - CALLBACK TRIGGERED!")
+#     logger.warning("=" * 100)
+#     
+#     logger.warning(f"🔍 [MONITOR LOG 2/5] Store data IS_NONE: {store_data is None}")
+#     logger.warning(f"🔍 [MONITOR LOG 3/5] Store data TYPE: {type(store_data)}")
+#     
+#     if store_data:
+#         logger.warning(f"✅ [MONITOR LOG 4/5] Store data LENGTH: {len(store_data)}")
+#         logger.warning(f"✅ [MONITOR LOG 5/5] Store data FILENAMES: {[f.get('filename', 'N/A') for f in store_data]}")
+#     else:
+#         logger.error(f"❌ [MONITOR LOG 4/5] Store data este GOLI/NONE!")
+#         logger.error(f"❌ [MONITOR LOG 5/5] Store data VALUE: {store_data}")
+#     
+#     logger.warning("=" * 100)
+#     
+#     # Return dummy value (nu afectează UI-ul)
+#     return ""
 
 
 @app.callback(
