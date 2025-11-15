@@ -22,19 +22,15 @@ from app_instance import app
 # Exportăm Flask application pentru Gunicorn
 application = app.server
 
-# === INIȚIALIZARE LA PRIMUL REQUEST (Lazy Init) ===
-# Flag global pentru a verifica dacă aplicația e inițializată
-_app_initialized = False
+# === INIȚIALIZARE LA STARTUP (NU la primul request!) ===
+# CRITICAL: DB trebuie inițializat ÎNAINTE de orice request, altfel Flask aruncă
+# AssertionError: teardown_appcontext can no longer be called after first request
 
 def initialize_application():
     """
-    Inițializare lazy a aplicației (database, callbacks, layout).
-    Se execută DOAR o dată, la primul request, NU la import!
+    Inițializare aplicație la STARTUP (NU lazy init!).
+    Se execută imediat după import, ÎNAINTE de orice request HTTP.
     """
-    global _app_initialized
-    if _app_initialized:
-        return  # Deja inițializat
-    _app_initialized = True
     import os
     from dotenv import load_dotenv
     from urllib.parse import urlparse
@@ -45,14 +41,14 @@ def initialize_application():
     # === LOGGING ===
     from logger_setup import logger
     logger.info("=" * 70)
-    logger.info("🏥 INIȚIALIZARE APLICAȚIE MEDICAL - PRIMUL REQUEST")
+    logger.info("🏥 INIȚIALIZARE APLICAȚIE MEDICAL - STARTUP")
     logger.info("=" * 70)
     
     # === DATABASE INIT ===
     database_url = os.getenv('DATABASE_URL')
     if not database_url:
         logger.error("❌ DATABASE_URL nu este setat!")
-        return
+        raise RuntimeError("DATABASE_URL environment variable not set!")
     
     application.config['SQLALCHEMY_DATABASE_URI'] = database_url
     application.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
@@ -79,11 +75,13 @@ def initialize_application():
     
     logger.info(f"📊 Database configured: {urlparse(database_url).hostname}")
     
-    # === AUTH INIT ===
+    # === AUTH INIT (CRITICAL: trebuie făcut ÎNAINTE de orice request!) ===
     from auth.models import db, init_db, create_admin_user
     from auth.auth_manager import init_auth_manager
     from auth_routes import init_auth_routes
     
+    # IMPORTANT: Pasăm 'app' (Dash instance), nu 'application' (Flask server)
+    # init_db va extrage app.server intern
     init_db(app)
     init_auth_manager(app)
     init_auth_routes(app)
@@ -116,7 +114,7 @@ def initialize_application():
             else:
                 logger.info(f"✅ Admin user exists: {admin_email}")
         except Exception as e:
-            logger.error(f"❌ Admin user creation failed: {e}")
+            logger.error(f"❌ Admin user creation failed: {e}", exc_info=True)
     
     # === RATE LIMITER CLEANUP ===
     from auth.rate_limiter import schedule_cleanup_task
@@ -127,11 +125,14 @@ def initialize_application():
     logger.info("=" * 70)
 
 
-# === MIDDLEWARE: Lazy Init la Primul Request ===
-@application.before_request
-def before_request_init():
-    """Middleware care inițializează aplicația la primul request."""
+# === EXECUTĂ INIȚIALIZAREA LA IMPORT (STARTUP) ===
+try:
     initialize_application()
+except Exception as e:
+    # Log critical error and re-raise to prevent app from starting in broken state
+    from logger_setup import logger
+    logger.critical(f"❌❌❌ STARTUP FAILED: {e}", exc_info=True)
+    raise
 
 
 # === HEALTH CHECK ENDPOINT ===
