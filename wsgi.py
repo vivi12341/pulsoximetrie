@@ -1,0 +1,159 @@
+# ==============================================================================
+# wsgi.py - WSGI Entry Point for Production (Gunicorn)
+# ------------------------------------------------------------------------------
+# ROL: Punct de intrare MINIMAL pentru Gunicorn care exportă doar app.server
+#      FĂRĂ să execute inițializarea database/callbacks la import!
+#
+# UTILIZARE (Gunicorn):
+#   gunicorn --workers 4 --threads 2 wsgi:application
+#
+# RESPECTĂ: .cursorrules - Separation of Concerns, Defensive Programming
+# ==============================================================================
+
+import os
+import sys
+
+# Asigură-te că directorul curent e în Python path
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+# Import DOAR app instance (nu run_medical care face init!)
+from app_instance import app
+
+# Exportăm Flask application pentru Gunicorn
+application = app.server
+
+# === INIȚIALIZARE LA PRIMUL REQUEST (Lazy Init) ===
+# Flag global pentru a verifica dacă aplicația e inițializată
+_app_initialized = False
+
+def initialize_application():
+    """
+    Inițializare lazy a aplicației (database, callbacks, layout).
+    Se execută DOAR o dată, la primul request, NU la import!
+    """
+    global _app_initialized
+    if _app_initialized:
+        return  # Deja inițializat
+    _app_initialized = True
+    import os
+    from dotenv import load_dotenv
+    from urllib.parse import urlparse
+    
+    # Încărcăm environment variables
+    load_dotenv()
+    
+    # === LOGGING ===
+    from logger_setup import logger
+    logger.info("=" * 70)
+    logger.info("🏥 INIȚIALIZARE APLICAȚIE MEDICAL - PRIMUL REQUEST")
+    logger.info("=" * 70)
+    
+    # === DATABASE INIT ===
+    database_url = os.getenv('DATABASE_URL')
+    if not database_url:
+        logger.error("❌ DATABASE_URL nu este setat!")
+        return
+    
+    application.config['SQLALCHEMY_DATABASE_URI'] = database_url
+    application.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+    application.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'dev-secret-key-change-in-production')
+    
+    # Connection pooling
+    application.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
+        'pool_size': 10,
+        'max_overflow': 20,
+        'pool_timeout': 30,
+        'pool_recycle': 1800,
+        'pool_pre_ping': True,
+        'connect_args': {
+            'connect_timeout': 10,
+            'options': '-c statement_timeout=60000'
+        }
+    }
+    
+    # Session config
+    application.config['SESSION_COOKIE_SECURE'] = os.getenv('SESSION_COOKIE_SECURE', 'False') == 'True'
+    application.config['SESSION_COOKIE_HTTPONLY'] = True
+    application.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
+    application.config['PERMANENT_SESSION_LIFETIME'] = int(os.getenv('PERMANENT_SESSION_LIFETIME', '30')) * 24 * 3600
+    
+    logger.info(f"📊 Database configured: {urlparse(database_url).hostname}")
+    
+    # === AUTH INIT ===
+    from auth.models import db, init_db, create_admin_user
+    from auth.auth_manager import init_auth_manager
+    from auth_routes import init_auth_routes
+    
+    init_db(app)
+    init_auth_manager(app)
+    init_auth_routes(app)
+    
+    logger.info("✅ Database & Authentication initialized")
+    
+    # === CALLBACKS & LAYOUT ===
+    from app_layout_new import layout
+    import callbacks
+    import callbacks_medical
+    import admin_callbacks
+    
+    app.layout = layout
+    
+    logger.info(f"✅ Layout & Callbacks registered: {len(app.callback_map)} callbacks")
+    
+    # === ADMIN USER ===
+    with application.app_context():
+        try:
+            admin_email = os.getenv('ADMIN_EMAIL', 'admin@pulsoximetrie.ro')
+            admin_password = os.getenv('ADMIN_PASSWORD', 'Admin123!Change')
+            admin_name = os.getenv('ADMIN_NAME', 'Administrator')
+            
+            from auth.models import Doctor
+            existing_admin = Doctor.query.filter_by(email=admin_email).first()
+            
+            if not existing_admin:
+                create_admin_user(admin_email, admin_password, admin_name)
+                logger.info(f"🔑 Admin user created: {admin_email}")
+            else:
+                logger.info(f"✅ Admin user exists: {admin_email}")
+        except Exception as e:
+            logger.error(f"❌ Admin user creation failed: {e}")
+    
+    # === RATE LIMITER CLEANUP ===
+    from auth.rate_limiter import schedule_cleanup_task
+    schedule_cleanup_task()
+    
+    logger.info("=" * 70)
+    logger.info("✅ APPLICATION FULLY INITIALIZED - Ready for requests!")
+    logger.info("=" * 70)
+
+
+# === MIDDLEWARE: Lazy Init la Primul Request ===
+@application.before_request
+def before_request_init():
+    """Middleware care inițializează aplicația la primul request."""
+    initialize_application()
+
+
+# === HEALTH CHECK ENDPOINT ===
+@application.route('/health')
+def health_check():
+    """Health check endpoint pentru monitoring Railway."""
+    from flask import jsonify
+    from datetime import datetime
+    
+    return jsonify({
+        'status': 'healthy',
+        'timestamp': datetime.utcnow().isoformat(),
+        'application': 'pulsoximetrie-medical',
+        'callbacks': len(app.callback_map) if hasattr(app, 'callback_map') else 0
+    }), 200
+
+
+if __name__ == '__main__':
+    # Development mode: pornește cu Dash server
+    print("⚠️  ATENȚIE: wsgi.py e pentru PRODUCTION (Gunicorn)!")
+    print("⚠️  Pentru development, rulează: python run_medical.py")
+    print("")
+    print("Pentru testing wsgi.py local cu Gunicorn:")
+    print("  gunicorn --workers 1 --bind 127.0.0.1:8050 wsgi:application")
+
