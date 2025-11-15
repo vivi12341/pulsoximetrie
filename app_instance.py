@@ -11,6 +11,10 @@
 # ==============================================================================
 
 import dash
+# CRITICAL: Import librăriile Dash ÎNAINTE de a crea instanța!
+# Acest lucru forțează Dash să înregistreze html, dcc, dash_table
+# ÎNAINTE de inițializarea app, rezolvând erori 500 pentru asset serving
+from dash import html, dcc, dash_table
 import os
 import io
 import zipfile
