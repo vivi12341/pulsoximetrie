@@ -184,8 +184,11 @@ def initialize_application():
         blueprint_names = [bp.name for bp in application.blueprints.values()]
         logger.warning(f"🔧 Flask blueprints: {blueprint_names}")
         
-        if '_dash_component_suites' in [r.endpoint for r in application.url_map._rules]:
-            logger.warning("✅ Dash asset routes CONFIRMED registered!")
+        # Check if _dash_component_suites routes exist (relaxed check - substring match)
+        component_suite_routes = [r for r in application.url_map._rules if '_dash-component-suites' in str(r)]
+        if component_suite_routes:
+            logger.warning(f"✅ Dash asset routes CONFIRMED registered! (Found {len(component_suite_routes)} routes)")
+            logger.warning(f"🔧 Sample route: {component_suite_routes[0] if component_suite_routes else 'N/A'}")
         else:
             logger.critical("❌ WARNING: Dash asset routes NOT found in Flask url_map!")
         
