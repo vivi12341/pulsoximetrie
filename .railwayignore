@@ -1,0 +1,84 @@
+# ==============================================================================
+# .railwayignore - Fișiere excluse din deployment Railway
+# ==============================================================================
+# Sintaxă similară cu .gitignore
+# Railway exclude aceste fișiere/foldere din build pentru a reduce dimensiunea
+
+# === DEVELOPMENT & TESTING ===
+*.pyc
+__pycache__/
+*.pyo
+*.pyd
+.Python
+*.so
+*.egg-info/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# === LOCAL DATA (NU în production) ===
+# Date locale - vor fi în R2/PostgreSQL în production
+patient_data_local/
+output_local/
+batch_sessions_local/
+test_data/
+*.db
+*.sqlite
+*.sqlite3
+
+# === IDE & TOOLS ===
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# === DOCUMENTATION (doar pentru development) ===
+# Păstrăm README.md principal, excludem restul
+docs/
+*.md
+!README.md
+
+# === GIT ===
+.git/
+.gitignore
+.gitattributes
+
+# === ENV (NU commitați .env - folosiți Railway Variables!) ===
+.env
+.env.local
+.env.*.local
+
+# === LOGS (generat runtime) ===
+*.log
+logs/
+output/LOGS/*
+
+# === BACKUP & TEMP ===
+*.bak
+*.tmp
+*.temp
+temp/
+tmp/
+
+# === WINDOWS ===
+desktop.ini
+
+# === MAC ===
+.AppleDouble
+.LSOverride
+
+# ==============================================================================
+# CE TRIMITEM la Railway (whitelist implicit):
+# - run_medical.py (entry point)
+# - app_*.py (layout, callbacks)
+# - *.py (toate modulele Python)
+# - requirements.txt (CRITICAL!)
+# - nixpacks.toml (CRITICAL pentru Chromium!)
+# - colors_config.json, config.py
+# - assets/ (CSS, logo-uri)
+# - migrations/ (database)
+# ==============================================================================
+

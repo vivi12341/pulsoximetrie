@@ -24,6 +24,18 @@ from flask import request
 # Încărcăm variabilele de mediu din .env
 load_dotenv()
 
+# === INIȚIALIZARE KALEIDO (DEFENSIVE) ===
+# Verificăm și configurăm Kaleido pentru export imagini Plotly
+try:
+    from kaleido_setup import setup_kaleido
+    KALEIDO_AVAILABLE = setup_kaleido()
+    if not KALEIDO_AVAILABLE:
+        print("⚠️ WARNING: Export imagini Plotly indisponibil (Kaleido/Chrome lipsește)")
+        print("⚠️ Aplicația va funcționa cu grafice interactive HTML")
+except Exception as kaleido_init_error:
+    print(f"⚠️ WARNING: Eroare la inițializare Kaleido: {kaleido_init_error}")
+    KALEIDO_AVAILABLE = False
+
 # === CREARE AUTOMATĂ FOLDERE NECESARE (PRODUCTION) ===
 # În Docker/Railway, containerul e fresh la fiecare deploy!
 required_folders = [

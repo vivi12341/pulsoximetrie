@@ -372,20 +372,44 @@ def run_batch_job(input_folder: str, output_folder: str, window_minutes: int, se
                     image_file_name = generate_intuitive_image_name(df_slice, device_number)
                     image_full_path = os.path.join(file_output_path, image_file_name)
 
-                    # Salvăm imaginea
-                    fig.write_image(
-                        image_full_path,
-                        width=config.IMAGE_RESOLUTION['width'],
-                        height=config.IMAGE_RESOLUTION['height']
-                    )
-                    logger.info(f"Salvat imaginea: {image_file_name}")
-                    
-                    # Aplicăm logo-ul medicului pe imagine (dacă este configurat)
+                    # [v7.0 DEFENSIVE] Salvăm imaginea cu fallback graceful pentru Kaleido/Chrome
                     try:
-                        from plot_generator import apply_logo_to_image
-                        apply_logo_to_image(image_full_path)
-                    except Exception as logo_error:
-                        logger.warning(f"Nu s-a putut aplica logo pe {image_file_name}: {logo_error}")
+                        fig.write_image(
+                            image_full_path,
+                            width=config.IMAGE_RESOLUTION['width'],
+                            height=config.IMAGE_RESOLUTION['height']
+                        )
+                        logger.info(f"Salvat imaginea: {image_file_name}")
+                        
+                        # Aplicăm logo-ul medicului pe imagine (dacă este configurat)
+                        try:
+                            from plot_generator import apply_logo_to_image
+                            apply_logo_to_image(image_full_path)
+                        except Exception as logo_error:
+                            logger.warning(f"Nu s-a putut aplica logo pe {image_file_name}: {logo_error}")
+                            
+                    except RuntimeError as kaleido_error:
+                        # FALLBACK GRACEFUL: Kaleido necesită Chrome (lipsește din container)
+                        if "Kaleido requires" in str(kaleido_error) or "Chrome" in str(kaleido_error):
+                            logger.warning(
+                                f"⚠️ Kaleido/Chrome indisponibil pentru {image_file_name}. "
+                                f"Export imagini dezactivat. SOLUȚIE: Adaugă 'chromium' în nixpacks.toml"
+                            )
+                            logger.warning(f"Eroare Kaleido: {kaleido_error}")
+                            
+                            # CONTINUĂM procesarea fără imagini (graceful degradation)
+                            # Link-ul pacient va funcționa cu grafice interactive HTML
+                        else:
+                            # Altă eroare runtime - re-raise
+                            raise
+                            
+                    except Exception as img_error:
+                        # Orice altă eroare la salvare imagine
+                        logger.error(
+                            f"❌ Eroare neașteptată la salvarea imaginii {image_file_name}: {img_error}",
+                            exc_info=True
+                        )
+                        # CONTINUĂM procesarea (resilience)
                     
                     # Trecem la următoarea felie
                     current_slice_start = current_slice_end
