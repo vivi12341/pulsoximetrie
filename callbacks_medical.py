@@ -748,36 +748,22 @@ def toggle_batch_mode_display(selected_mode):
     [State('admin-batch-file-upload', 'filename'),
      State('admin-batch-uploaded-files-store', 'data')]
 )
-def handle_file_upload(list_of_contents, list_of_names, existing_files):
+def handle_file_upload(list_of_contents, list_of_names, session_id):
     """
-    Procesează fișierele uploadate și afișează lista.
-    Salvează fișierele temporar pentru procesare ulterioară.
+    [WORKAROUND v3.0] Salvează fișierele pe disk în loc de dcc.Store.
+    PROBLEMA: dcc.Store nu propagă datele corect în Railway production.
+    SOLUȚIE: Salvăm pe disk și returnăm doar session_id.
     """
-    # [DIAGNOSTIC v2.0] 20+ LOG-URI pentru identificare EXACTĂ a problemei
+    # Import TempFileManager
+    from temp_file_manager import get_manager
+    
     logger.warning("=" * 100)
-    logger.warning("🔍 [LOG 1/20] HANDLE_FILE_UPLOAD - CALLBACK ENTRY")
+    logger.warning("🔍 [UPLOAD v3] HANDLE_FILE_UPLOAD - WORKAROUND cu disk storage")
     logger.warning("=" * 100)
     
-    # LOG 2-4: Parametri Input
-    logger.warning(f"🔍 [LOG 2/20] INPUT list_of_contents TYPE: {type(list_of_contents)}")
-    logger.warning(f"🔍 [LOG 3/20] INPUT list_of_contents IS_NONE: {list_of_contents is None}")
-    logger.warning(f"🔍 [LOG 4/20] INPUT list_of_contents LENGTH: {len(list_of_contents) if list_of_contents else 0}")
-    
-    # LOG 5-7: Parametri State filename
-    logger.warning(f"🔍 [LOG 5/20] STATE list_of_names TYPE: {type(list_of_names)}")
-    logger.warning(f"🔍 [LOG 6/20] STATE list_of_names IS_NONE: {list_of_names is None}")
-    logger.warning(f"🔍 [LOG 7/20] STATE list_of_names VALUE: {list_of_names}")
-    
-    # LOG 8-10: Parametri State existing store
-    logger.warning(f"🔍 [LOG 8/20] STATE existing_files TYPE: {type(existing_files)}")
-    logger.warning(f"🔍 [LOG 9/20] STATE existing_files IS_NONE: {existing_files is None}")
-    logger.warning(f"🔍 [LOG 10/20] STATE existing_files LENGTH: {len(existing_files) if existing_files else 0}")
-    
-    # LOG 11: Context callback
-    from dash import ctx
-    logger.warning(f"🔍 [LOG 11/20] DASH CONTEXT triggered_id: {ctx.triggered_id}")
-    logger.warning(f"🔍 [LOG 12/20] DASH CONTEXT triggered: {ctx.triggered}")
-    
+    logger.warning(f"🔍 [UPLOAD v3.1] INPUT list_of_contents: {list_of_contents is not None} (length: {len(list_of_contents) if list_of_contents else 0})")
+    logger.warning(f"🔍 [UPLOAD v3.2] STATE list_of_names: {list_of_names}")
+    logger.warning(f"🔍 [UPLOAD v3.3] STATE session_id (IN): {session_id}")
     logger.warning("=" * 100)
     
     # LOG 13: Validare DEFENSIVĂ pentru contents
@@ -802,48 +788,28 @@ def handle_file_upload(list_of_contents, list_of_names, existing_files):
         logger.error(f"❌ [LOG 16/20] VALIDATION FAILED: list_of_names mismatch! contents={len(list_of_contents) if list_of_contents else 0}, names={len(list_of_names) if list_of_names else 0}")
         return no_update, no_update
     
-    logger.warning("✅ [LOG 16/20] VALIDATION PASSED: list_of_names match cu list_of_contents")
+    logger.warning("✅ [UPLOAD v3.4] VALIDATION PASSED - Toate verificările OK")
     
-    # LOG 17: Inițializare existing_files
-    logger.warning("🔍 [LOG 17/20] INIȚIALIZARE existing_files")
-    if existing_files is None:
-        logger.warning("🔧 [LOG 17.1/20] existing_files era None - inițializez cu []")
-        existing_files = []
+    # [WORKAROUND v3.0] Creează/reutilizează session_id
+    import uuid
+    if not session_id or not isinstance(session_id, str):
+        session_id = str(uuid.uuid4())
+        logger.warning(f"🆕 [UPLOAD v3.5] Generat session_id NOU: {session_id}")
     else:
-        logger.warning(f"✅ [LOG 17.1/20] existing_files deja există cu {len(existing_files)} elemente")
+        logger.warning(f"♻️ [UPLOAD v3.5] Reutilizat session_id EXISTENT: {session_id}")
     
-    # LOG 18: Procesare fișiere
-    logger.warning("🔍 [LOG 18/20] START PROCESARE - Iterare prin list_of_contents")
-    new_files = []
+    # Inițializează TempFileManager
+    manager = get_manager(session_id)
+    logger.warning(f"📁 [UPLOAD v3.6] TempFileManager inițializat: {manager.session_folder}")
     
-    for idx, (content, filename) in enumerate(zip(list_of_contents, list_of_names)):
-        logger.warning(f"🔍 [LOG 18.{idx+1}/20] Procesez fișier [{idx}]: {filename}")
-        
-        # Verificăm dacă fișierul nu există deja
-        is_duplicate = any(f['filename'] == filename for f in existing_files)
-        logger.warning(f"🔍 [LOG 18.{idx+1}.1/20] is_duplicate: {is_duplicate}")
-        
-        if not is_duplicate:
-            file_size = len(content) if content else 0
-            file_type = 'CSV' if filename.lower().endswith('.csv') else 'PDF'
-            
-            file_obj = {
-                'filename': filename,
-                'content': content,
-                'size': file_size,
-                'type': file_type
-            }
-            new_files.append(file_obj)
-            logger.warning(f"  ✅ [LOG 18.{idx+1}.2/20] Adăugat fișier NOU: {filename} ({file_type}) - {file_size} bytes")
-        else:
-            logger.warning(f"  ⚠️ [LOG 18.{idx+1}.2/20] Fișier duplicat (skip): {filename}")
+    # Salvează fișierele pe disk
+    saved_count = manager.save_uploaded_files(list_of_contents, list_of_names)
+    logger.warning(f"💾 [UPLOAD v3.7] Fișiere salvate pe disk: {saved_count}")
     
-    # LOG 19: Combinare cu existing_files
-    logger.warning(f"🔍 [LOG 19/20] COMBINARE - new_files ({len(new_files)}) + existing_files ({len(existing_files)})")
-    all_files = existing_files + new_files
-    logger.warning(f"✅ [LOG 19.1/20] all_files LENGTH după combinare: {len(all_files)}")
-    logger.warning(f"✅ [LOG 19.2/20] all_files FILENAMES: {[f['filename'] for f in all_files]}")
-    logger.warning(f"✅ [LOG 19.3/20] all_files TYPE: {type(all_files)}")
+    # Citește metadata pentru UI (nu returnăm content, doar info)
+    all_files = manager.get_uploaded_files()
+    logger.warning(f"📊 [UPLOAD v3.8] Metadata citită: {len(all_files)} fișiere")
+    logger.warning(f"📋 [UPLOAD v3.9] Filenames: {[f['filename'] for f in all_files]}")
     
     # Generăm UI pentru listă fișiere
     if not all_files:
@@ -932,18 +898,17 @@ def handle_file_upload(list_of_contents, list_of_names, existing_files):
         'overflowY': 'auto'
     })
     
-    # LOG 20: RETURN FINAL
+    # [WORKAROUND v3.0] RETURN: UI + session_id (NU lista de fișiere!)
     logger.warning("=" * 100)
-    logger.warning("🔍 [LOG 20/20] PREGĂTIRE RETURN")
-    logger.warning(f"🎯 [LOG 20.1/20] RETURN OUTPUT 1 (UI): files_display TYPE = {type(files_display)}")
-    logger.warning(f"🎯 [LOG 20.2/20] RETURN OUTPUT 2 (STORE): all_files LENGTH = {len(all_files)}")
-    logger.warning(f"🎯 [LOG 20.3/20] RETURN OUTPUT 2 (STORE): all_files TYPE = {type(all_files)}")
-    logger.warning(f"🎯 [LOG 20.4/20] RETURN OUTPUT 2 (STORE): all_files CONTENT = {[f['filename'] for f in all_files]}")
+    logger.warning("🔍 [UPLOAD v3.10] PREGĂTIRE RETURN")
+    logger.warning(f"🎯 [UPLOAD v3.11] RETURN OUTPUT 1 (UI): files_display TYPE = {type(files_display)}")
+    logger.warning(f"🎯 [UPLOAD v3.12] RETURN OUTPUT 2 (STORE): session_id = '{session_id}' (STRING, nu listă!)")
     logger.warning("=" * 100)
-    logger.warning("🚀 [LOG 20.5/20] CALLBACK EXIT - Returnez (files_display, all_files)")
+    logger.warning("🚀 [UPLOAD v3.13] CALLBACK EXIT - Returnez (files_display, session_id)")
     logger.warning("=" * 100)
     
-    return files_display, all_files
+    # CRITICAL: Returnăm session_id în store, NU lista de fișiere!
+    return files_display, session_id
 
 
 def _format_file_size(size_bytes):
@@ -1051,7 +1016,7 @@ def handle_file_deletion(clear_all_clicks, delete_clicks, current_files):
      State('admin-batch-window-minutes', 'value')],
     prevent_initial_call=True
 )
-def admin_run_batch_processing(n_clicks, batch_mode, input_folder, uploaded_files, output_folder, window_minutes):
+def admin_run_batch_processing(n_clicks, batch_mode, input_folder, session_id, output_folder, window_minutes):
     """
     Callback pentru procesare batch + generare automată link-uri + tracking progres.
     Suportă AMBELE moduri: local (folder) și upload (fișiere).
@@ -1059,36 +1024,14 @@ def admin_run_batch_processing(n_clicks, batch_mode, input_folder, uploaded_file
     if n_clicks == 0:
         return no_update, no_update, no_update, no_update, no_update, no_update
     
-    # [DIAGNOSTIC v2.0] LOG-URI EXTENSIVE pentru citire store
+    # [WORKAROUND v3.0] Citim fișierele de pe disk folosind session_id
     logger.warning("=" * 100)
-    logger.warning("🔍 [BATCH LOG 1/15] ADMIN_RUN_BATCH_PROCESSING - CALLBACK ENTRY")
+    logger.warning("🔍 [BATCH v3.1] ADMIN_RUN_BATCH_PROCESSING - WORKAROUND cu disk storage")
     logger.warning("=" * 100)
     
-    # Context callback
-    from dash import ctx
-    logger.warning(f"🔍 [BATCH LOG 2/15] DASH CONTEXT triggered_id: {ctx.triggered_id}")
-    logger.warning(f"🔍 [BATCH LOG 3/15] DASH CONTEXT triggered: {ctx.triggered}")
-    
-    # Parametri
-    logger.warning(f"🔍 [BATCH LOG 4/15] INPUT n_clicks: {n_clicks}")
-    logger.warning(f"🔍 [BATCH LOG 5/15] STATE batch_mode: {batch_mode}")
-    logger.warning(f"🔍 [BATCH LOG 6/15] STATE input_folder: {input_folder}")
-    logger.warning(f"🔍 [BATCH LOG 7/15] STATE output_folder: {output_folder}")
-    logger.warning(f"🔍 [BATCH LOG 8/15] STATE window_minutes: {window_minutes}")
-    
-    # CRITIC: Verificare Store uploaded_files
-    logger.warning("=" * 100)
-    logger.warning("🔍 [BATCH LOG 9/15] CITIRE STORE 'uploaded_files' - START")
-    logger.warning(f"🔍 [BATCH LOG 10/15] uploaded_files IS_NONE: {uploaded_files is None}")
-    logger.warning(f"🔍 [BATCH LOG 11/15] uploaded_files TYPE: {type(uploaded_files)}")
-    logger.warning(f"🔍 [BATCH LOG 12/15] uploaded_files VALUE: {uploaded_files}")
-    
-    if uploaded_files:
-        logger.warning(f"🔍 [BATCH LOG 13/15] uploaded_files LENGTH: {len(uploaded_files)}")
-        logger.warning(f"🔍 [BATCH LOG 14/15] uploaded_files KEYS (first): {list(uploaded_files[0].keys()) if len(uploaded_files) > 0 else 'N/A'}")
-    else:
-        logger.error(f"❌ [BATCH LOG 13/15] uploaded_files este GOLI/NONE!")
-    
+    logger.warning(f"🔍 [BATCH v3.2] STATE session_id (IN): {session_id}")
+    logger.warning(f"🔍 [BATCH v3.3] STATE batch_mode: {batch_mode}")
+    logger.warning(f"🔍 [BATCH v3.4] STATE input_folder: {input_folder}")
     logger.warning("=" * 100)
     
     # === VALIDARE ÎN FUNCȚIE DE MOD ===
@@ -1104,79 +1047,54 @@ def admin_run_batch_processing(n_clicks, batch_mode, input_folder, uploaded_file
         logger.warning(f"✅ Procesare LOCALĂ din folder: {input_folder}")
         
     else:  # batch_mode == 'upload'
-        # [DIAGNOSTIC v2.0] Verificare detaliată fișiere uploadate
-        logger.warning(f"🔍 [BATCH LOG 15/15] MOD UPLOAD - Verificare fișiere uploadate...")
+        # [WORKAROUND v3.0] Citim fișierele de pe disk
+        logger.warning(f"🔍 [BATCH v3.5] MOD UPLOAD - Citire fișiere de pe disk...")
         
-        if not uploaded_files:
+        # Verificăm session_id
+        if not session_id or not isinstance(session_id, str):
             logger.error("=" * 100)
-            logger.error("❌ [BATCH LOG 15.1/15] CRITICAL: Store uploaded_files este None/False/Empty!")
+            logger.error("❌ [BATCH v3.6] CRITICAL: session_id este None/invalid!")
+            logger.error(f"   Type: {type(session_id)}")
+            logger.error(f"   Value: {session_id}")
             logger.error("=" * 100)
-            logger.error("❌ Store 'uploaded_files' este None/False!")
-            logger.error(f"   Type: {type(uploaded_files)}")
-            logger.error(f"   Value: {uploaded_files}")
             return html.Div([
-                html.H4("⚠️ Niciun fișier detectat în store!", style={'color': '#e67e22', 'marginBottom': '10px'}),
+                html.H4("⚠️ Niciun session_id detectat!", style={'color': '#e67e22', 'marginBottom': '10px'}),
                 html.P("Încărcați fișiere CSV + PDF folosind butonul de upload de mai sus.", style={'marginBottom': '10px'}),
                 html.Div([
-                    html.P("DEBUG INFO:", style={'fontWeight': 'bold', 'marginBottom': '5px'}),
-                    html.P(f"• uploaded_files = {uploaded_files}", style={'fontSize': '11px', 'fontFamily': 'monospace', 'marginBottom': '3px'}),
-                    html.P(f"• type = {type(uploaded_files)}", style={'fontSize': '11px', 'fontFamily': 'monospace', 'marginBottom': '3px'}),
-                    html.P("• Possible cause: Store not initialized or reset", style={'fontSize': '11px', 'fontFamily': 'monospace', 'color': '#e74c3c'})
+                    html.P("DEBUG INFO [WORKAROUND v3.0]:", style={'fontWeight': 'bold', 'marginBottom': '5px'}),
+                    html.P(f"• session_id = {session_id}", style={'fontSize': '11px', 'fontFamily': 'monospace', 'marginBottom': '3px'}),
+                    html.P(f"• type = {type(session_id)}", style={'fontSize': '11px', 'fontFamily': 'monospace', 'marginBottom': '3px'}),
+                    html.P("• Possible cause: Upload callback nu s-a executat sau session_id nu a fost salvat", style={'fontSize': '11px', 'fontFamily': 'monospace', 'color': '#e74c3c'})
                 ], style={'backgroundColor': '#ecf0f1', 'padding': '10px', 'borderRadius': '5px', 'marginTop': '10px'})
             ], style={'padding': '15px', 'backgroundColor': '#fff3cd', 'border': '1px solid #ffc107', 'borderRadius': '5px'}), \
             no_update, no_update, no_update, no_update, no_update
         
-        if not isinstance(uploaded_files, list):
-            logger.error(f"❌ Store 'uploaded_files' NU este listă! Type: {type(uploaded_files)}")
+        # [WORKAROUND v3.0] Citim fișierele de pe disk folosind TempFileManager
+        from temp_file_manager import get_manager
+        
+        manager = get_manager(session_id)
+        logger.warning(f"📁 [BATCH v3.7] TempFileManager inițializat: {manager.session_folder}")
+        
+        # Verificăm dacă există fișiere
+        files_metadata = manager.get_uploaded_files()
+        if not files_metadata:
+            logger.error("❌ [BATCH v3.8] Nu există fișiere în sesiune!")
             return html.Div([
-                html.H4("⚠️ Eroare format store fișiere!", style={'color': '#e67e22', 'marginBottom': '10px'}),
-                html.P(f"Store type: {type(uploaded_files)} (expected: list)", 
-                      style={'fontSize': '11px', 'color': '#95a5a6', 'fontFamily': 'monospace'})
+                html.H4("⚠️ Nu există fișiere în sesiune!", style={'color': '#e67e22', 'marginBottom': '10px'}),
+                html.P(f"Session ID: {session_id}", style={'marginBottom': '10px', 'fontSize': '11px', 'fontFamily': 'monospace'}),
+                html.P("Fișierele au fost șterse sau sesiunea a expirat.", style={'marginBottom': '10px'}),
+                html.P("Încărcați din nou fișiere CSV + PDF.", style={'marginBottom': '10px'})
             ], style={'padding': '15px', 'backgroundColor': '#fff3cd', 'border': '1px solid #ffc107', 'borderRadius': '5px'}), \
             no_update, no_update, no_update, no_update, no_update
         
-        if len(uploaded_files) == 0:
-            logger.error("❌ Store 'uploaded_files' este listă GOALĂ!")
-            return html.Div([
-                html.H4("⚠️ Listă fișiere goală!", style={'color': '#e67e22', 'marginBottom': '10px'}),
-                html.P("Fișierele au fost șterse sau store-ul a fost resetat.", style={'marginBottom': '10px'}),
-                html.P("Încărcați din nou fișiere CSV + PDF.", style={'marginBottom': '10px'}),
-                html.Div([
-                    html.P("DEBUG INFO:", style={'fontWeight': 'bold', 'marginBottom': '5px'}),
-                    html.P(f"• uploaded_files = []", style={'fontSize': '11px', 'fontFamily': 'monospace', 'marginBottom': '3px'}),
-                    html.P(f"• length = 0", style={'fontSize': '11px', 'fontFamily': 'monospace', 'marginBottom': '3px'})
-                ], style={'backgroundColor': '#ecf0f1', 'padding': '10px', 'borderRadius': '5px', 'marginTop': '10px'})
-            ], style={'padding': '15px', 'backgroundColor': '#fff3cd', 'border': '1px solid #ffc107', 'borderRadius': '5px'}), \
-            no_update, no_update, no_update, no_update, no_update
+        # [SUCCESS] Fișiere detectate pe disk
+        logger.warning(f"✅ [BATCH v3.9] Fișiere detectate pe disk: {len(files_metadata)}")
+        for idx, file_meta in enumerate(files_metadata):
+            logger.warning(f"   [{idx}] {file_meta.get('filename', 'N/A')} ({file_meta.get('type', 'N/A')}) - {file_meta.get('size', 0)} bytes")
         
-        # [SUCCESS] Fișiere detectate
-        logger.warning(f"✅ Fișiere detectate în store: {len(uploaded_files)}")
-        for idx, file_data in enumerate(uploaded_files):
-            logger.warning(f"   [{idx}] {file_data.get('filename', 'N/A')} ({file_data.get('type', 'N/A')}) - {file_data.get('size', 0)} bytes")
-        
-        # Salvăm fișierele uploadate într-un folder temporar
-        import tempfile
-        import base64
-        
-        temp_folder = tempfile.mkdtemp(prefix='batch_upload_')
-        logger.warning(f"📤 Salvare {len(uploaded_files)} fișiere uploadate în: {temp_folder}")
-        
-        for file_data in uploaded_files:
-            filename = file_data['filename']
-            content = file_data['content']
-            
-            # Decodare base64 (Dash Upload salvează în base64)
-            content_type, content_string = content.split(',')
-            decoded = base64.b64decode(content_string)
-            
-            # Salvare fișier
-            file_path = os.path.join(temp_folder, filename)
-            with open(file_path, 'wb') as f:
-                f.write(decoded)
-            logger.info(f"  ✅ Salvat: {filename} ({len(decoded)} bytes)")
-        
-        processing_folder = temp_folder
-        logger.info(f"🚀 Procesare UPLOAD din folder temporar: {temp_folder}")
+        # Folosim folderul sesiunii ca processing_folder
+        processing_folder = str(manager.session_folder)
+        logger.warning(f"🚀 [BATCH v3.10] Procesare UPLOAD din folder sesiune: {processing_folder}")
     
     # Folosim folder default pentru output dacă nu e specificat
     if not output_folder or output_folder.strip() == '':
