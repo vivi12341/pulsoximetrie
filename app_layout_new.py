@@ -9,7 +9,7 @@
 # RESPECTĂ: .cursorrules - 1 PACIENT = 1 LINK PERSISTENT
 # ==============================================================================
 
-from dash import dcc, html, dash_table
+from dash import dcc, html
 import plotly.graph_objects as go
 import config
 
@@ -196,6 +196,25 @@ medical_layout = html.Div([
                                                     'border': '1px dashed #bdc3c7'
                                                 })
                                             ]
+                                        ),
+                                        
+                                        # === BUTON ȘTERGERE TOATE FIȘIERELE ===
+                                        html.Button(
+                                            '🗑️ Șterge toate fișierele',
+                                            id='admin-batch-clear-files-btn',
+                                            n_clicks=0,
+                                            style={
+                                                'padding': '8px 16px',
+                                                'marginTop': '10px',
+                                                'backgroundColor': '#e74c3c',
+                                                'color': 'white',
+                                                'border': 'none',
+                                                'borderRadius': '5px',
+                                                'cursor': 'pointer',
+                                                'fontSize': '14px',
+                                                'fontWeight': 'bold',
+                                                'display': 'none'  # Ascuns inițial (apare doar când există fișiere)
+                                            }
                                         )
                                     ],
                                     style={'display': 'block', 'marginBottom': '20px'}  # Vizibil inițial
@@ -333,7 +352,18 @@ medical_layout = html.Div([
                                 ),
                                 
                                 # === STORE PENTRU SESSION ID ===
-                                dcc.Store(id='admin-batch-session-id', data=None)
+                                dcc.Store(id='admin-batch-session-id', data=None),
+                                
+                                # === INTERVAL PENTRU FORCE ROUTING TRIGGER ===
+                                dcc.Interval(
+                                    id='force-routing-trigger',
+                                    interval=100,  # 100ms - trigger la încărcare
+                                    n_intervals=0,
+                                    max_intervals=1  # Rulează o singură dată
+                                ),
+                                
+                                # === STORE PENTRU TOKEN DETECTARE (Pacienți) ===
+                                dcc.Store(id='url-token-detected', data=None)
                             ]
                         )
                     ],
