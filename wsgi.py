@@ -84,84 +84,178 @@ def log_server_errors(response):
 
 def initialize_application():
     """
+    [DIAGNOSTIC v7 - 30 LOG-URI STRATEGICE]
     Inițializare aplicație la STARTUP (NU lazy init!).
     Se execută imediat după import, ÎNAINTE de orice request HTTP.
     """
     import os
     from dotenv import load_dotenv
     from urllib.parse import urlparse
+    import time
     
     # Încărcăm environment variables
     load_dotenv()
     
     # === LOGGING ===
     from logger_setup import logger
+    start_time = time.time()
+    
     logger.warning("=" * 70)
-    logger.warning("🏥 INIȚIALIZARE APLICAȚIE MEDICAL - STARTUP")
+    logger.warning("[INIT 1/30] 🏥 INIȚIALIZARE APLICAȚIE MEDICAL - STARTUP")
+    logger.warning("[INIT 2/30] ⏱️ Timestamp: {}".format(time.strftime("%Y-%m-%d %H:%M:%S")))
     logger.warning("=" * 70)
     
     # === DATABASE INIT ===
+    logger.warning("[INIT 3/30] 📊 Starting DATABASE configuration...")
+    
     database_url = os.getenv('DATABASE_URL')
+    logger.warning(f"[INIT 4/30] 🔍 DATABASE_URL present: {database_url is not None}")
+    
     if not database_url:
-        logger.error("❌ DATABASE_URL nu este setat!")
+        logger.error("[INIT 5/30] ❌ DATABASE_URL nu este setat!")
         raise RuntimeError("DATABASE_URL environment variable not set!")
     
-    application.config['SQLALCHEMY_DATABASE_URI'] = database_url
-    application.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-    application.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'dev-secret-key-change-in-production')
+    parsed_db = urlparse(database_url)
+    logger.warning(f"[INIT 5/30] 📊 Database host: {parsed_db.hostname}")
+    logger.warning(f"[INIT 6/30] 📊 Database port: {parsed_db.port}")
+    logger.warning(f"[INIT 7/30] 📊 Database scheme: {parsed_db.scheme}")
+    
+    try:
+        application.config['SQLALCHEMY_DATABASE_URI'] = database_url
+        application.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+        application.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'dev-secret-key-change-in-production')
+        logger.warning("[INIT 8/30] ✅ Flask config set successfully")
+    except Exception as config_err:
+        logger.critical(f"[INIT 8/30] ❌ Flask config ERROR: {config_err}")
+        raise
     
     # Connection pooling
-    application.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
-        'pool_size': 10,
-        'max_overflow': 20,
-        'pool_timeout': 30,
-        'pool_recycle': 1800,
-        'pool_pre_ping': True,
-        'connect_args': {
-            'connect_timeout': 10,
-            'options': '-c statement_timeout=60000'
+    try:
+        application.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
+            'pool_size': 10,
+            'max_overflow': 20,
+            'pool_timeout': 30,
+            'pool_recycle': 1800,
+            'pool_pre_ping': True,
+            'connect_args': {
+                'connect_timeout': 10,
+                'options': '-c statement_timeout=60000'
+            }
         }
-    }
+        logger.warning("[INIT 9/30] ✅ Database pooling configured")
+    except Exception as pool_err:
+        logger.critical(f"[INIT 9/30] ❌ Pooling config ERROR: {pool_err}")
+        raise
     
     # Session config
-    application.config['SESSION_COOKIE_SECURE'] = os.getenv('SESSION_COOKIE_SECURE', 'False') == 'True'
-    application.config['SESSION_COOKIE_HTTPONLY'] = True
-    application.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
-    application.config['PERMANENT_SESSION_LIFETIME'] = int(os.getenv('PERMANENT_SESSION_LIFETIME', '30')) * 24 * 3600
+    try:
+        application.config['SESSION_COOKIE_SECURE'] = os.getenv('SESSION_COOKIE_SECURE', 'False') == 'True'
+        application.config['SESSION_COOKIE_HTTPONLY'] = True
+        application.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
+        application.config['PERMANENT_SESSION_LIFETIME'] = int(os.getenv('PERMANENT_SESSION_LIFETIME', '30')) * 24 * 3600
+        logger.warning("[INIT 10/30] ✅ Session config set")
+    except Exception as session_err:
+        logger.critical(f"[INIT 10/30] ❌ Session config ERROR: {session_err}")
+        raise
     
-    logger.warning(f"📊 Database configured: {urlparse(database_url).hostname}")
+    logger.warning(f"[INIT 11/30] ✅ Database configured: {parsed_db.hostname}")
     
     # === AUTH INIT (CRITICAL: trebuie făcut ÎNAINTE de orice request!) ===
-    from auth.models import db, init_db, create_admin_user
-    from auth.auth_manager import init_auth_manager
-    from auth_routes import init_auth_routes
+    logger.warning("[INIT 12/30] 🔐 Starting AUTH initialization...")
+    
+    try:
+        logger.warning("[INIT 13/30] 📦 Importing auth modules...")
+        from auth.models import db, init_db, create_admin_user
+        from auth.auth_manager import init_auth_manager
+        from auth_routes import init_auth_routes
+        logger.warning("[INIT 14/30] ✅ Auth modules imported successfully")
+    except ImportError as auth_import_err:
+        logger.critical(f"[INIT 14/30] ❌ Auth import ERROR: {auth_import_err}", exc_info=True)
+        raise
     
     # IMPORTANT: Pasăm 'app' (Dash instance), nu 'application' (Flask server)
     # init_db va extrage app.server intern
-    init_db(app)
-    init_auth_manager(app)
-    init_auth_routes(app)
+    try:
+        logger.warning("[INIT 15/30] 🗄️ Calling init_db()...")
+        init_db(app)
+        logger.warning("[INIT 16/30] ✅ Database initialized (init_db SUCCESS)")
+    except Exception as db_init_err:
+        logger.critical(f"[INIT 16/30] ❌ init_db() FAILED: {db_init_err}", exc_info=True)
+        logger.critical("[INIT 16/30] ❌ Possible causes: DB connection timeout, wrong credentials, firewall")
+        raise
     
-    logger.warning("✅ Database & Authentication initialized")
+    try:
+        logger.warning("[INIT 17/30] 🔐 Calling init_auth_manager()...")
+        init_auth_manager(app)
+        logger.warning("[INIT 18/30] ✅ Auth manager initialized")
+    except Exception as auth_mgr_err:
+        logger.critical(f"[INIT 18/30] ❌ init_auth_manager() FAILED: {auth_mgr_err}", exc_info=True)
+        raise
+    
+    try:
+        logger.warning("[INIT 19/30] 🛣️ Calling init_auth_routes()...")
+        init_auth_routes(app)
+        logger.warning("[INIT 20/30] ✅ Auth routes registered")
+    except Exception as routes_err:
+        logger.critical(f"[INIT 20/30] ❌ init_auth_routes() FAILED: {routes_err}", exc_info=True)
+        raise
+    
+    logger.warning("[INIT 21/30] ✅ Database & Authentication initialized COMPLETE")
     
     # === DASH LIBRARIES REGISTRATION (CRITICAL!) ===
     # MUST import Dash component libraries BEFORE setting layout
     # Otherwise Dash won't register them and will return 500 for component assets
     # Dash 3.x CORRECT syntax: from dash import html, dcc, dash_table
     # CACHE BUST v2: Force Railway to rebuild with correct imports
-    from dash import html, dcc, dash_table
-    logger.warning("✅ Dash component libraries imported (dcc, html, dash_table) - Dash 3.x syntax [CACHE_BUST_v2]")
+    logger.warning("[INIT 22/30] 📦 Importing Dash libraries (html, dcc, dash_table)...")
+    
+    try:
+        from dash import html, dcc, dash_table
+        logger.warning("[INIT 23/30] ✅ Dash 3.x libraries imported [CACHE_BUST_v2]")
+    except ImportError as dash_import_err:
+        logger.critical(f"[INIT 23/30] ❌ Dash import FAILED: {dash_import_err}", exc_info=True)
+        raise
     
     # === CALLBACKS & LAYOUT ===
     # CRITICAL: Trebuie setate ÎNAINTE de warmup pentru ca Dash să știe ce componente să înregistreze!
-    from app_layout_new import layout
-    import callbacks
-    import callbacks_medical
-    import admin_callbacks
+    logger.warning("[INIT 24/30] 📦 Importing layout and callbacks...")
     
-    app.layout = layout
+    try:
+        from app_layout_new import layout
+        logger.warning("[INIT 25/30] ✅ Layout imported from app_layout_new")
+    except ImportError as layout_err:
+        logger.critical(f"[INIT 25/30] ❌ Layout import FAILED: {layout_err}", exc_info=True)
+        raise
     
-    logger.warning(f"✅ Layout & Callbacks registered: {len(app.callback_map)} callbacks")
+    try:
+        import callbacks
+        logger.warning("[INIT 26/30] ✅ callbacks.py imported")
+    except ImportError as cb_err:
+        logger.critical(f"[INIT 26/30] ❌ callbacks.py import FAILED: {cb_err}", exc_info=True)
+        raise
+    
+    try:
+        import callbacks_medical
+        logger.warning("[INIT 27/30] ✅ callbacks_medical.py imported")
+    except ImportError as cb_med_err:
+        logger.critical(f"[INIT 27/30] ❌ callbacks_medical.py import FAILED: {cb_med_err}", exc_info=True)
+        raise
+    
+    try:
+        import admin_callbacks
+        logger.warning("[INIT 28/30] ✅ admin_callbacks.py imported")
+    except ImportError as admin_cb_err:
+        logger.critical(f"[INIT 28/30] ❌ admin_callbacks.py import FAILED: {admin_cb_err}", exc_info=True)
+        raise
+    
+    try:
+        app.layout = layout
+        logger.warning(f"[INIT 29/30] ✅ Layout SET on app instance")
+    except Exception as layout_set_err:
+        logger.critical(f"[INIT 29/30] ❌ app.layout SET FAILED: {layout_set_err}", exc_info=True)
+        raise
+    
+    logger.warning(f"[INIT 30/30] ✅ Layout & Callbacks registered: {len(app.callback_map)} callbacks")
     
     # === DASH ASSET REGISTRY WARMUP (FIX: React 500 errors) ===
     # CRITICAL: Warmup DUPĂ setare layout! Altfel Dash nu știe ce componente să înregistreze!
