@@ -492,6 +492,71 @@ medical_layout = html.Div([
                                     'marginBottom': '30px'
                                 }),
                                 
+                                # === SECȚIUNE ADMINISTRARE UTILIZATORI (DOAR ADMIN) ===
+                                html.Div(
+                                    id='admin-user-management-section',
+                                    children=[
+                                        html.H3("👥 Administrare Utilizatori", style={'color': '#e74c3c', 'marginBottom': '15px'}),
+                                        html.P(
+                                            "Gestionați conturile medicilor. Puteți crea, edita și dezactiva utilizatori.",
+                                            style={'color': '#555', 'fontSize': '13px', 'marginBottom': '20px'}
+                                        ),
+                                        
+                                        # Butoane acțiuni
+                                        html.Div([
+                                            html.Button(
+                                                '➕ Creare Utilizator Nou',
+                                                id='admin-create-user-button',
+                                                n_clicks=0,
+                                                style={
+                                                    'padding': '12px 25px',
+                                                    'fontSize': '14px',
+                                                    'fontWeight': 'bold',
+                                                    'backgroundColor': '#27ae60',
+                                                    'color': 'white',
+                                                    'border': 'none',
+                                                    'borderRadius': '5px',
+                                                    'cursor': 'pointer',
+                                                    'marginRight': '10px'
+                                                }
+                                            ),
+                                            html.Button(
+                                                '🔄 Reîmprospătează Lista',
+                                                id='admin-refresh-users-button',
+                                                n_clicks=0,
+                                                style={
+                                                    'padding': '12px 25px',
+                                                    'fontSize': '14px',
+                                                    'fontWeight': 'bold',
+                                                    'backgroundColor': '#3498db',
+                                                    'color': 'white',
+                                                    'border': 'none',
+                                                    'borderRadius': '5px',
+                                                    'cursor': 'pointer'
+                                                }
+                                            )
+                                        ], style={'marginBottom': '25px'}),
+                                        
+                                        # Container pentru formularul de creare/editare utilizator
+                                        html.Div(id='admin-user-form-container', style={'marginBottom': '25px'}),
+                                        
+                                        # Container pentru lista de utilizatori
+                                        dcc.Loading(
+                                            id="admin-users-loading",
+                                            type="default",
+                                            children=html.Div(id='admin-users-list-container')
+                                        )
+                                    ],
+                                    style={
+                                        'padding': '25px',
+                                        'backgroundColor': '#fff9f9',
+                                        'borderRadius': '10px',
+                                        'boxShadow': '0 2px 8px rgba(231,76,60,0.15)',
+                                        'marginBottom': '30px',
+                                        'border': '2px solid #e74c3c'
+                                    }
+                                ),
+                                
                                 # Notificare status
                                 html.Div(id='settings-status-notification', style={'marginTop': '20px'})
                             ]

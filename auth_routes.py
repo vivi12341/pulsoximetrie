@@ -163,7 +163,18 @@ def route_login(app_server):
                 return render_login_page(error=error_msg, email=email)
         
         # GET request - afișăm formularul
-        return render_login_page()
+        # Verificăm dacă există mesaj de succes în URL
+        success_param = request.args.get('success', '')
+        success_message = None
+        
+        if success_param == 'account_created':
+            success_message = "Contul tău a fost creat cu succes! Poți să te autentifici acum."
+        elif success_param == 'password_reset':
+            success_message = "Parola a fost schimbată cu succes! Poți să te autentifici acum."
+        elif success_param == 'disconnected':
+            success_message = "Te-ai deconectat cu succes."
+        
+        return render_login_page(success=success_message)
 
 
 def render_login_page(error=None, email='', success=None):
@@ -374,6 +385,10 @@ def render_login_page(error=None, email='', success=None):
             </div>
             
             <div class="divider">
+                Nu ai cont? <a href="/signup" style="color: #667eea; text-decoration: none; font-weight: 600;">Înregistrează-te</a>
+            </div>
+            
+            <div class="divider" style="margin-top: 10px;">
                 © 2025 Platformă Pulsoximetrie
             </div>
         </div>
@@ -751,6 +766,340 @@ def render_reset_password_page(token='', error=None):
 
 
 # ==============================================================================
+# ROUTE: /signup (înregistrare utilizator nou)
+# ==============================================================================
+
+def route_signup(app_server):
+    """
+    Configurează route-ul /signup pentru înregistrare utilizatori noi.
+    
+    Args:
+        app_server: Instanța Flask
+    """
+    
+    @app_server.route('/signup', methods=['GET', 'POST'])
+    def signup():
+        """
+        Handler pentru înregistrare utilizator nou.
+        
+        GET: Afișează formularul de înregistrare
+        POST: Creează contul nou
+        """
+        # Verificăm dacă sign up-ul este activat (poate fi controlat prin variabilă de mediu)
+        signup_enabled = os.getenv('ALLOW_PUBLIC_SIGNUP', 'true').lower() == 'true'
+        
+        if not signup_enabled:
+            return render_signup_page(
+                error="Înregistrarea publică este dezactivată. Contactați administratorul pentru a crea un cont."
+            )
+        
+        if request.method == 'POST':
+            # Extragem datele din formular
+            full_name = request.form.get('full_name', '').strip()
+            email = request.form.get('email', '').strip().lower()
+            password = request.form.get('password', '')
+            confirm_password = request.form.get('confirm_password', '')
+            
+            # Validări de bază
+            if not full_name or not email or not password or not confirm_password:
+                logger.warning("Tentativă înregistrare cu câmpuri goale")
+                return render_signup_page(
+                    error="Te rugăm să completezi toate câmpurile.",
+                    full_name=full_name,
+                    email=email
+                )
+            
+            # Verificăm dacă parolele coincid
+            if password != confirm_password:
+                return render_signup_page(
+                    error="Parolele nu coincid.",
+                    full_name=full_name,
+                    email=email
+                )
+            
+            # Validare putere parolă
+            is_valid, message = validate_password_strength(password)
+            if not is_valid:
+                return render_signup_page(
+                    error=message,
+                    full_name=full_name,
+                    email=email
+                )
+            
+            # Verificăm dacă email-ul există deja
+            existing_doctor = Doctor.query.filter_by(email=email).first()
+            if existing_doctor:
+                logger.warning(f"Tentativă înregistrare cu email existent: {email[:3]}***")
+                return render_signup_page(
+                    error="Există deja un cont cu acest email. Te rugăm să te autentifici sau să resetezi parola.",
+                    full_name=full_name
+                )
+            
+            # Creăm contul nou
+            try:
+                new_doctor = Doctor(
+                    email=email,
+                    password_hash=hash_password(password),
+                    full_name=full_name,
+                    is_admin=False,  # Conturile noi NU sunt admin by default
+                    is_active=True
+                )
+                
+                db.session.add(new_doctor)
+                db.session.commit()
+                
+                logger.info(f"✅ Cont nou creat: {email}")
+                
+                # Redirect la login cu mesaj de succes
+                return redirect('/login?success=account_created')
+                
+            except Exception as e:
+                logger.error(f"❌ Eroare la crearea contului: {e}")
+                db.session.rollback()
+                return render_signup_page(
+                    error="A apărut o eroare la crearea contului. Te rugăm să încerci din nou.",
+                    full_name=full_name,
+                    email=email
+                )
+        
+        # GET request - afișăm formularul
+        return render_signup_page()
+
+
+def render_signup_page(error=None, full_name='', email=''):
+    """
+    Renderizează pagina de înregistrare cu template HTML.
+    
+    Args:
+        error: Mesaj de eroare (opțional)
+        full_name: Nume pre-completat (opțional)
+        email: Email pre-completat (opțional)
+        
+    Returns:
+        HTML string
+    """
+    template = """
+    <!DOCTYPE html>
+    <html lang="ro">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Înregistrare - Platformă Pulsoximetrie</title>
+        <style>
+            * { margin: 0; padding: 0; box-sizing: border-box; }
+            body {
+                font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                min-height: 100vh;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                padding: 20px;
+            }
+            .signup-container {
+                background: white;
+                padding: 40px;
+                border-radius: 15px;
+                box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+                width: 100%;
+                max-width: 480px;
+            }
+            .logo {
+                text-align: center;
+                margin-bottom: 30px;
+            }
+            .logo h1 {
+                color: #667eea;
+                font-size: 28px;
+                margin-bottom: 10px;
+            }
+            .logo p {
+                color: #777;
+                font-size: 14px;
+            }
+            .form-group {
+                margin-bottom: 20px;
+            }
+            .form-group label {
+                display: block;
+                margin-bottom: 8px;
+                color: #333;
+                font-weight: 600;
+                font-size: 14px;
+            }
+            .form-group input[type="text"],
+            .form-group input[type="email"],
+            .form-group input[type="password"] {
+                width: 100%;
+                padding: 12px 15px;
+                border: 2px solid #e0e0e0;
+                border-radius: 8px;
+                font-size: 15px;
+                transition: all 0.3s ease;
+            }
+            .form-group input:focus {
+                outline: none;
+                border-color: #667eea;
+                box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+            }
+            .btn-signup {
+                width: 100%;
+                padding: 14px;
+                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                color: white;
+                border: none;
+                border-radius: 8px;
+                font-size: 16px;
+                font-weight: 600;
+                cursor: pointer;
+                transition: all 0.3s ease;
+            }
+            .btn-signup:hover {
+                transform: translateY(-2px);
+                box-shadow: 0 5px 20px rgba(102, 126, 234, 0.4);
+            }
+            .btn-signup:active {
+                transform: translateY(0);
+            }
+            .error-message {
+                background: #fee;
+                border-left: 4px solid #e74c3c;
+                padding: 12px;
+                margin-bottom: 20px;
+                border-radius: 5px;
+                color: #c0392b;
+                font-size: 14px;
+            }
+            .password-requirements {
+                background: #f0f8ff;
+                border: 1px solid #b3d9ff;
+                padding: 12px;
+                border-radius: 8px;
+                margin-bottom: 20px;
+                font-size: 12px;
+            }
+            .password-requirements ul {
+                margin: 8px 0 0 20px;
+            }
+            .password-requirements li {
+                color: #555;
+                line-height: 1.6;
+            }
+            .login-link {
+                text-align: center;
+                margin-top: 20px;
+            }
+            .login-link a {
+                color: #667eea;
+                text-decoration: none;
+                font-size: 14px;
+                font-weight: 600;
+            }
+            .login-link a:hover {
+                text-decoration: underline;
+            }
+            .divider {
+                text-align: center;
+                margin: 25px 0;
+                color: #999;
+                font-size: 13px;
+            }
+        </style>
+    </head>
+    <body>
+        <div class="signup-container">
+            <div class="logo">
+                <h1>✨ Înregistrare</h1>
+                <p>Platformă Pulsoximetrie</p>
+            </div>
+            
+            {% if error %}
+            <div class="error-message">
+                ❌ {{ error }}
+            </div>
+            {% endif %}
+            
+            <form method="POST" action="/signup">
+                <div class="form-group">
+                    <label for="full_name">Nume Complet</label>
+                    <input 
+                        type="text" 
+                        id="full_name" 
+                        name="full_name" 
+                        value="{{ full_name }}"
+                        placeholder="Ex: Dr. Popescu Ion"
+                        required 
+                        autofocus
+                    >
+                </div>
+                
+                <div class="form-group">
+                    <label for="email">Email</label>
+                    <input 
+                        type="email" 
+                        id="email" 
+                        name="email" 
+                        value="{{ email }}"
+                        placeholder="exemplu@medical.ro"
+                        required
+                    >
+                </div>
+                
+                <div class="password-requirements">
+                    <strong>📋 Cerințe parolă:</strong>
+                    <ul>
+                        <li>Minimum 8 caractere</li>
+                        <li>Cel puțin o literă mare (A-Z)</li>
+                        <li>Cel puțin o literă mică (a-z)</li>
+                        <li>Cel puțin o cifră (0-9)</li>
+                        <li>Cel puțin un caracter special (!@#$...)</li>
+                    </ul>
+                </div>
+                
+                <div class="form-group">
+                    <label for="password">Parolă</label>
+                    <input 
+                        type="password" 
+                        id="password" 
+                        name="password" 
+                        placeholder="••••••••"
+                        required
+                    >
+                </div>
+                
+                <div class="form-group">
+                    <label for="confirm_password">Confirmă Parola</label>
+                    <input 
+                        type="password" 
+                        id="confirm_password" 
+                        name="confirm_password" 
+                        placeholder="••••••••"
+                        required
+                    >
+                </div>
+                
+                <button type="submit" class="btn-signup">
+                    ✨ Creează Cont
+                </button>
+            </form>
+            
+            <div class="login-link">
+                Ai deja cont? <a href="/login">Autentifică-te</a>
+            </div>
+            
+            <div class="divider">
+                © 2025 Platformă Pulsoximetrie
+            </div>
+        </div>
+    </body>
+    </html>
+    """
+    
+    from jinja2 import Template
+    return Template(template).render(error=error, full_name=full_name, email=email)
+
+
+# ==============================================================================
 # FUNCȚIE INIȚIALIZARE - APELATĂ DIN run_medical.py
 # ==============================================================================
 
@@ -764,8 +1113,9 @@ def init_auth_routes(app):
     route_health(app.server)
     route_login(app.server)
     route_logout(app.server)
+    route_signup(app.server)
     route_request_reset(app.server)
     route_reset_password(app.server)
     
-    logger.info("✅ Route-uri inițializate: /health, /login, /logout, /request-reset, /reset-password")
+    logger.info("✅ Route-uri inițializate: /health, /login, /logout, /signup, /request-reset, /reset-password")
 

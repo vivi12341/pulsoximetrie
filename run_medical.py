@@ -226,6 +226,7 @@ from app_layout_new import layout
 # Importăm TOATE callbacks-urile (vechi + noi)
 import callbacks  # Callbacks originale (vizualizare + batch)
 import callbacks_medical  # Callbacks noi (admin + pacient)
+import admin_callbacks  # Callbacks pentru administrare utilizatori (doar admin)
 
 # Asamblăm aplicația
 app.layout = layout
