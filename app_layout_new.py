@@ -22,11 +22,9 @@ import config
 
 def create_login_prompt_static():
     """Pagină de login statică (fără dependență de callback)."""
-    from auth_ui_components import create_auth_header
-    
     return html.Div([
-        # Header autentificare
-        html.Div(id='auth-header-container', children=[create_auth_header()]),
+        # Header autentificare (va fi populat de callback)
+        html.Div(id='auth-header-container'),
         
         html.Div([
             # Icon mare
