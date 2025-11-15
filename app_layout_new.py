@@ -13,70 +13,50 @@ from dash import dcc, html
 import plotly.graph_objects as go
 import config
 
-# --- Layout Principal - Condițional Medic/Pacient ---
-layout = html.Div(
-    id="main-container",
-    style={
-        'fontFamily': config.GOLDEN_STYLE['layout']['font']['family'],
-        'maxWidth': '1400px',
-        'margin': 'auto',
-        'padding': '20px'
-    },
-    children=[
-        # Detectare URL pentru token
-        dcc.Location(id='url', refresh=False),
-        
-        # FIX CRITICAL: Interval component pentru trigger FORȚAT callback routing
-        # Se execută o singură dată după 100ms de la încărcare pagină
-        dcc.Interval(
-            id='force-routing-trigger',
-            interval=100,  # 100ms după încărcare
-            n_intervals=0,
-            max_intervals=1  # Doar o singură execuție!
-        ),
-        
-        # Store-uri pentru date
-        dcc.Store(id='loaded-data-store'),
-        dcc.Store(id='current-patient-token'),
-        dcc.Store(id='url-token-detected'),  # Nou: detectare token din URL
-        dcc.Store(id='collapsed-groups-store', data=[]),  # Store pentru grupuri collapsed
-        dcc.Store(id='delete-recording-store'),  # Store pentru datele de ștergere înregistrări
-        
-        # Container notificări globale
-        html.Div(id="global-notification-container"),
-        
-        # Modal confirmare ștergere înregistrări
-        html.Div(id='delete-confirmation-modal', style={'display': 'none'}),
-        
-        # Container dinamic - se populează în funcție de prezența token-ului
-        # FIX v2: Conținut VIZIBIL fallback (nu doar loading spinner)
-        html.Div(
-            id='dynamic-layout-container',
-            children=[
-                html.Div([
-                    html.H1("🏥 Platformă Pulsoximetrie", 
-                            style={'textAlign': 'center', 'color': '#2c3e50', 'marginTop': '80px'}),
-                    html.Div([
-                        dcc.Loading(
-                            id="initial-loading",
-                            type="circle",
-                            children=[
-                                html.Div([
-                                    html.H3("🔄 Se încarcă interfața...", 
-                                           style={'textAlign': 'center', 'color': '#7f8c8d', 'marginTop': '40px'}),
-                                    html.P("Vă rugăm așteptați...", 
-                                          style={'textAlign': 'center', 'color': '#95a5a6', 'fontSize': '14px'}),
-                                    html.P("Dacă această pagină persistă mai mult de 3 secunde, vă rugăm reîmprospătați pagina (F5).", 
-                                          style={'textAlign': 'center', 'color': '#e74c3c', 'fontSize': '12px', 'marginTop': '20px'})
-                                ], id='fallback-loading-message')
-                            ]
-                        )
-                    ], style={'maxWidth': '600px', 'margin': '0 auto', 'padding': '20px'})
-                ])
-            ]
-        )
-    ]
-)
+# --- Layout Function (Dash 3.x Best Practice) ---
+# CRITICAL: În Dash 3.x, app.layout poate fi o FUNCȚIE care returnează layout-ul
+# Aceasta se execută la FIECARE request, permițând routing dinamic fără callback!
+
+def get_layout():
+    """
+    Returnează layout-ul corespunzător bazat pe context (medic sau pacient).
+    Această funcție se execută la fiecare încărcare pagină.
+    """
+    from flask import request
+    from flask_login import current_user
+    from logger_setup import logger
+    import patient_links
+    
+    # Verifică dacă există token în URL
+    token = request.args.get('token')
+    
+    logger.warning(f"[LAYOUT FUNCTION] Called for path: {request.path}, token: {token is not None}")
+    
+    if token:
+        # Validare token pacient
+        if patient_links.validate_token(token):
+            logger.warning(f"[LAYOUT FUNCTION] Valid patient token → returning patient_layout")
+            return patient_layout
+        else:
+            logger.warning(f"[LAYOUT FUNCTION] Invalid token → returning error")
+            return html.Div([
+                html.H2("❌ Acces Interzis", style={'color': 'red', 'textAlign': 'center', 'marginTop': '50px'}),
+                html.P("Token-ul este invalid sau a expirat. Contactați medicul dumneavoastră.", 
+                       style={'textAlign': 'center', 'color': '#666'})
+            ], style={'padding': '50px'})
+    
+    # Fără token → verificăm autentificarea pentru medici
+    if current_user.is_authenticated:
+        logger.warning(f"[LAYOUT FUNCTION] Authenticated user → returning medical_layout")
+        return medical_layout
+    else:
+        logger.warning(f"[LAYOUT FUNCTION] NOT authenticated → returning login prompt")
+        # Import login prompt
+        from callbacks_medical import create_login_prompt
+        return create_login_prompt()
+
+# Backward compatibility: păstrăm 'layout' pentru import-uri existente
+layout = get_layout
 
 # --- Layout pentru MEDICI (cu tab-uri complete) ---
 # ACEST LAYOUT VA FI AFIȘAT DOAR DUPĂ AUTENTIFICARE!
