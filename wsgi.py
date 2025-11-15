@@ -202,25 +202,49 @@ def initialize_application():
     
     logger.warning("[INIT 21/30] ✅ Database & Authentication initialized COMPLETE")
     
-    # === DASH LIBRARIES REGISTRATION (CRITICAL!) ===
-    # FIX v3: Bibliotecile Dash sunt DEJA înregistrate în app_instance.py (linia 34-95)!
-    # Nu mai importăm aici pentru a evita duplicate + probleme de ordine
-    # app_instance.py:
-    #   1. Importă dash libraries (html, dcc, dash_table)
-    #   2. Creează app instance
-    #   3. Setează dummy layout pentru a FORȚA înregistrarea bibliotecilor
-    #   4. Verifică că bibliotecile sunt înregistrate (_registered_paths)
-    logger.warning("[INIT 22/30] 📦 Dash libraries already registered in app_instance.py")
+    # === DASH LIBRARIES REGISTRATION (FIX v3 - FORCE în wsgi.py!) ===
+    # PROBLEMA: app_instance.py setează dummy layout DAR Gunicorn fork workers DUPĂ import
+    # SOLUȚIA: Forțăm înregistrarea AICI în initialize_application() care rulează LA STARTUP
     
-    # Verificăm că app are biblioteci înregistrate (diagnostic)
+    logger.warning("[INIT 22/30] 🔧 FORCING Dash library registration în wsgi.py startup...")
+    
+    # Verificăm starea ÎNAINTE de forțare
     try:
         if hasattr(app, '_registered_paths'):
-            registered_count = len(app._registered_paths)
-            logger.warning(f"[INIT 23/30] ✅ Dash has {registered_count} registered library paths")
+            initial_libs = list(app._registered_paths.keys())
+            logger.warning(f"[INIT 22.1/30] 📊 BEFORE force: {len(initial_libs)} libraries: {initial_libs}")
         else:
-            logger.warning("[INIT 23/30] ⚠️ WARNING: app._registered_paths not accessible")
-    except Exception as check_err:
-        logger.warning(f"[INIT 23/30] ⚠️ Cannot check registered paths: {check_err}")
+            logger.warning("[INIT 22.1/30] ⚠️ _registered_paths not found - Dash version issue?")
+    except Exception as e:
+        logger.warning(f"[INIT 22.1/30] ⚠️ Cannot read _registered_paths: {e}")
+    
+    # FORȚĂM înregistrarea prin accesare property (trigger lazy init)
+    try:
+        # Pasul 1: Trigger registered_paths property
+        if hasattr(app, 'registered_paths'):
+            _ = app.registered_paths  # Acesta ar trebui să triggere lazy init
+            logger.warning("[INIT 22.2/30] ✅ Triggered app.registered_paths property")
+        
+        # Pasul 2: Verificăm Flask routes (asset serving)
+        with application.app_context():
+            dash_routes = [r for r in application.url_map._rules if '_dash-component-suites' in str(r)]
+            logger.warning(f"[INIT 22.3/30] 🔍 Found {len(dash_routes)} Dash asset routes")
+            
+        # Pasul 3: Verificăm din nou _registered_paths DUPĂ forțare
+        if hasattr(app, '_registered_paths'):
+            after_libs = list(app._registered_paths.keys())
+            logger.warning(f"[INIT 23/30] 📊 AFTER force: {len(after_libs)} libraries: {after_libs}")
+            
+            if len(after_libs) == 0:
+                logger.critical("[INIT 23.1/30] ❌❌❌ CRITICAL: Registered libraries STILL EMPTY!")
+                logger.critical("[INIT 23.2/30] ❌ Dash library registration FAILED în wsgi.py")
+            else:
+                logger.warning(f"[INIT 23.1/30] ✅ SUCCESS: {len(after_libs)} libraries registered!")
+        else:
+            logger.warning("[INIT 23/30] ⚠️ _registered_paths not accessible after force")
+            
+    except Exception as force_err:
+        logger.critical(f"[INIT 23/30] ❌ Force registration ERROR: {force_err}", exc_info=True)
     
     # === CALLBACKS & LAYOUT ===
     # CRITICAL: Trebuie setate ÎNAINTE de warmup pentru ca Dash să știe ce componente să înregistreze!
@@ -351,63 +375,6 @@ except Exception as e:
 # === HEALTH CHECK ENDPOINT ===
 # Definit în auth_routes.py (init_auth_routes) - NU duplicăm aici!
 # Endpoint: /health (JSON status, timestamp, callbacks count)
-
-
-# === DEBUG R2 STATUS (TEMPORARY - pentru verificare Railway) ===
-@application.route('/debug/r2-status')
-def debug_r2_status():
-    """
-    [TEMPORARY] Debug endpoint pentru verificare configurare R2 în Railway.
-    Expune status R2 + environment variables (cu credențiale MASCATE).
-    
-    DELETE AFTER: După confirmare R2 funcționează OK!
-    """
-    from flask import jsonify
-    from storage_service import get_storage_status, r2_client
-    from datetime import datetime
-    import os
-    
-    try:
-        # Status R2 din storage_service
-        status = get_storage_status()
-        
-        # Environment variables (MASCATE pentru securitate!)
-        env_vars = {
-            'R2_ENABLED': os.getenv('R2_ENABLED', 'NOT_SET'),
-            'R2_ENDPOINT': (os.getenv('R2_ENDPOINT', 'NOT_SET')[:50] + '...' 
-                          if os.getenv('R2_ENDPOINT') else 'NOT_SET'),
-            'R2_ACCESS_KEY_ID': (os.getenv('R2_ACCESS_KEY_ID', 'NOT_SET')[:8] + '...[MASKED]' 
-                               if os.getenv('R2_ACCESS_KEY_ID') else 'NOT_SET'),
-            'R2_SECRET_ACCESS_KEY': '***HIDDEN***' if os.getenv('R2_SECRET_ACCESS_KEY') else 'NOT_SET',
-            'R2_BUCKET_NAME': os.getenv('R2_BUCKET_NAME', 'NOT_SET'),
-            'R2_REGION': os.getenv('R2_REGION', 'NOT_SET')
-        }
-        
-        # Test conexiune R2 (dacă e activat)
-        r2_connection_test = "NOT_TESTED"
-        if r2_client.enabled and r2_client.client:
-            try:
-                r2_client.client.head_bucket(Bucket=r2_client.bucket_name)
-                r2_connection_test = "✅ SUCCESS - Bucket accessible"
-            except Exception as conn_err:
-                r2_connection_test = f"❌ FAILED: {str(conn_err)[:100]}"
-        elif not r2_client.enabled:
-            r2_connection_test = "⚠️ R2 DISABLED (R2_ENABLED=False or missing)"
-        
-        return jsonify({
-            'storage_status': status,
-            'environment_vars': env_vars,
-            'r2_connection_test': r2_connection_test,
-            'r2_client_enabled': r2_client.enabled,
-            'timestamp': datetime.now().isoformat()
-        })
-        
-    except Exception as e:
-        logger.error(f"❌ Debug endpoint error: {e}", exc_info=True)
-        return jsonify({
-            'error': str(e),
-            'message': 'Debug endpoint failed - check logs'
-        }), 500
 
 
 if __name__ == '__main__':
