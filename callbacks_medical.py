@@ -182,7 +182,8 @@ def create_login_prompt():
     [Output('dynamic-layout-container', 'children'),
      Output('url-token-detected', 'data')],
     [Input('url', 'pathname'),
-     Input('url', 'search')]
+     Input('url', 'search')],
+    prevent_initial_call=False  # EXPLICIT: callback trebuie să se execute la prima încărcare!
 )
 def route_layout_based_on_url(pathname, search):
     """
@@ -191,26 +192,33 @@ def route_layout_based_on_url(pathname, search):
     - Fără token → Layout complet pentru MEDICI (NECESITĂ AUTENTIFICARE!)
     
     DEFENSIVE: Error handling robust pentru production!
-    FIX CRITICAL: Adăugat Input pathname pentru a trigger callback la orice încărcare pagină!
-    FIX v2: Import layout-uri la ÎNCEPUT callback (nu lazy import)
+    FIX CRITICAL v3: RETURNARE IMEDIATĂ pentru a evita blocking
     """
     # [DEBUG PRODUCTION] Log explicit pentru a detecta când callback-ul se execută
-    logger.info(f"🔵 [ROUTE CALLBACK] START - pathname={pathname}, search={search}")
+    logger.info(f"🔵🔵🔵 [ROUTE CALLBACK v3] START - pathname={pathname}, search={search}")
     
     # FIX CRITICAL: Importăm layout-urile și current_user ÎNAINTE de try-catch
     # pentru a evita probleme de import
-    from app_layout_new import medical_layout, patient_layout
-    from flask_login import current_user
-    
-    logger.info(f"🔵 [ROUTE CALLBACK] Layout-uri importate cu succes")
+    try:
+        from app_layout_new import medical_layout, patient_layout
+        from flask_login import current_user
+        
+        logger.info(f"✅ [ROUTE CALLBACK v3] Layout-uri importate cu succes")
+    except Exception as import_err:
+        logger.critical(f"❌❌❌ [ROUTE CALLBACK v3] NU POT IMPORTA LAYOUT-URI: {import_err}")
+        # WORKAROUND: Returnăm un mesaj de eroare simplu
+        return html.Div([
+            html.H1("⚠️ Eroare Import", style={'color': 'red', 'textAlign': 'center', 'marginTop': '100px'}),
+            html.P(f"Nu pot încărca interfața: {str(import_err)}", style={'textAlign': 'center'})
+        ]), None
     
     try:
         # Log current_user status (defensive - poate să nu existe în unele contexte)
         try:
             is_auth = current_user.is_authenticated
-            logger.info(f"🔵 [ROUTE CALLBACK] current_user.is_authenticated = {is_auth}")
+            logger.info(f"✅ [ROUTE CALLBACK v3] current_user.is_authenticated = {is_auth}")
         except Exception as user_err:
-            logger.warning(f"⚠️ [ROUTE CALLBACK] Nu pot accesa current_user: {user_err}")
+            logger.warning(f"⚠️ [ROUTE CALLBACK v3] Nu pot accesa current_user: {user_err}")
             is_auth = False
         
         # Verificăm dacă există token în URL (query string search)
