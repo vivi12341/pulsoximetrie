@@ -753,11 +753,23 @@ def handle_file_upload(list_of_contents, list_of_names, existing_files):
     Procesează fișierele uploadate și afișează lista.
     Salvează fișierele temporar pentru procesare ulterioară.
     """
+    # [DEFENSIVE DEBUG] Logging extensiv pentru troubleshooting
+    logger.info("=" * 80)
+    logger.info("📤 HANDLE FILE UPLOAD - Callback trigerat")
+    logger.info(f"📦 list_of_contents: {list_of_contents is not None} (length: {len(list_of_contents) if list_of_contents else 0})")
+    logger.info(f"📦 list_of_names: {list_of_names}")
+    logger.info(f"📦 existing_files (BEFORE): {existing_files}")
+    logger.info(f"📦 existing_files type: {type(existing_files)}")
+    logger.info(f"📦 existing_files length: {len(existing_files) if existing_files else 0}")
+    logger.info("=" * 80)
+    
     if not list_of_contents:
+        logger.warning("⚠️ list_of_contents este None/False - returnez no_update")
         return no_update, no_update
     
     # Inițializează lista existentă dacă e None
     if existing_files is None:
+        logger.info("🔧 Inițializez existing_files = [] (era None)")
         existing_files = []
     
     # Adăugăm noile fișiere
@@ -765,15 +777,24 @@ def handle_file_upload(list_of_contents, list_of_names, existing_files):
     for content, filename in zip(list_of_contents, list_of_names):
         # Verificăm dacă fișierul nu există deja
         if not any(f['filename'] == filename for f in existing_files):
+            file_size = len(content) if content else 0
+            file_type = 'CSV' if filename.lower().endswith('.csv') else 'PDF'
             new_files.append({
                 'filename': filename,
                 'content': content,
-                'size': len(content) if content else 0,
-                'type': 'CSV' if filename.lower().endswith('.csv') else 'PDF'
+                'size': file_size,
+                'type': file_type
             })
+            logger.info(f"  ✅ Adăugat fișier NOU: {filename} ({file_type}) - {file_size} bytes")
+        else:
+            logger.warning(f"  ⚠️ Fișier duplicat (skip): {filename}")
     
     # Combinăm cu fișierele existente
     all_files = existing_files + new_files
+    
+    logger.info(f"📊 REZULTAT: {len(new_files)} fișiere noi + {len(existing_files)} existente = {len(all_files)} TOTAL")
+    logger.info(f"📦 all_files (AFTER - va fi returnat la store): {[f['filename'] for f in all_files]}")
+    logger.info("=" * 80)
     
     # Generăm UI pentru listă fișiere
     if not all_files:
@@ -862,7 +883,8 @@ def handle_file_upload(list_of_contents, list_of_names, existing_files):
         'overflowY': 'auto'
     })
     
-    logger.info(f"📤 {len(new_files)} fișiere noi uploadate. Total: {len(all_files)}")
+    # [CRITICAL] Returnăm UI + Store actualizat
+    logger.info(f"🎯 RETURN: files_display (UI) + all_files ({len(all_files)} fișiere) → STORE")
     return files_display, all_files
 
 
@@ -889,12 +911,22 @@ def handle_file_deletion(clear_all_clicks, delete_clicks, current_files):
     """
     from dash import ctx
     
+    # [DEFENSIVE DEBUG] Logging pentru troubleshooting
+    logger.info("=" * 80)
+    logger.info("🗑️ HANDLE FILE DELETION - Callback trigerat")
+    logger.info(f"📦 ctx.triggered_id: {ctx.triggered_id}")
+    logger.info(f"📦 current_files (BEFORE): {[f['filename'] for f in current_files] if current_files else None}")
+    logger.info(f"📦 current_files length: {len(current_files) if current_files else 0}")
+    logger.info("=" * 80)
+    
     if not ctx.triggered_id:
+        logger.warning("⚠️ ctx.triggered_id este None - returnez no_update")
         return no_update
     
     # Ștergere toate fișierele
     if ctx.triggered_id == 'admin-batch-clear-files-btn':
-        logger.info("🗑️ Ștergere toate fișierele uploadate")
+        logger.info("🗑️ ȘTERGERE TOATE FIȘIERELE (clear all clicked)")
+        logger.info("🎯 RETURN: [] (listă goală) → STORE")
         return []
     
     # Ștergere fișier individual
@@ -902,9 +934,15 @@ def handle_file_deletion(clear_all_clicks, delete_clicks, current_files):
         index_to_delete = ctx.triggered_id['index']
         if current_files and 0 <= index_to_delete < len(current_files):
             deleted_file = current_files[index_to_delete]
-            logger.info(f"🗑️ Ștergere fișier: {deleted_file['filename']}")
-            return [f for i, f in enumerate(current_files) if i != index_to_delete]
+            remaining = [f for i, f in enumerate(current_files) if i != index_to_delete]
+            logger.info(f"🗑️ ȘTERGERE FIȘIER INDIVIDUAL: {deleted_file['filename']} (index {index_to_delete})")
+            logger.info(f"📊 Rămân {len(remaining)} fișiere: {[f['filename'] for f in remaining]}")
+            logger.info(f"🎯 RETURN: {len(remaining)} fișiere → STORE")
+            return remaining
+        else:
+            logger.error(f"❌ Index invalid pentru ștergere: {index_to_delete} (current_files length: {len(current_files) if current_files else 0})")
     
+    logger.warning("⚠️ Nicio condiție satisfăcută - returnez no_update")
     return no_update
 
 
@@ -1085,8 +1123,11 @@ def admin_run_batch_processing(n_clicks, batch_mode, input_folder, uploaded_file
             except Exception as cleanup_error:
                 logger.warning(f"Nu s-a putut șterge folderul temporar: {cleanup_error}")
         
-        # Golim lista de fișiere uploadate dacă e în mod upload (procesare completă)
+        # [CRITICAL] Golim lista de fișiere uploadate dacă e în mod upload (procesare completă)
         files_to_clear = [] if batch_mode == 'upload' else no_update
+        logger.info(f"🗑️ Store files_to_clear: {files_to_clear} (batch_mode={batch_mode})")
+        if batch_mode == 'upload':
+            logger.info("✅ Mod UPLOAD - Golim store-ul după procesare completă")
         
         if not generated_links:
             return html.Div([
