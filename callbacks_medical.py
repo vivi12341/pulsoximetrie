@@ -257,79 +257,79 @@ def route_layout_based_on_url(pathname, search):
         is_auth = False
     
     logger.warning(f"[LOG 28/40] 🔐 Final is_auth value: {is_auth}")
-        
-        # === LOG 29-35: TOKEN DETECTION ===
-        logger.warning(f"[LOG 29/40] 🎫 Checking for token in URL...")
-        logger.warning(f"[LOG 30/40] 🎫 Search is None: {search is None}")
-        logger.warning(f"[LOG 31/40] 🎫 Search contains 'token=': {'token=' in search if search else False}")
-        
-        # Verificăm dacă există token în URL (query string search)
-        if search and 'token=' in search:
-            logger.warning(f"[LOG 32/40] 🎫 TOKEN DETECTED in URL!")
-            # Extragem token-ul din URL
-            try:
-                token = search.split('token=')[1].split('&')[0]
-                logger.warning(f"[LOG 33/40] 🎫 Token extracted: {token[:8]}...")
-                logger.warning(f"[LOG 34/40] 🎫 Token length: {len(token)}")
-                logger.warning(f"[LOG 35/40] 🎫 Validating token...")
-                
-                # Validăm token-ul
-                if patient_links.validate_token(token):
-                    logger.warning(f"[LOG 36/40] ✅ Token VALID → returning patient_layout")
-                    logger.warning(f"[LOG 37/40] 📊 patient_layout type before return: {type(patient_layout)}")
-                    logger.warning(f"[LOG 38/40] 🔚 CALLBACK END (patient path) - SUCCESS")
-                    return patient_layout, token
-                else:
-                    logger.warning(f"[LOG 39/40] ❌ Token INVALID → returning error page")
-                    logger.warning(f"[LOG 40/40] 🔚 CALLBACK END (invalid token)")
-                    return html.Div([
-                        html.H2("❌ Acces Interzis", style={'color': 'red', 'textAlign': 'center', 'marginTop': '50px'}),
-                        html.P("Token-ul este invalid sau a expirat. Contactați medicul dumneavoastră.", 
-                               style={'textAlign': 'center', 'color': '#666'})
-                    ], style={'padding': '50px'}), None
-                    
-            except Exception as e:
-                logger.critical(f"[LOG 35A/40] ❌ Exception extracting token: {e}", exc_info=True)
-                # Eroare la parsare token → verificăm autentificare pentru acces medic
-                if not is_auth:
-                    logger.warning("[LOG 36A/40] ⚠️ Token error + not authenticated → login prompt")
-                    return create_login_prompt(), None
-                logger.warning("[LOG 37A/40] ⚠️ Token error but authenticated → medical_layout")
-                return medical_layout, None
-        
-        # === LOG 38-40: NO TOKEN PATH (MEDICAL) ===
-        logger.warning(f"[LOG 38/40] 🏥 NO TOKEN in URL → Medical path")
-        logger.warning(f"[LOG 39/40] 🏥 is_auth = {is_auth}")
-        
-        # Fără token → Layout pentru medici (NECESITĂ AUTENTIFICARE!)
-        if not is_auth:
-            logger.warning("[LOG 40/40] 🔐 NOT AUTHENTICATED → Creating login prompt")
-            logger.warning("[LOG 41/40] 🔐 Calling create_login_prompt()...")
-            
-            try:
-                login_prompt_layout = create_login_prompt()
-                logger.warning("[LOG 42/40] ✅ Login prompt created successfully")
-                logger.warning(f"[LOG 43/40] 📊 login_prompt type: {type(login_prompt_layout)}")
-                logger.warning(f"[LOG 44/40] 🔚 CALLBACK END (login prompt path) - RETURNING NOW")
-                return login_prompt_layout, None
-            except Exception as login_err:
-                logger.critical(f"[LOG 45/40] ❌ ERROR creating login prompt: {login_err}", exc_info=True)
-                return html.Div([
-                    html.H1("Error", style={'textAlign': 'center', 'color': 'red'}),
-                    html.P(f"Cannot create login: {str(login_err)}", style={'textAlign': 'center'})
-                ]), None
-        
-        # Utilizator autentificat → afișăm layout medical
-        logger.warning("[LOG 46/40] 🏥 AUTHENTICATED → returning medical_layout")
+    
+    # === LOG 29-35: TOKEN DETECTION ===
+    logger.warning(f"[LOG 29/40] 🎫 Checking for token in URL...")
+    logger.warning(f"[LOG 30/40] 🎫 Search is None: {search is None}")
+    logger.warning(f"[LOG 31/40] 🎫 Search contains 'token=': {'token=' in search if search else False}")
+    
+    # Verificăm dacă există token în URL (query string search)
+    if search and 'token=' in search:
+        logger.warning(f"[LOG 32/40] 🎫 TOKEN DETECTED in URL!")
+        # Extragem token-ul din URL
         try:
-            user_email = current_user.email if hasattr(current_user, 'email') else "unknown"
-            logger.warning(f"[LOG 47/40] 🏥 User email: {user_email}")
-        except Exception as email_err:
-            logger.warning(f"[LOG 48/40] ⚠️ Cannot get email: {email_err}")
+            token = search.split('token=')[1].split('&')[0]
+            logger.warning(f"[LOG 33/40] 🎫 Token extracted: {token[:8]}...")
+            logger.warning(f"[LOG 34/40] 🎫 Token length: {len(token)}")
+            logger.warning(f"[LOG 35/40] 🎫 Validating token...")
+            
+            # Validăm token-ul
+            if patient_links.validate_token(token):
+                logger.warning(f"[LOG 36/40] ✅ Token VALID → returning patient_layout")
+                logger.warning(f"[LOG 37/40] 📊 patient_layout type before return: {type(patient_layout)}")
+                logger.warning(f"[LOG 38/40] 🔚 CALLBACK END (patient path) - SUCCESS")
+                return patient_layout, token
+            else:
+                logger.warning(f"[LOG 39/40] ❌ Token INVALID → returning error page")
+                logger.warning(f"[LOG 40/40] 🔚 CALLBACK END (invalid token)")
+                return html.Div([
+                    html.H2("❌ Acces Interzis", style={'color': 'red', 'textAlign': 'center', 'marginTop': '50px'}),
+                    html.P("Token-ul este invalid sau a expirat. Contactați medicul dumneavoastră.", 
+                           style={'textAlign': 'center', 'color': '#666'})
+                ], style={'padding': '50px'}), None
+                
+        except Exception as e:
+            logger.critical(f"[LOG 35A/40] ❌ Exception extracting token: {e}", exc_info=True)
+            # Eroare la parsare token → verificăm autentificare pentru acces medic
+            if not is_auth:
+                logger.warning("[LOG 36A/40] ⚠️ Token error + not authenticated → login prompt")
+                return create_login_prompt(), None
+            logger.warning("[LOG 37A/40] ⚠️ Token error but authenticated → medical_layout")
+            return medical_layout, None
+    
+    # === LOG 38-40: NO TOKEN PATH (MEDICAL) ===
+    logger.warning(f"[LOG 38/40] 🏥 NO TOKEN in URL → Medical path")
+    logger.warning(f"[LOG 39/40] 🏥 is_auth = {is_auth}")
+    
+    # Fără token → Layout pentru medici (NECESITĂ AUTENTIFICARE!)
+    if not is_auth:
+        logger.warning("[LOG 40/40] 🔐 NOT AUTHENTICATED → Creating login prompt")
+        logger.warning("[LOG 41/40] 🔐 Calling create_login_prompt()...")
         
-        logger.warning(f"[LOG 49/40] 📊 medical_layout type before return: {type(medical_layout)}")
-        logger.warning(f"[LOG 50/40] 🔚 CALLBACK END (medical path) - RETURNING NOW")
-        return medical_layout, None
+        try:
+            login_prompt_layout = create_login_prompt()
+            logger.warning("[LOG 42/40] ✅ Login prompt created successfully")
+            logger.warning(f"[LOG 43/40] 📊 login_prompt type: {type(login_prompt_layout)}")
+            logger.warning(f"[LOG 44/40] 🔚 CALLBACK END (login prompt path) - RETURNING NOW")
+            return login_prompt_layout, None
+        except Exception as login_err:
+            logger.critical(f"[LOG 45/40] ❌ ERROR creating login prompt: {login_err}", exc_info=True)
+            return html.Div([
+                html.H1("Error", style={'textAlign': 'center', 'color': 'red'}),
+                html.P(f"Cannot create login: {str(login_err)}", style={'textAlign': 'center'})
+            ]), None
+    
+    # Utilizator autentificat → afișăm layout medical
+    logger.warning("[LOG 46/40] 🏥 AUTHENTICATED → returning medical_layout")
+    try:
+        user_email = current_user.email if hasattr(current_user, 'email') else "unknown"
+        logger.warning(f"[LOG 47/40] 🏥 User email: {user_email}")
+    except Exception as email_err:
+        logger.warning(f"[LOG 48/40] ⚠️ Cannot get email: {email_err}")
+    
+    logger.warning(f"[LOG 49/40] 📊 medical_layout type before return: {type(medical_layout)}")
+    logger.warning(f"[LOG 50/40] 🔚 CALLBACK END (medical path) - RETURNING NOW")
+    return medical_layout, None
         
     except Exception as e:
         # === LOG 51-60: EXCEPTION HANDLER ===
