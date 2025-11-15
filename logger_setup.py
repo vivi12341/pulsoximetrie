@@ -115,11 +115,13 @@ logger = setup_logger()
 
 # Mesaj de confirmare că logger-ul a fost inițializat cu succes.
 is_prod = os.getenv('RAILWAY_ENVIRONMENT') is not None or os.getenv('PORT') is not None
-logger.info("="*50)
-logger.info("Sistemul de logging a fost inițializat cu succes.")
-logger.info(f"Log-urile vor fi salvate în fișierul: {os.path.abspath(os.path.join(config.LOGS_DIR, 'app_activity.log'))}")
 if is_prod:
+    # Production: Mesaj minimal (WARNING level)
     logger.warning("⚙️  PRODUCTION MODE: Logging level = WARNING (reduce noise)")
 else:
+    # Development: Mesaje verbose (INFO level)
+    logger.info("="*50)
+    logger.info("Sistemul de logging a fost inițializat cu succes.")
+    logger.info(f"Log-urile vor fi salvate în fișierul: {os.path.abspath(os.path.join(config.LOGS_DIR, 'app_activity.log'))}")
     logger.info("⚙️  DEVELOPMENT MODE: Logging level = INFO (verbose)")
-logger.info("="*50)
+    logger.info("="*50)

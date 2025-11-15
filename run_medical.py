@@ -179,6 +179,20 @@ app.server.config['SQLALCHEMY_DATABASE_URI'] = database_url
 app.server.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.server.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'dev-secret-key-change-in-production')
 
+# === CONFIGURARE CONNECTION POOLING (DEFENSIVE) ===
+# Previne "Connection reset by peer" + memory leaks
+app.server.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
+    'pool_size': 10,              # Max 10 conexiuni persistente
+    'max_overflow': 20,           # Max 20 conexiuni overflow (total 30)
+    'pool_timeout': 30,           # Timeout 30s pentru conexiune nouă
+    'pool_recycle': 1800,         # Recycle conexiuni după 30 min
+    'pool_pre_ping': True,        # Health check înainte de fiecare query
+    'connect_args': {
+        'connect_timeout': 10,    # Timeout conexiune PostgreSQL: 10s
+        'options': '-c statement_timeout=60000'  # Query timeout: 60s
+    }
+}
+
 # Configurăm sesiuni
 app.server.config['SESSION_COOKIE_SECURE'] = os.getenv('SESSION_COOKIE_SECURE', 'False') == 'True'
 app.server.config['SESSION_COOKIE_HTTPONLY'] = True
@@ -195,6 +209,48 @@ init_auth_manager(app)
 # Inițializăm route-urile de autentificare
 init_auth_routes(app)
 
+# === HEALTH CHECK ENDPOINT (Railway/Monitoring) ===
+@app.server.route('/health')
+def health_check():
+    """
+    Health check endpoint pentru Railway monitoring.
+    Verifică: Database connection, Storage access, Application status.
+    """
+    from flask import jsonify
+    
+    health_status = {
+        'status': 'healthy',
+        'timestamp': __import__('datetime').datetime.utcnow().isoformat(),
+        'checks': {}
+    }
+    
+    try:
+        # Check 1: Database connection
+        with app.server.app_context():
+            db.session.execute(db.text('SELECT 1'))
+            health_status['checks']['database'] = 'ok'
+    except Exception as e:
+        health_status['status'] = 'unhealthy'
+        health_status['checks']['database'] = f'error: {str(e)[:100]}'
+    
+    try:
+        # Check 2: Storage write/read
+        import os
+        test_file = 'output/LOGS/.health_check'
+        with open(test_file, 'w') as f:
+            f.write('ok')
+        os.remove(test_file)
+        health_status['checks']['storage'] = 'ok'
+    except Exception as e:
+        health_status['status'] = 'unhealthy'
+        health_status['checks']['storage'] = f'error: {str(e)[:100]}'
+    
+    # Check 3: Application callbacks
+    health_status['checks']['callbacks'] = len(app.callback_map)
+    
+    status_code = 200 if health_status['status'] == 'healthy' else 503
+    return jsonify(health_status), status_code
+
 # === REQUEST LOGGING (production monitoring) ===
 # ELIMINAT: Werkzeug loggează deja toate cererile HTTP
 # Logging custom genereaza duplicate (3 linii per request!)
@@ -203,6 +259,10 @@ if is_railway:
     @app.server.after_request
     def log_errors_only(response):
         """Log doar erori HTTP în production (4xx/5xx)."""
+        # Skip logging pentru health checks (prea des)
+        if request.path == '/health':
+            return response
+        
         if response.status_code >= 400:
             logger.warning(f"⚠️ {request.method} {request.path} → {response.status_code} | IP: {request.remote_addr}")
         return response
@@ -277,40 +337,44 @@ if __name__ == '__main__':
     # - Local Development: 127.0.0.1 (securitate)
     host = '0.0.0.0' if is_production else '127.0.0.1'
     
-    # [DIAGNOSTIC v2.0] Verificare callback-uri înregistrate
-    logger.warning("=" * 100)
-    logger.warning("🔍 [INIT LOG 1/5] APLICAȚIE INIȚIALIZARE - Verificare callbacks")
-    logger.warning("=" * 100)
-    
-    # Listează toate callback-urile înregistrate
-    try:
-        callback_map = app.callback_map
-        logger.warning(f"🔍 [INIT LOG 2/5] Număr total callbacks înregistrate: {len(callback_map)}")
+    # [DIAGNOSTIC v2.0] Verificare callback-uri înregistrate (doar în development)
+    if not is_production:
+        logger.info("=" * 100)
+        logger.info("🔍 [INIT LOG 1/5] APLICAȚIE INIȚIALIZARE - Verificare callbacks")
+        logger.info("=" * 100)
         
-        # Verifică dacă callback-urile critice sunt înregistrate
-        logger.warning("🔍 [INIT LOG 3/5] Verificare callback-uri critice...")
-        has_upload_callback = False
-        has_monitor_callback = False
+        # Listează toate callback-urile înregistrate
+        try:
+            callback_map = app.callback_map
+            logger.info(f"🔍 [INIT LOG 2/5] Număr total callbacks înregistrate: {len(callback_map)}")
+            
+            # Verifică dacă callback-urile critice sunt înregistrate
+            logger.info("🔍 [INIT LOG 3/5] Verificare callback-uri critice...")
+            has_upload_callback = False
+            has_monitor_callback = False
+            
+            for cb_id, cb_data in callback_map.items():
+                if 'admin-batch-uploaded-files-store' in str(cb_data):
+                    logger.info(f"✅ [INIT LOG 3.1/5] Callback găsit: {cb_id}")
+                    has_upload_callback = True
+                if 'dummy-output-for-debug' in str(cb_data):
+                    logger.info(f"✅ [INIT LOG 3.2/5] Monitor callback găsit: {cb_id}")
+                    has_monitor_callback = True
+            
+            if not has_upload_callback:
+                logger.error("❌ [INIT LOG 3.3/5] CRITICAL: Upload callback NU este înregistrat!")
+            if not has_monitor_callback:
+                logger.error("❌ [INIT LOG 3.4/5] CRITICAL: Monitor callback NU este înregistrat!")
+            
+        except Exception as e:
+            logger.error(f"❌ [INIT LOG 3/5] Eroare verificare callbacks: {e}")
         
-        for cb_id, cb_data in callback_map.items():
-            if 'admin-batch-uploaded-files-store' in str(cb_data):
-                logger.warning(f"✅ [INIT LOG 3.1/5] Callback găsit: {cb_id}")
-                has_upload_callback = True
-            if 'dummy-output-for-debug' in str(cb_data):
-                logger.warning(f"✅ [INIT LOG 3.2/5] Monitor callback găsit: {cb_id}")
-                has_monitor_callback = True
-        
-        if not has_upload_callback:
-            logger.error("❌ [INIT LOG 3.3/5] CRITICAL: Upload callback NU este înregistrat!")
-        if not has_monitor_callback:
-            logger.error("❌ [INIT LOG 3.4/5] CRITICAL: Monitor callback NU este înregistrat!")
-        
-    except Exception as e:
-        logger.error(f"❌ [INIT LOG 3/5] Eroare verificare callbacks: {e}")
-    
-    logger.warning(f"🔍 [INIT LOG 4/5] PORT: {port}")
-    logger.warning(f"🔍 [INIT LOG 5/5] DEBUG MODE: {debug_mode}")
-    logger.warning("=" * 100)
+        logger.info(f"🔍 [INIT LOG 4/5] PORT: {port}")
+        logger.info(f"🔍 [INIT LOG 5/5] DEBUG MODE: {debug_mode}")
+        logger.info("=" * 100)
+    else:
+        # Production: Logging minimal
+        logger.info(f"✅ Aplicație inițializată: {len(app.callback_map)} callbacks, port {port}")
     
     logger.info(f"🌐 Aplicația pornește pe: http://{host}:{port}/")
     logger.info(f"⚙️  Environment: {'PRODUCTION' if is_production else 'DEVELOPMENT'}")
