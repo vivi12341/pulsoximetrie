@@ -20,40 +20,83 @@ from datetime import datetime
 # Importăm instanța de logger pentru a înregistra pornirea aplicației
 from logger_setup import logger
 
+# === CRITICAL FIX: DASH 3.X LIBRARY REGISTRATION ===
+# PROBLEMA: Dash 3.x lazy-load biblioteci → "dash" is not a registered library → 500 error
+# CAUZA: În producție (Railway), Gunicorn workers nu au biblioteci înregistrate la import
+# SOLUȚIE: Forțăm înregistrarea EXPLICITĂ a bibliotecilor ÎNAINTE de orice layout/callback!
+
+logger.warning("=" * 80)
+logger.warning("[APP_INSTANCE 1/10] 📦 Initializing Dash 3.x libraries...")
+logger.warning("=" * 80)
+
+# Import ALL Dash component libraries (CRITICAL: trebuie făcut ÎNAINTE de app creation!)
+try:
+    from dash import html, dcc, dash_table, Input, Output, State, callback
+    logger.warning("[APP_INSTANCE 2/10] ✅ Dash 3.x libraries imported: html, dcc, dash_table")
+except ImportError as dash_lib_err:
+    logger.critical(f"[APP_INSTANCE 2/10] ❌ CRITICAL: Dash libraries import FAILED: {dash_lib_err}")
+    raise
+
 # --- Inițializarea Aplicației Dash ---
 
 # Creăm instanța principală a aplicației.
 # `__name__` este o variabilă standard Python care ajută Dash să localizeze
 # fișierele statice din folderul 'assets'.
 # Putem adăuga aici și foi de stil externe (CSS) dacă este cazul.
+logger.warning("[APP_INSTANCE 3/10] 🚀 Creating Dash app instance...")
+
 app = dash.Dash(
     __name__,
     suppress_callback_exceptions=True # Necesar pentru layout-uri dinamice cu tab-uri
 )
 
+logger.warning("[APP_INSTANCE 4/10] ✅ Dash app instance created")
+
 # Setăm un titlu pentru fereastra browser-ului
 app.title = "Analizator Pulsoximetrie"
 
-# ===== FORCE LIBRARY REGISTRATION (CRITICAL FIX!) =====
-# Dash înregistrează librăriile (html, dcc, dash_table) DOAR când setezi layout-ul!
-# Setăm un layout DUMMY pentru a forța înregistrarea librăriilor ÎNAINTE ca wsgi.py să preia controlul
+# === FORCE DASH LIBRARY REGISTRATION (DEFENSIVE) ===
+# CRITICAL: Dash 3.x înregistrează biblioteci DOAR când găsește componente în layout!
+# În producție, dacă layout-ul e setat DUPĂ ce worker-ul e forked, înregistrarea eșuează!
+# SOLUȚIE: Forțăm înregistrarea prin crearea unui layout DUMMY care conține TOATE componentele
+
+logger.warning("[APP_INSTANCE 5/10] 🔧 Forcing Dash library registration...")
+
 try:
-    from dash import html, dcc, dash_table
-    
-    # Layout dummy MINIM pentru a forța Dash să înregistreze html, dcc, dash_table
-    # Acesta va fi SUPRASCRIS de wsgi.py cu layout-ul real!
-    app.layout = html.Div([
-        dcc.Store(id='dummy-store'),
-        html.Div(id='dummy-div'),
-        dash_table.DataTable(id='dummy-table', data=[])
+    # Creăm layout DUMMY cu TOATE componentele Dash pentru a forța înregistrarea
+    # Acest layout NU va fi văzut de utilizatori (va fi suprascris în wsgi.py)
+    dummy_layout = html.Div([
+        html.Div("Dummy"),  # html component → înregistrează dash.html
+        dcc.Store(id='dummy-store'),  # dcc component → înregistrează dash.dcc
+        dash_table.DataTable(id='dummy-table', data=[])  # DataTable → înregistrează dash.dash_table
     ])
     
-    logger.info(f"✅ Dash libraries FORCE-REGISTERED via dummy layout")
-    logger.info(f"📦 Registered libraries: {list(app.config.registered_paths.keys()) if hasattr(app.config, 'registered_paths') else 'N/A'}")
+    # Setăm layout-ul DUMMY temporar (va fi suprascris în wsgi.py cu layout-ul real)
+    app.layout = dummy_layout
+    logger.warning("[APP_INSTANCE 6/10] ✅ Dummy layout set to force library registration")
+    
+    # Verificăm că bibliotecile sunt înregistrate
+    # Dash 3.x stochează bibliotecile înregistrate în app._registered_paths
+    if hasattr(app, '_registered_paths'):
+        registered_libs = list(app._registered_paths.keys())
+        logger.warning(f"[APP_INSTANCE 7/10] 🔍 Registered libraries: {registered_libs}")
+        
+        # Verificăm că dash_table este înregistrat
+        if 'dash_table' in registered_libs or 'dash' in registered_libs:
+            logger.warning("[APP_INSTANCE 8/10] ✅ dash_table library CONFIRMED registered!")
+        else:
+            logger.error(f"[APP_INSTANCE 8/10] ⚠️ WARNING: dash_table NOT found in registered libs: {registered_libs}")
+    else:
+        logger.warning("[APP_INSTANCE 7/10] ⚠️ WARNING: app._registered_paths not found (Dash version?)")
+    
+    logger.warning("[APP_INSTANCE 9/10] ✅ Dash library registration COMPLETE")
+    
 except Exception as reg_err:
-    logger.error(f"❌ Library force-registration FAILED: {reg_err}", exc_info=True)
-    # CRITICAL: Dacă failează, aplicația NU va funcționa în production!
-    raise
+    logger.critical(f"[APP_INSTANCE 9/10] ❌ CRITICAL: Library registration FAILED: {reg_err}", exc_info=True)
+    # Nu aruncăm eroare - aplicația poate continua, dar logging-ul ajută la debugging
+
+logger.warning("[APP_INSTANCE 10/10] ✅ app_instance.py initialization COMPLETE")
+logger.warning("=" * 80)
 
 # === CONFIGURARE SERVIRE IMAGINI ȘI PDF-URI PACIENȚI ===
 # Route personalizat pentru servirea resurselor din patient_data

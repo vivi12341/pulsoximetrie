@@ -203,18 +203,24 @@ def initialize_application():
     logger.warning("[INIT 21/30] ✅ Database & Authentication initialized COMPLETE")
     
     # === DASH LIBRARIES REGISTRATION (CRITICAL!) ===
-    # MUST import Dash component libraries BEFORE setting layout
-    # Otherwise Dash won't register them and will return 500 for component assets
-    # Dash 3.x CORRECT syntax: from dash import html, dcc, dash_table
-    # CACHE BUST v2: Force Railway to rebuild with correct imports
-    logger.warning("[INIT 22/30] 📦 Importing Dash libraries (html, dcc, dash_table)...")
+    # FIX v3: Bibliotecile Dash sunt DEJA înregistrate în app_instance.py (linia 34-95)!
+    # Nu mai importăm aici pentru a evita duplicate + probleme de ordine
+    # app_instance.py:
+    #   1. Importă dash libraries (html, dcc, dash_table)
+    #   2. Creează app instance
+    #   3. Setează dummy layout pentru a FORȚA înregistrarea bibliotecilor
+    #   4. Verifică că bibliotecile sunt înregistrate (_registered_paths)
+    logger.warning("[INIT 22/30] 📦 Dash libraries already registered in app_instance.py")
     
+    # Verificăm că app are biblioteci înregistrate (diagnostic)
     try:
-        from dash import html, dcc, dash_table
-        logger.warning("[INIT 23/30] ✅ Dash 3.x libraries imported [CACHE_BUST_v2]")
-    except ImportError as dash_import_err:
-        logger.critical(f"[INIT 23/30] ❌ Dash import FAILED: {dash_import_err}", exc_info=True)
-        raise
+        if hasattr(app, '_registered_paths'):
+            registered_count = len(app._registered_paths)
+            logger.warning(f"[INIT 23/30] ✅ Dash has {registered_count} registered library paths")
+        else:
+            logger.warning("[INIT 23/30] ⚠️ WARNING: app._registered_paths not accessible")
+    except Exception as check_err:
+        logger.warning(f"[INIT 23/30] ⚠️ Cannot check registered paths: {check_err}")
     
     # === CALLBACKS & LAYOUT ===
     # CRITICAL: Trebuie setate ÎNAINTE de warmup pentru ca Dash să știe ce componente să înregistreze!
@@ -249,11 +255,25 @@ def initialize_application():
         raise
     
     try:
+        # CRITICAL: Suprascrie dummy layout-ul din app_instance.py cu layout-ul REAL
+        # app_instance.py a setat un dummy layout pentru a forța înregistrarea bibliotecilor
+        # Acum înlocuim cu layout-ul funcțional (medical/patient routing)
         app.layout = layout
-        logger.warning(f"[INIT 29/30] ✅ Layout SET on app instance")
+        logger.warning(f"[INIT 29/30] ✅ REAL Layout SET on app instance (replaced dummy)")
     except Exception as layout_set_err:
         logger.critical(f"[INIT 29/30] ❌ app.layout SET FAILED: {layout_set_err}", exc_info=True)
         raise
+    
+    # Verificare finală că bibliotecile sunt înregistrate
+    try:
+        if hasattr(app, '_registered_paths'):
+            final_libs = list(app._registered_paths.keys())
+            logger.warning(f"[INIT 30/30] 🔍 FINAL VERIFICATION: {len(final_libs)} libraries registered")
+            logger.warning(f"[INIT 30/30] 🔍 Libraries: {', '.join(final_libs[:5])}...")  # Primele 5
+        else:
+            logger.warning("[INIT 30/30] ⚠️ Cannot verify final library registration")
+    except Exception as final_check_err:
+        logger.warning(f"[INIT 30/30] ⚠️ Final verification error: {final_check_err}")
     
     logger.warning(f"[INIT 30/30] ✅ Layout & Callbacks registered: {len(app.callback_map)} callbacks")
     
