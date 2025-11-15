@@ -197,13 +197,21 @@ def route_layout_based_on_url(pathname, search):
     # [DEBUG PRODUCTION] Log explicit pentru a detecta când callback-ul se execută
     logger.info(f"🔵 [ROUTE CALLBACK] START - pathname={pathname}, search={search}")
     
+    # FIX CRITICAL: Importăm layout-urile și current_user ÎNAINTE de try-catch
+    # pentru a evita probleme de import
+    from app_layout_new import medical_layout, patient_layout
+    from flask_login import current_user
+    
+    logger.info(f"🔵 [ROUTE CALLBACK] Layout-uri importate cu succes")
+    
     try:
-        # Importăm layout-urile la ÎNCEPUT (nu lazy import pentru a evita circular imports)
-        from app_layout_new import medical_layout, patient_layout
-        from flask_login import current_user
-        
-        logger.info(f"🔵 [ROUTE CALLBACK] Layout-uri importate cu succes")
-        logger.info(f"🔵 [ROUTE CALLBACK] current_user.is_authenticated = {current_user.is_authenticated if hasattr(current_user, 'is_authenticated') else 'N/A'}")
+        # Log current_user status (defensive - poate să nu existe în unele contexte)
+        try:
+            is_auth = current_user.is_authenticated
+            logger.info(f"🔵 [ROUTE CALLBACK] current_user.is_authenticated = {is_auth}")
+        except Exception as user_err:
+            logger.warning(f"⚠️ [ROUTE CALLBACK] Nu pot accesa current_user: {user_err}")
+            is_auth = False
         
         # Verificăm dacă există token în URL (query string search)
         if search and 'token=' in search:
@@ -227,20 +235,26 @@ def route_layout_based_on_url(pathname, search):
             except Exception as e:
                 logger.error(f"❌ [ROUTE CALLBACK] Eroare extragere token: {e}", exc_info=True)
                 # Eroare la parsare token → verificăm autentificare pentru acces medic
-                if not current_user.is_authenticated:
+                if not is_auth:
                     logger.debug("⚠️ [ROUTE CALLBACK] Eroare token + neautentificat → login prompt")
                     return create_login_prompt(), None
                 logger.debug("⚠️ [ROUTE CALLBACK] Eroare token dar autentificat → medical_layout")
                 return medical_layout, None
         
         # Fără token → Layout pentru medici (NECESITĂ AUTENTIFICARE!)
-        if not current_user.is_authenticated:
+        if not is_auth:
             logger.info("🔐 [ROUTE CALLBACK] Neautentificat + fără token → return login_prompt")
             login_prompt_layout = create_login_prompt()
             logger.info("🔐 [ROUTE CALLBACK] Login prompt creat cu succes")
             return login_prompt_layout, None
         
-        logger.info(f"🏥 [ROUTE CALLBACK] Autentificat ({current_user.email}) → return medical_layout")
+        # Utilizator autentificat → afișăm layout medical
+        try:
+            user_email = current_user.email if hasattr(current_user, 'email') else "unknown"
+            logger.info(f"🏥 [ROUTE CALLBACK] Autentificat ({user_email}) → return medical_layout")
+        except:
+            logger.info(f"🏥 [ROUTE CALLBACK] Autentificat → return medical_layout")
+        
         return medical_layout, None
         
     except Exception as e:

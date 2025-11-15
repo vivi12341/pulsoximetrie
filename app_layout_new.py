@@ -40,7 +40,22 @@ layout = html.Div(
         html.Div(id='delete-confirmation-modal', style={'display': 'none'}),
         
         # Container dinamic - se populează în funcție de prezența token-ului
-        html.Div(id='dynamic-layout-container')
+        # FIX CRITICAL: Adăugăm conținut inițial pentru a evita "Loading..." blocat
+        html.Div(
+            id='dynamic-layout-container',
+            children=[
+                dcc.Loading(
+                    id="initial-loading",
+                    type="circle",
+                    children=[
+                        html.Div([
+                            html.H2("🔄 Inițializare...", style={'textAlign': 'center', 'color': '#666', 'marginTop': '100px'}),
+                            html.P("Aplicația se încarcă...", style={'textAlign': 'center', 'color': '#999'})
+                        ])
+                    ]
+                )
+            ]
+        )
     ]
 )
 
