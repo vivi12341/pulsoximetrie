@@ -2120,16 +2120,19 @@ def admin_load_dashboard_table(n_clicks, trigger):
         )
 
 
-@app.callback(
-    [Output({'type': 'images-display-container', 'index': ALL}, 'children'),
-     Output({'type': 'view-grid-btn', 'index': ALL}, 'style'),
-     Output({'type': 'view-list-btn', 'index': ALL}, 'style')],
-    [Input({'type': 'view-grid-btn', 'index': ALL}, 'n_clicks'),
-     Input({'type': 'view-list-btn', 'index': ALL}, 'n_clicks')],
-    [State({'type': 'view-grid-btn', 'index': ALL}, 'id')],
-    prevent_initial_call=True
-)
-def toggle_images_view(grid_clicks, list_clicks, btn_ids):
+# CALLBACK DEZACTIVAT TEMPORAR - cauza console error "A callback is missing Inputs"
+# Pattern-matching cu ALL necesita componente dummy in layout initial
+# TODO: Re-implementare cu MATCH sau adaugare componente dummy CORECTE
+# @app.callback(
+#     [Output({'type': 'images-display-container', 'index': ALL}, 'children'),
+#      Output({'type': 'view-grid-btn', 'index': ALL}, 'style'),
+#      Output({'type': 'view-list-btn', 'index': ALL}, 'style')],
+#     [Input({'type': 'view-grid-btn', 'index': ALL}, 'n_clicks'),
+#      Input({'type': 'view-list-btn', 'index': ALL}, 'n_clicks')],
+#     [State({'type': 'view-grid-btn', 'index': ALL}, 'id')],
+#     prevent_initial_call=True
+# )
+def toggle_images_view_DISABLED(grid_clicks, list_clicks, btn_ids):
     """
     Comută între vizualizarea Grid (ansamblu) și List (desfășurat) pentru imagini.
     """

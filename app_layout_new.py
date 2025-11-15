@@ -800,13 +800,7 @@ medical_layout = html.Div([
     ], style={'marginTop': '60px', 'paddingBottom': '30px'}),
     
     # ===== ELEMENT DUMMY pentru DEBUGGING (MEDICAL LAYOUT) =====
-    html.Div(id='dummy-output-for-debug', style={'display': 'none'}),
-    
-    # DUMMY components pentru pattern-matching callbacks (toggle_images_view)
-    # Necesare pentru Dash 3.x pattern-matching cu ALL - trebuie să existe măcar 1 componentă
-    html.Div(id={'type': 'images-display-container', 'index': 'dummy-medical'}, style={'display': 'none'}),
-    html.Button(id={'type': 'view-grid-btn', 'index': 'dummy-medical'}, style={'display': 'none'}),
-    html.Button(id={'type': 'view-list-btn', 'index': 'dummy-medical'}, style={'display': 'none'})
+    html.Div(id='dummy-output-for-debug', style={'display': 'none'})
 ]
 )
 
@@ -876,11 +870,6 @@ patient_layout = html.Div([
     ], style={'marginTop': '40px'}),
     
     # ===== ELEMENT DUMMY pentru DEBUGGING în CONSOLĂ BROWSER =====
-    html.Div(id='dummy-output-for-debug', style={'display': 'none'}),
-    
-    # DUMMY components pentru pattern-matching callbacks (toggle_images_view)
-    html.Div(id={'type': 'images-display-container', 'index': 'dummy-patient'}, style={'display': 'none'}),
-    html.Button(id={'type': 'view-grid-btn', 'index': 'dummy-patient'}, style={'display': 'none'}),
-    html.Button(id={'type': 'view-list-btn', 'index': 'dummy-patient'}, style={'display': 'none'})
+    html.Div(id='dummy-output-for-debug', style={'display': 'none'})
 ])
 
