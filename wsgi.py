@@ -136,18 +136,8 @@ except Exception as e:
 
 
 # === HEALTH CHECK ENDPOINT ===
-@application.route('/health')
-def health_check():
-    """Health check endpoint pentru monitoring Railway."""
-    from flask import jsonify
-    from datetime import datetime
-    
-    return jsonify({
-        'status': 'healthy',
-        'timestamp': datetime.utcnow().isoformat(),
-        'application': 'pulsoximetrie-medical',
-        'callbacks': len(app.callback_map) if hasattr(app, 'callback_map') else 0
-    }), 200
+# Definit în auth_routes.py (init_auth_routes) - NU duplicăm aici!
+# Endpoint: /health (JSON status, timestamp, callbacks count)
 
 
 if __name__ == '__main__':
