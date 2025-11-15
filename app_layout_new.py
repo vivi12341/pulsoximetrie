@@ -19,41 +19,23 @@ import config
 
 def get_layout():
     """
-    Returnează layout-ul corespunzător bazat pe context (medic sau pacient).
-    Această funcție se execută la fiecare încărcare pagină.
+    [FIX v4] Returnează layout wrapper cu dcc.Location + dynamic-layout-container.
+    Callback-ul route_layout_based_on_url va popula conținutul dinamic.
     """
-    from flask import request
-    from flask_login import current_user
     from logger_setup import logger
-    import patient_links
     
-    # Verifică dacă există token în URL
-    token = request.args.get('token')
+    logger.warning(f"[LAYOUT FUNCTION v4] Returning WRAPPER layout with dynamic-layout-container")
     
-    logger.warning(f"[LAYOUT FUNCTION] Called for path: {request.path}, token: {token is not None}")
-    
-    if token:
-        # Validare token pacient
-        if patient_links.validate_token(token):
-            logger.warning(f"[LAYOUT FUNCTION] Valid patient token → returning patient_layout")
-            return patient_layout
-        else:
-            logger.warning(f"[LAYOUT FUNCTION] Invalid token → returning error")
-            return html.Div([
-                html.H2("❌ Acces Interzis", style={'color': 'red', 'textAlign': 'center', 'marginTop': '50px'}),
-                html.P("Token-ul este invalid sau a expirat. Contactați medicul dumneavoastră.", 
-                       style={'textAlign': 'center', 'color': '#666'})
-            ], style={'padding': '50px'})
-    
-    # Fără token → verificăm autentificarea pentru medici
-    if current_user.is_authenticated:
-        logger.warning(f"[LAYOUT FUNCTION] Authenticated user → returning medical_layout")
-        return medical_layout
-    else:
-        logger.warning(f"[LAYOUT FUNCTION] NOT authenticated → returning login prompt")
-        # Import login prompt
-        from callbacks_medical import create_login_prompt
-        return create_login_prompt()
+    # Layout wrapper care conține dcc.Location + container dinamic
+    return html.Div([
+        # Component dcc.Location pentru routing
+        dcc.Location(id='url', refresh=False),
+        
+        # Container dinamic care va fi populat de callback routing
+        html.Div(id='dynamic-layout-container', children=[
+            html.Div("Loading...", style={'textAlign': 'center', 'padding': '100px'})
+        ])
+    ])
 
 # Backward compatibility: păstrăm 'layout' pentru import-uri existente
 layout = get_layout
