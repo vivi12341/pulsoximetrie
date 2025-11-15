@@ -182,10 +182,7 @@ medical_layout = html.Div([
                                                     'border': '1px dashed #bdc3c7'
                                                 })
                                             ]
-                                        ),
-                                        
-                                        # === STORE PENTRU FIȘIERE UPLOADATE ===
-                                        dcc.Store(id='admin-batch-uploaded-files-store', data=[])
+                                        )
                                     ],
                                     style={'display': 'block', 'marginBottom': '20px'}  # Vizibil inițial
                                 ),
@@ -310,6 +307,14 @@ medical_layout = html.Div([
                                     interval=1000,  # 1 secundă
                                     n_intervals=0,
                                     disabled=True  # Activat doar când procesare activă
+                                ),
+                                
+                                # === STORE PENTRU FIȘIERE UPLOADATE (AFARĂ din toggle display!) ===
+                                # CRITICAL: storage_type='session' pentru persistență între re-render-uri!
+                                dcc.Store(
+                                    id='admin-batch-uploaded-files-store',
+                                    storage_type='session',  # Persistă în session storage browser
+                                    data=[]  # Inițializare listă goală
                                 ),
                                 
                                 # === STORE PENTRU SESSION ID ===
