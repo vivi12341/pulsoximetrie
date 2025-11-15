@@ -9,7 +9,7 @@
 # RESPECTĂ: .cursorrules - 1 PACIENT = 1 LINK PERSISTENT
 # ==============================================================================
 
-from dash import dcc, html
+from dash import dcc, html, dash_table
 import plotly.graph_objects as go
 import config
 
