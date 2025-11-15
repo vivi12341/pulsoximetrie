@@ -11,10 +11,6 @@
 # ==============================================================================
 
 import dash
-# CRITICAL: Import librăriile Dash ÎNAINTE de a crea instanța!
-# Acest lucru forțează Dash să înregistreze html, dcc, dash_table
-# ÎNAINTE de inițializarea app, rezolvând erori 500 pentru asset serving
-from dash import html, dcc, dash_table
 import os
 import io
 import zipfile
@@ -37,6 +33,27 @@ app = dash.Dash(
 
 # Setăm un titlu pentru fereastra browser-ului
 app.title = "Analizator Pulsoximetrie"
+
+# ===== FORCE LIBRARY REGISTRATION (CRITICAL FIX!) =====
+# Dash înregistrează librăriile (html, dcc, dash_table) DOAR când setezi layout-ul!
+# Setăm un layout DUMMY pentru a forța înregistrarea librăriilor ÎNAINTE ca wsgi.py să preia controlul
+try:
+    from dash import html, dcc, dash_table
+    
+    # Layout dummy MINIM pentru a forța Dash să înregistreze html, dcc, dash_table
+    # Acesta va fi SUPRASCRIS de wsgi.py cu layout-ul real!
+    app.layout = html.Div([
+        dcc.Store(id='dummy-store'),
+        html.Div(id='dummy-div'),
+        dash_table.DataTable(id='dummy-table', data=[])
+    ])
+    
+    logger.info(f"✅ Dash libraries FORCE-REGISTERED via dummy layout")
+    logger.info(f"📦 Registered libraries: {list(app.config.registered_paths.keys()) if hasattr(app.config, 'registered_paths') else 'N/A'}")
+except Exception as reg_err:
+    logger.error(f"❌ Library force-registration FAILED: {reg_err}", exc_info=True)
+    # CRITICAL: Dacă failează, aplicația NU va funcționa în production!
+    raise
 
 # === CONFIGURARE SERVIRE IMAGINI ȘI PDF-URI PACIENȚI ===
 # Route personalizat pentru servirea resurselor din patient_data
