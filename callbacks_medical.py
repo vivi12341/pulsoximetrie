@@ -40,7 +40,11 @@ def create_login_prompt():
     Returns:
         html.Div: Component Dash cu prompt de autentificare
     """
+    from dash import dcc
     return html.Div([
+        # URL tracking pentru callback-uri
+        dcc.Location(id='url', refresh=False),
+        
         html.Div([
             # Icon mare
             html.Div("🔐", style={
