@@ -39,8 +39,8 @@ cmds = [
 # cmds = []
 
 [start]
-# Comandă pornire aplicație
-cmd = 'python run_medical.py'
+# Comandă pornire aplicație (PRODUCTION: Gunicorn WSGI server)
+cmd = 'gunicorn --workers 4 --threads 2 --timeout 120 --bind 0.0.0.0:$PORT --log-level warning --access-logfile - --error-logfile - "run_medical:app.server"'
 
 # ==============================================================================
 # TROUBLESHOOTING:
