@@ -148,8 +148,9 @@ def initialize_application():
     # MUST import Dash component libraries BEFORE setting layout
     # Otherwise Dash won't register them and will return 500 for component assets
     # Dash 3.x CORRECT syntax: from dash import html, dcc, dash_table
+    # CACHE BUST v2: Force Railway to rebuild with correct imports
     from dash import html, dcc, dash_table
-    logger.warning("✅ Dash component libraries imported (dcc, html, dash_table) - Dash 3.x syntax")
+    logger.warning("✅ Dash component libraries imported (dcc, html, dash_table) - Dash 3.x syntax [CACHE_BUST_v2]")
     
     # === CALLBACKS & LAYOUT ===
     # CRITICAL: Trebuie setate ÎNAINTE de warmup pentru ca Dash să știe ce componente să înregistreze!

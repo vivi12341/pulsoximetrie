@@ -1,6 +1,23 @@
-# Force Railway Fresh Rebuild
-# Timestamp: 2025-11-15 21:10:00
-# Reason: Clear Docker layer cache (ghilimele simple persistent în cache vechi)
+# RAILWAY CACHE BUST - v3
+# Timestamp: 2025-11-15 18:35:00
+# Reason: Railway cache issue - fix Dash 3.x nu e activ
+# Previous deploy folosea container vechi cu import-uri deprecate
+# FORCE full rebuild without cache
 
-Railway rebuild trigger - commit hash: ca0895a
+CACHE_BUST_VERSION=3
+DEPLOYMENT_ID=railway_cache_bust_dash3x_v3
+FIX_VERIFIED=wsgi.py_line_152_correct_syntax
+LOG_MARKER=[CACHE_BUST_v2]
 
+# Ce am făcut:
+# 1. Verificat wsgi.py → ✅ from dash import html, dcc, dash_table (CORECT)
+# 2. Verificat toate .py files → ✅ ZERO import-uri deprecate
+# 3. Adăugat marker log "[CACHE_BUST_v2]" în wsgi.py
+# 4. Modificat FORCE_REBUILD.txt → trigger Railway rebuild
+
+# Așteptat după deploy:
+# Railway logs trebuie să arate:
+# "✅ Dash component libraries imported - Dash 3.x syntax [CACHE_BUST_v2]"
+
+# Browser trebuie să arate:
+# GET dash_html_components.min.js → 200 OK (NU 500!)

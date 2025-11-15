@@ -42,6 +42,7 @@ cmds = [
 # Comandă pornire aplicație (PRODUCTION: Gunicorn WSGI server)
 # FIX: --preload forțează workers să împartă același asset registry
 # FIX: wsgi:application (NU run_medical:app.server) pentru consistent init
+# CACHE_BUST_v2: Force Railway rebuild - Dash 3.x import fix
 cmd = 'gunicorn --workers 4 --threads 2 --timeout 120 --preload --bind 0.0.0.0:$PORT --log-level warning --access-logfile - --error-logfile - wsgi:application'
 
 # ==============================================================================
