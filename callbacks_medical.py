@@ -690,18 +690,33 @@ def load_patient_data_from_token(n_intervals):
 @app.callback(
     [Output('admin-batch-local-mode', 'style'),
      Output('admin-batch-upload-mode', 'style')],
-    [Input('admin-batch-mode-selector', 'value')]
+    [Input('admin-batch-mode-selector', 'value')],
+    prevent_initial_call=False  # FIX: Execută callback la încărcarea inițială
 )
 def toggle_batch_mode_display(selected_mode):
     """
-    Comută între modul local (folder) și modul upload (fișiere).
+    [FIX v2] Comută între modul local (folder) și modul upload (fișiere).
+    
+    SOLUȚII IMPLEMENTATE:
+    - prevent_initial_call=False → callback se execută la încărcare
+    - Logging comprehensiv pentru debugging
+    - Stiluri complete (marginBottom + display)
     """
+    tag = "toggle_batch_mode_display"
+    logger.info(f"[{tag}] START - selected_mode: {selected_mode}")
+    
     if selected_mode == 'local':
         # Afișează mod local, ascunde upload
-        return {'display': 'block', 'marginBottom': '20px'}, {'display': 'none'}
-    else:  # 'upload'
+        local_style = {'display': 'block', 'marginBottom': '20px'}
+        upload_style = {'display': 'none'}
+        logger.info(f"[{tag}] Mode: LOCAL → local visible, upload hidden")
+        return local_style, upload_style
+    else:  # 'upload' (default)
         # Afișează upload, ascunde mod local
-        return {'display': 'none'}, {'display': 'block', 'marginBottom': '20px'}
+        local_style = {'display': 'none'}
+        upload_style = {'display': 'block', 'marginBottom': '20px'}
+        logger.info(f"[{tag}] Mode: UPLOAD → upload visible, local hidden")
+        return local_style, upload_style
 
 
 @app.callback(

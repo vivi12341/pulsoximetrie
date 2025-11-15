@@ -163,6 +163,7 @@ medical_layout = html.Div([
                                 # === MOD ONLINE (UPLOAD FIȘIERE) ===
                                 html.Div(
                                     id='admin-batch-upload-mode',
+                                    style={'display': 'block', 'marginBottom': '20px'},  # FIX: Stil explicit (default vizibil)
                                     children=[
                                         html.Label("📤 Selectați fișiere CSV + PDF:", style={'fontWeight': 'bold', 'display': 'block', 'marginBottom': '10px'}),
                                         dcc.Upload(
