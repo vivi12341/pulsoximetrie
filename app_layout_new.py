@@ -40,20 +40,30 @@ layout = html.Div(
         html.Div(id='delete-confirmation-modal', style={'display': 'none'}),
         
         # Container dinamic - se populează în funcție de prezența token-ului
-        # FIX CRITICAL: Adăugăm conținut inițial pentru a evita "Loading..." blocat
+        # FIX v2: Conținut VIZIBIL fallback (nu doar loading spinner)
         html.Div(
             id='dynamic-layout-container',
             children=[
-                dcc.Loading(
-                    id="initial-loading",
-                    type="circle",
-                    children=[
-                        html.Div([
-                            html.H2("🔄 Inițializare...", style={'textAlign': 'center', 'color': '#666', 'marginTop': '100px'}),
-                            html.P("Aplicația se încarcă...", style={'textAlign': 'center', 'color': '#999'})
-                        ])
-                    ]
-                )
+                html.Div([
+                    html.H1("🏥 Platformă Pulsoximetrie", 
+                            style={'textAlign': 'center', 'color': '#2c3e50', 'marginTop': '80px'}),
+                    html.Div([
+                        dcc.Loading(
+                            id="initial-loading",
+                            type="circle",
+                            children=[
+                                html.Div([
+                                    html.H3("🔄 Se încarcă interfața...", 
+                                           style={'textAlign': 'center', 'color': '#7f8c8d', 'marginTop': '40px'}),
+                                    html.P("Vă rugăm așteptați...", 
+                                          style={'textAlign': 'center', 'color': '#95a5a6', 'fontSize': '14px'}),
+                                    html.P("Dacă această pagină persistă mai mult de 3 secunde, vă rugăm reîmprospătați pagina (F5).", 
+                                          style={'textAlign': 'center', 'color': '#e74c3c', 'fontSize': '12px', 'marginTop': '20px'})
+                                ], id='fallback-loading-message')
+                            ]
+                        )
+                    ], style={'maxWidth': '600px', 'margin': '0 auto', 'padding': '20px'})
+                ])
             ]
         )
     ]
