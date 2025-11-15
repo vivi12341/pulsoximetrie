@@ -26,6 +26,15 @@ layout = html.Div(
         # Detectare URL pentru token
         dcc.Location(id='url', refresh=False),
         
+        # FIX CRITICAL: Interval component pentru trigger FORȚAT callback routing
+        # Se execută o singură dată după 100ms de la încărcare pagină
+        dcc.Interval(
+            id='force-routing-trigger',
+            interval=100,  # 100ms după încărcare
+            n_intervals=0,
+            max_intervals=1  # Doar o singură execuție!
+        ),
+        
         # Store-uri pentru date
         dcc.Store(id='loaded-data-store'),
         dcc.Store(id='current-patient-token'),

@@ -182,18 +182,20 @@ def create_login_prompt():
     [Output('dynamic-layout-container', 'children'),
      Output('url-token-detected', 'data')],
     [Input('url', 'pathname'),
-     Input('url', 'search')],
+     Input('url', 'search'),
+     Input('force-routing-trigger', 'n_intervals')],  # FIX: Force trigger la încărcare!
     prevent_initial_call=False  # EXPLICIT: callback trebuie să se execute la prima încărcare!
 )
-def route_layout_based_on_url(pathname, search):
+def route_layout_based_on_url(pathname, search, n_intervals):
     """
-    [DIAGNOSTIC v5 - 40 LOG-URI]
+    [DIAGNOSTIC v6 - 40 LOG-URI + FORCE TRIGGER]
     Detectează dacă URL conține token și afișează layout-ul corespunzător.
+    FORCE TRIGGER: dcc.Interval execută callback-ul automat la 100ms după încărcare!
     """
     # === LOG 1-5: ENTRY POINT ===
     logger.warning(f"[LOG 1/40] 🔵🔵🔵 CALLBACK START - pathname={pathname}")
     logger.warning(f"[LOG 2/40] 🔵 Search param: {search}")
-    logger.warning(f"[LOG 3/40] 🔵 Callback trigger source: URL change detected")
+    logger.warning(f"[LOG 3/40] 🔵 Callback trigger: n_intervals={n_intervals} (force trigger!)")
     
     import sys
     logger.warning(f"[LOG 4/40] 🔵 Python version: {sys.version}")
