@@ -194,7 +194,9 @@ def route_layout_based_on_url(pathname, search):
     logger.warning(f"[LOG 1/40] 🔵🔵🔵 CALLBACK START - pathname={pathname}")
     logger.warning(f"[LOG 2/40] 🔵 Search param: {search}")
     logger.warning(f"[LOG 3/40] 🔵 Callback trigger source: URL change detected")
-    logger.warning(f"[LOG 4/40] 🔵 Python version check: {import sys; sys.version}")
+    
+    import sys
+    logger.warning(f"[LOG 4/40] 🔵 Python version: {sys.version}")
     logger.warning(f"[LOG 5/40] 🔵 Callback function ID: route_layout_based_on_url")
     
     # === LOG 6-10: IMPORT PHASE ===
@@ -215,8 +217,9 @@ def route_layout_based_on_url(pathname, search):
         logger.warning(f"[LOG 13/40] 🔍 current_user type: {type(current_user)}")
         
     except ImportError as import_err:
+        import traceback
         logger.critical(f"[LOG 14/40] ❌ ImportError: {import_err}")
-        logger.critical(f"[LOG 15/40] ❌ Import traceback: {import traceback; traceback.format_exc()}")
+        logger.critical(f"[LOG 15/40] ❌ Import traceback: {traceback.format_exc()}")
         return html.Div([
             html.H1("⚠️ Import Error", style={'color': 'red', 'textAlign': 'center', 'marginTop': '100px'}),
             html.P(f"Cannot import: {str(import_err)}", style={'textAlign': 'center'})
