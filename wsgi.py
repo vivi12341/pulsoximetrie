@@ -22,6 +22,38 @@ from app_instance import app
 # Exportăm Flask application pentru Gunicorn
 application = app.server
 
+# === ERROR LOGGING MIDDLEWARE (pentru diagnostic 500 errors) ===
+from flask import request
+
+@application.after_request
+def log_server_errors(response):
+    """
+    Log toate erorile de server (5xx) pentru diagnostic.
+    CRITICAL: Dash asset serving poate returna 500 fără logging!
+    """
+    from logger_setup import logger
+    
+    # Skip logging pentru health checks
+    if request.path == '/health':
+        return response
+    
+    # Log toate erorile 5xx cu traceback
+    if response.status_code >= 500:
+        logger.critical(f"❌❌❌ {request.method} {request.path} → {response.status_code}")
+        logger.critical(f"❌ Request headers: {dict(request.headers)}")
+        logger.critical(f"❌ Request args: {dict(request.args)}")
+        
+        # Încearcă să obții response body pentru debugging
+        try:
+            response_data = response.get_data(as_text=True)
+            if response_data:
+                logger.critical(f"❌ Response body (first 500 chars): {response_data[:500]}")
+        except Exception as e:
+            logger.critical(f"❌ Cannot read response body: {e}")
+    
+    return response
+
+
 # === INIȚIALIZARE LA STARTUP (NU la primul request!) ===
 # CRITICAL: DB trebuie inițializat ÎNAINTE de orice request, altfel Flask aruncă
 # AssertionError: teardown_appcontext can no longer be called after first request
