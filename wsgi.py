@@ -93,7 +93,7 @@ def initialize_application():
     # Otherwise Dash won't register them and will return 500 for component assets
     import dash.dcc
     import dash.html
-    import dash_table
+    from dash import dash_table  # Dash 2.x syntax (dash_table integrated in main package)
     logger.warning("✅ Dash component libraries imported (dcc, html, dash_table)")
     
     # === CALLBACKS & LAYOUT ===
