@@ -40,7 +40,9 @@ cmds = [
 
 [start]
 # Comandă pornire aplicație (PRODUCTION: Gunicorn WSGI server)
-cmd = 'gunicorn --workers 4 --threads 2 --timeout 120 --bind 0.0.0.0:$PORT --log-level warning --access-logfile - --error-logfile - "run_medical:app.server"'
+# FIX: --preload forțează workers să împartă același asset registry
+# FIX: wsgi:application (NU run_medical:app.server) pentru consistent init
+cmd = 'gunicorn --workers 4 --threads 2 --timeout 120 --preload --bind 0.0.0.0:$PORT --log-level warning --access-logfile - --error-logfile - wsgi:application'
 
 # ==============================================================================
 # TROUBLESHOOTING:

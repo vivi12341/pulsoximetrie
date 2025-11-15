@@ -25,6 +25,30 @@ application = app.server
 # === ERROR LOGGING MIDDLEWARE (pentru diagnostic 500 errors) ===
 from flask import request
 
+@application.before_request
+def intercept_dash_assets():
+    """
+    DEFENSIVE: Interceptează cereri Dash assets pentru logging pre-request.
+    Dacă Dash asset serving e broken, măcar știm DE CE înainte să returneze 500.
+    """
+    from logger_setup import logger
+    
+    # Doar pentru Dash component suites (assets problematice)
+    if '_dash-component-suites' in request.path:
+        logger.warning(f"🔍 ASSET REQUEST: {request.method} {request.path}")
+        logger.warning(f"🔍 User-Agent: {request.headers.get('User-Agent', 'N/A')[:100]}")
+        
+        # Verifică dacă asset route există în Flask
+        try:
+            # Încearcă să match-uiești route-ul
+            adapter = application.url_map.bind('')
+            endpoint, values = adapter.match(request.path)
+            logger.warning(f"✅ Asset route matched: endpoint={endpoint}, values={values}")
+        except Exception as route_err:
+            logger.critical(f"❌ Asset route FAILED to match: {route_err}")
+            logger.critical(f"❌ Available endpoints: {[r.endpoint for r in application.url_map._rules][:10]}")
+
+
 @application.after_request
 def log_server_errors(response):
     """
@@ -127,6 +151,36 @@ def initialize_application():
     import dash.html
     from dash import dash_table  # Dash 2.x syntax (dash_table integrated in main package)
     logger.warning("✅ Dash component libraries imported (dcc, html, dash_table)")
+    
+    # === DASH ASSET REGISTRY WARMUP (FIX: React 500 errors) ===
+    # FORCE Dash to initialize asset serving infrastructure BEFORE first request
+    # Dash lazy-loads assets, causing 500 errors in production with Gunicorn workers
+    try:
+        logger.warning("🔧 Warming up Dash asset registry...")
+        
+        # Method 1: Force registry initialization by accessing _dash_layout
+        with application.app_context():
+            # Trigger Flask app context to register Dash routes
+            logger.warning(f"🔧 Flask routes registered: {len(application.url_map._rules)} routes")
+        
+        # Method 2: Explicitly register component suites (defensive)
+        # Access internal registry to force initialization
+        if hasattr(app, '_dash_renderer'):
+            logger.warning(f"🔧 Dash renderer version: {app._dash_renderer}")
+        
+        # Method 3: Verify asset blueprints are registered
+        blueprint_names = [bp.name for bp in application.blueprints.values()]
+        logger.warning(f"🔧 Flask blueprints: {blueprint_names}")
+        
+        if '_dash_component_suites' in [r.endpoint for r in application.url_map._rules]:
+            logger.warning("✅ Dash asset routes CONFIRMED registered!")
+        else:
+            logger.critical("❌ WARNING: Dash asset routes NOT found in Flask url_map!")
+        
+        logger.warning("✅ Dash asset registry warmup complete")
+        
+    except Exception as warmup_err:
+        logger.critical(f"❌ Asset registry warmup FAILED: {warmup_err}", exc_info=True)
     
     # === CALLBACKS & LAYOUT ===
     from app_layout_new import layout
