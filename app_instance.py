@@ -63,18 +63,40 @@ app.title = "Analizator Pulsoximetrie"
 logger.warning("[APP_INSTANCE 5/10] 🔧 Forcing Dash library registration...")
 
 try:
-    # [FIX v2] Creăm layout DUMMY MINIMAL fără DataTable
-    # DataTable poate avea callback-uri implicite care cauzează "missing Inputs" warning
-    # Dash înregistrează bibliotecile când vede componente în layout (html, dcc suficient!)
+    # [FIX v2] CRITICAL: Forțăm înregistrarea ÎNAINTE de setare layout
+    # Dash 3.x înregistrează biblioteci când găsește componente în layout
+    # Dar trebuie să FORȚĂM înregistrarea explicit pentru Gunicorn workers
+    
+    # Pasul 1: Creăm componente pentru a triggera înregistrarea
+    logger.warning("[APP_INSTANCE 5.1/10] Creating dummy components...")
+    dummy_html = html.Div("Force registration")
+    dummy_dcc = dcc.Store(id='dummy-registration-store')
+    dummy_table = dash_table.DataTable(id='dummy-registration-table', data=[])
+    
+    # Pasul 2: Setăm layout DUMMY cu TOATE componentele
     dummy_layout = html.Div([
-        html.Div("Dummy"),  # html component → înregistrează dash.html
-        dcc.Store(id='dummy-store'),  # dcc component → înregistrează dash.dcc
-        dcc.Upload(id='dummy-upload')  # Upload → înregistrează dash.dcc (încarcă dash_table implicit)
+        dummy_html,
+        dummy_dcc,
+        dummy_table
     ])
     
-    # Setăm layout-ul DUMMY temporar (va fi suprascris în wsgi.py cu layout-ul real)
+    # CRITICAL: Setăm layout IMEDIAT pentru a triggera înregistrarea
     app.layout = dummy_layout
-    logger.warning("[APP_INSTANCE 6/10] ✅ Dummy layout set (MINIMAL - no DataTable to avoid callback conflicts)")
+    logger.warning("[APP_INSTANCE 6/10] ✅ Dummy layout set to force library registration")
+    
+    # Pasul 3: FORȚĂM warmup-ul registrului Dash
+    # Accesăm app._registered_paths pentru a declanșa lazy initialization
+    if hasattr(app, 'registered_paths'):
+        _ = app.registered_paths  # Trigger property getter
+        logger.warning("[APP_INSTANCE 6.1/10] ✅ Triggered registered_paths property")
+    
+    # Pasul 4: Verificăm că Flask routes-urile sunt înregistrate
+    try:
+        with app.server.app_context():
+            route_count = len(list(app.server.url_map.iter_rules()))
+            logger.warning(f"[APP_INSTANCE 6.2/10] ✅ Flask routes registered: {route_count}")
+    except Exception as route_err:
+        logger.warning(f"[APP_INSTANCE 6.2/10] ⚠️ Cannot count routes: {route_err}")
     
     # Verificăm că bibliotecile sunt înregistrate
     # Dash 3.x stochează bibliotecile înregistrate în app._registered_paths
