@@ -147,10 +147,9 @@ def initialize_application():
     # === DASH LIBRARIES REGISTRATION (CRITICAL!) ===
     # MUST import Dash component libraries BEFORE setting layout
     # Otherwise Dash won't register them and will return 500 for component assets
-    import dash.dcc
-    import dash.html
-    from dash import dash_table  # Dash 2.x syntax (dash_table integrated in main package)
-    logger.warning("✅ Dash component libraries imported (dcc, html, dash_table)")
+    # Dash 3.x CORRECT syntax: from dash import html, dcc, dash_table
+    from dash import html, dcc, dash_table
+    logger.warning("✅ Dash component libraries imported (dcc, html, dash_table) - Dash 3.x syntax")
     
     # === CALLBACKS & LAYOUT ===
     # CRITICAL: Trebuie setate ÎNAINTE de warmup pentru ca Dash să știe ce componente să înregistreze!
