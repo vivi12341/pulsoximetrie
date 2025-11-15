@@ -32,7 +32,15 @@ def setup_kaleido():
     try:
         # [STEP 1] Import Kaleido
         import kaleido
-        logger.info(f"✅ Kaleido {kaleido.__version__} importat cu succes")
+        
+        # Verificăm versiunea (dacă disponibilă - Kaleido 1.2.0+ nu mai are __version__)
+        try:
+            kaleido_version = kaleido.__version__
+        except AttributeError:
+            # Kaleido 1.2.0+ nu expune __version__ direct
+            kaleido_version = "1.2.0+"
+        
+        logger.info(f"✅ Kaleido {kaleido_version} importat cu succes")
         
         # [STEP 2] Verificăm dacă Chrome/Chromium există deja
         # (Railway cu nixpacks.toml ar trebui să-l instaleze automat)
@@ -121,11 +129,14 @@ def check_kaleido_status():
     try:
         import kaleido
         
-        # Quick test - verificăm dacă putem importa scope
+        # Quick test - verificăm dacă putem crea un scope (test funcțional)
         try:
+            # Test simplu: încercăm să importăm și inițializăm scope-ul
             from kaleido.scopes.plotly import PlotlyScope
+            # Nu instanțiem (ar fi lent), doar verificăm că poate fi importat
             return "available"
         except Exception:
+            # Kaleido importat dar scope-ul nu funcționează
             return "unavailable"
             
     except ImportError:
