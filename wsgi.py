@@ -40,9 +40,9 @@ def initialize_application():
     
     # === LOGGING ===
     from logger_setup import logger
-    logger.info("=" * 70)
-    logger.info("🏥 INIȚIALIZARE APLICAȚIE MEDICAL - STARTUP")
-    logger.info("=" * 70)
+    logger.warning("=" * 70)
+    logger.warning("🏥 INIȚIALIZARE APLICAȚIE MEDICAL - STARTUP")
+    logger.warning("=" * 70)
     
     # === DATABASE INIT ===
     database_url = os.getenv('DATABASE_URL')
@@ -73,7 +73,7 @@ def initialize_application():
     application.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
     application.config['PERMANENT_SESSION_LIFETIME'] = int(os.getenv('PERMANENT_SESSION_LIFETIME', '30')) * 24 * 3600
     
-    logger.info(f"📊 Database configured: {urlparse(database_url).hostname}")
+    logger.warning(f"📊 Database configured: {urlparse(database_url).hostname}")
     
     # === AUTH INIT (CRITICAL: trebuie făcut ÎNAINTE de orice request!) ===
     from auth.models import db, init_db, create_admin_user
@@ -86,7 +86,7 @@ def initialize_application():
     init_auth_manager(app)
     init_auth_routes(app)
     
-    logger.info("✅ Database & Authentication initialized")
+    logger.warning("✅ Database & Authentication initialized")
     
     # === CALLBACKS & LAYOUT ===
     from app_layout_new import layout
@@ -96,7 +96,7 @@ def initialize_application():
     
     app.layout = layout
     
-    logger.info(f"✅ Layout & Callbacks registered: {len(app.callback_map)} callbacks")
+    logger.warning(f"✅ Layout & Callbacks registered: {len(app.callback_map)} callbacks")
     
     # === ADMIN USER ===
     with application.app_context():
@@ -110,9 +110,9 @@ def initialize_application():
             
             if not existing_admin:
                 create_admin_user(admin_email, admin_password, admin_name)
-                logger.info(f"🔑 Admin user created: {admin_email}")
+                logger.warning(f"🔑 Admin user created: {admin_email}")
             else:
-                logger.info(f"✅ Admin user exists: {admin_email}")
+                logger.warning(f"✅ Admin user exists: {admin_email}")
         except Exception as e:
             logger.error(f"❌ Admin user creation failed: {e}", exc_info=True)
     
@@ -120,9 +120,9 @@ def initialize_application():
     from auth.rate_limiter import schedule_cleanup_task
     schedule_cleanup_task()
     
-    logger.info("=" * 70)
-    logger.info("✅ APPLICATION FULLY INITIALIZED - Ready for requests!")
-    logger.info("=" * 70)
+    logger.warning("=" * 70)
+    logger.warning("✅ APPLICATION FULLY INITIALIZED - Ready for requests!")
+    logger.warning("=" * 70)
 
 
 # === EXECUTĂ INIȚIALIZAREA LA IMPORT (STARTUP) ===
