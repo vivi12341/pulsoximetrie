@@ -178,160 +178,24 @@ def create_login_prompt():
 # CALLBACK ROUTING - DETECTARE TOKEN ȘI AFIȘARE LAYOUT
 # ==============================================================================
 
-@app.callback(
-    [Output('dynamic-layout-container', 'children'),
-     Output('url-token-detected', 'data')],
-    [Input('url', 'pathname'),
-     Input('url', 'search'),
-     Input('force-routing-trigger', 'n_intervals')],  # FIX: Force trigger la încărcare!
-    prevent_initial_call=False  # EXPLICIT: callback trebuie să se execute la prima încărcare!
-)
-def route_layout_based_on_url(pathname, search, n_intervals):
-    """
-    [DIAGNOSTIC v6 - 40 LOG-URI + FORCE TRIGGER]
-    Detectează dacă URL conține token și afișează layout-ul corespunzător.
-    FORCE TRIGGER: dcc.Interval execută callback-ul automat la 100ms după încărcare!
-    """
-    # === LOG 1-5: ENTRY POINT ===
-    logger.warning(f"[LOG 1/40] 🔵🔵🔵 CALLBACK START - pathname={pathname}")
-    logger.warning(f"[LOG 2/40] 🔵 Search param: {search}")
-    logger.warning(f"[LOG 3/40] 🔵 Callback trigger: n_intervals={n_intervals} (force trigger!)")
-    
-    import sys
-    logger.warning(f"[LOG 4/40] 🔵 Python version: {sys.version}")
-    logger.warning(f"[LOG 5/40] 🔵 Callback function ID: route_layout_based_on_url")
-    
-    # === LOG 6-10: IMPORT PHASE ===
-    logger.warning(f"[LOG 6/40] 📦 Starting imports...")
-    
-    try:
-        logger.warning(f"[LOG 7/40] 📦 Attempting to import app_layout_new...")
-        from app_layout_new import medical_layout, patient_layout
-        logger.warning(f"[LOG 8/40] ✅ app_layout_new imported successfully")
-        
-        logger.warning(f"[LOG 9/40] 📦 Attempting to import flask_login...")
-        from flask_login import current_user
-        logger.warning(f"[LOG 10/40] ✅ flask_login imported successfully")
-        
-        # Verificare tipuri importate
-        logger.warning(f"[LOG 11/40] 🔍 medical_layout type: {type(medical_layout)}")
-        logger.warning(f"[LOG 12/40] 🔍 patient_layout type: {type(patient_layout)}")
-        logger.warning(f"[LOG 13/40] 🔍 current_user type: {type(current_user)}")
-        
-    except ImportError as import_err:
-        import traceback
-        logger.critical(f"[LOG 14/40] ❌ ImportError: {import_err}")
-        logger.critical(f"[LOG 15/40] ❌ Import traceback: {traceback.format_exc()}")
-        return html.Div([
-            html.H1("⚠️ Import Error", style={'color': 'red', 'textAlign': 'center', 'marginTop': '100px'}),
-            html.P(f"Cannot import: {str(import_err)}", style={'textAlign': 'center'})
-        ]), None
-    except Exception as import_err:
-        logger.critical(f"[LOG 16/40] ❌ Unexpected import error: {import_err}")
-        logger.critical(f"[LOG 17/40] ❌ Error type: {type(import_err).__name__}")
-        return html.Div([
-            html.H1("⚠️ Eroare Import", style={'color': 'red', 'textAlign': 'center', 'marginTop': '100px'}),
-            html.P(f"Nu pot încărca interfața: {str(import_err)}", style={'textAlign': 'center'})
-        ]), None
-    
-    # === LOG 18-25: AUTHENTICATION CHECK ===
-    logger.warning(f"[LOG 18/40] 🔐 Checking authentication status...")
-    
-    try:
-        logger.warning(f"[LOG 19/40] 🔐 Accessing current_user.is_authenticated...")
-        is_auth = current_user.is_authenticated
-        logger.warning(f"[LOG 20/40] ✅ Authentication status retrieved: {is_auth}")
-        
-        # Log extra info despre current_user
-        try:
-            logger.warning(f"[LOG 21/40] 🔍 current_user.is_anonymous: {current_user.is_anonymous}")
-            logger.warning(f"[LOG 22/40] 🔍 current_user.is_active: {current_user.is_active if hasattr(current_user, 'is_active') else 'N/A'}")
-            logger.warning(f"[LOG 23/40] 🔍 current_user has email: {hasattr(current_user, 'email')}")
-        except Exception as detail_err:
-            logger.warning(f"[LOG 24/40] ⚠️ Cannot get current_user details: {detail_err}")
-            
-    except AttributeError as attr_err:
-        logger.warning(f"[LOG 25/40] ⚠️ AttributeError accessing current_user: {attr_err}")
-        is_auth = False
-    except Exception as user_err:
-        logger.warning(f"[LOG 26/40] ⚠️ Exception accessing current_user: {user_err}")
-        logger.warning(f"[LOG 27/40] ⚠️ Error type: {type(user_err).__name__}")
-        is_auth = False
-    
-    logger.warning(f"[LOG 28/40] 🔐 Final is_auth value: {is_auth}")
-    
-    # === LOG 29-35: TOKEN DETECTION ===
-    logger.warning(f"[LOG 29/40] 🎫 Checking for token in URL...")
-    logger.warning(f"[LOG 30/40] 🎫 Search is None: {search is None}")
-    logger.warning(f"[LOG 31/40] 🎫 Search contains 'token=': {'token=' in search if search else False}")
-    
-    # Verificăm dacă există token în URL (query string search)
-    if search and 'token=' in search:
-        logger.warning(f"[LOG 32/40] 🎫 TOKEN DETECTED in URL!")
-        # Extragem token-ul din URL
-        try:
-            token = search.split('token=')[1].split('&')[0]
-            logger.warning(f"[LOG 33/40] 🎫 Token extracted: {token[:8]}...")
-            logger.warning(f"[LOG 34/40] 🎫 Token length: {len(token)}")
-            logger.warning(f"[LOG 35/40] 🎫 Validating token...")
-            
-            # Validăm token-ul
-            if patient_links.validate_token(token):
-                logger.warning(f"[LOG 36/40] ✅ Token VALID → returning patient_layout")
-                logger.warning(f"[LOG 37/40] 📊 patient_layout type before return: {type(patient_layout)}")
-                logger.warning(f"[LOG 38/40] 🔚 CALLBACK END (patient path) - SUCCESS")
-                return patient_layout, token
-            else:
-                logger.warning(f"[LOG 39/40] ❌ Token INVALID → returning error page")
-                logger.warning(f"[LOG 40/40] 🔚 CALLBACK END (invalid token)")
-                return html.Div([
-                    html.H2("❌ Acces Interzis", style={'color': 'red', 'textAlign': 'center', 'marginTop': '50px'}),
-                    html.P("Token-ul este invalid sau a expirat. Contactați medicul dumneavoastră.", 
-                           style={'textAlign': 'center', 'color': '#666'})
-                ], style={'padding': '50px'}), None
-                
-        except Exception as e:
-            logger.critical(f"[LOG 35A/40] ❌ Exception extracting token: {e}", exc_info=True)
-            # Eroare la parsare token → verificăm autentificare pentru acces medic
-            if not is_auth:
-                logger.warning("[LOG 36A/40] ⚠️ Token error + not authenticated → login prompt")
-                return create_login_prompt(), None
-            logger.warning("[LOG 37A/40] ⚠️ Token error but authenticated → medical_layout")
-            return medical_layout, None
-    
-    # === LOG 38-40: NO TOKEN PATH (MEDICAL) ===
-    logger.warning(f"[LOG 38/40] 🏥 NO TOKEN in URL → Medical path")
-    logger.warning(f"[LOG 39/40] 🏥 is_auth = {is_auth}")
-    
-    # Fără token → Layout pentru medici (NECESITĂ AUTENTIFICARE!)
-    if not is_auth:
-        logger.warning("[LOG 40/40] 🔐 NOT AUTHENTICATED → Creating login prompt")
-        logger.warning("[LOG 41/40] 🔐 Calling create_login_prompt()...")
-        
-        try:
-            login_prompt_layout = create_login_prompt()
-            logger.warning("[LOG 42/40] ✅ Login prompt created successfully")
-            logger.warning(f"[LOG 43/40] 📊 login_prompt type: {type(login_prompt_layout)}")
-            logger.warning(f"[LOG 44/40] 🔚 CALLBACK END (login prompt path) - RETURNING NOW")
-            return login_prompt_layout, None
-        except Exception as login_err:
-            logger.critical(f"[LOG 45/40] ❌ ERROR creating login prompt: {login_err}", exc_info=True)
-            return html.Div([
-                html.H1("Error", style={'textAlign': 'center', 'color': 'red'}),
-                html.P(f"Cannot create login: {str(login_err)}", style={'textAlign': 'center'})
-            ]), None
-    
-    # Utilizator autentificat → afișăm layout medical
-    logger.warning("[LOG 46/40] 🏥 AUTHENTICATED → returning medical_layout")
-    try:
-        user_email = current_user.email if hasattr(current_user, 'email') else "unknown"
-        logger.warning(f"[LOG 47/40] 🏥 User email: {user_email}")
-    except Exception as email_err:
-        logger.warning(f"[LOG 48/40] ⚠️ Cannot get email: {email_err}")
-    
-    logger.warning(f"[LOG 49/40] 📊 medical_layout type before return: {type(medical_layout)}")
-    logger.warning(f"[LOG 50/40] 🔚 CALLBACK END (medical path) - RETURNING NOW")
-    return medical_layout, None
+# ==============================================================================
+# [SOLUȚIA A IMPLEMENTATĂ] Callback routing ȘTERS
+# ------------------------------------------------------------------------------
+# MOTIVAȚIE: Conflict cu get_layout() din app_layout_new.py care face routing
+# DIRECT la nivel de funcție (Dash 3.x best practice).
+# 
+# Callback-ul route_layout_based_on_url() cauza:
+# - Pagină "Loading..." infinită (dynamic-layout-container lipsea din layout)
+# - Conflict între 2 sisteme de routing (funcție vs callback)
+# 
+# SOLUȚIE: get_layout() face routing DIRECT:
+# - Token în URL → patient_layout
+# - Autentificat → medical_layout  
+# - Neautentificat → create_login_prompt()
+# 
+# Callback-urile care depindeau de url-token-detected au fost modificate să
+# citească token-ul DIRECT din Flask request.args.get('token')
+# ==============================================================================
 
 
 # ==============================================================================
@@ -478,12 +342,16 @@ def format_recording_date_ro(recording_date, start_time, end_time):
 @app.callback(
     [Output('patient-data-view', 'children'),
      Output('patient-main-graph', 'figure')],
-    [Input('url-token-detected', 'data')]
+    [Input('force-routing-trigger', 'n_intervals')]
 )
-def load_patient_data_from_token(token):
+def load_patient_data_from_token(n_intervals):
     """
-    Încarcă automat datele pacientului când token-ul este detectat în URL.
+    [SOLUȚIA A] Încarcă automat datele pacientului când token-ul este detectat în URL.
+    Token-ul se citește DIRECT din Flask request.args (nu mai depinde de callback routing).
     """
+    from flask import request
+    token = request.args.get('token')
+    
     if not token:
         return no_update, no_update
     
@@ -3672,14 +3540,17 @@ def load_settings_on_tab_open(tab_value):
 @app.callback(
     [Output('patient-logo-container', 'children'),
      Output('patient-footer-container', 'children')],
-    [Input('url-token-detected', 'data')]
+    [Input('force-routing-trigger', 'n_intervals')]
 )
-def display_doctor_branding_for_patient(token):
+def display_doctor_branding_for_patient(n_intervals):
     """
-    Afișează logo-ul și footer-ul medicului pe pagina pacientului.
+    [SOLUȚIA A] Afișează logo-ul și footer-ul medicului pe pagina pacientului.
+    Token-ul se citește DIRECT din Flask request.args.
     """
+    from flask import request
     import doctor_settings
     
+    token = request.args.get('token')
     if not token:
         return None, None
     
@@ -3738,12 +3609,12 @@ def display_doctor_branding_for_patient(token):
 
 @app.callback(
     Output('medical-footer-container', 'children'),
-    [Input('url-token-detected', 'data')]
+    [Input('force-routing-trigger', 'n_intervals')]
 )
-def display_footer_for_medical_pages(token):
+def display_footer_for_medical_pages(n_intervals):
     """
-    Afișează footer-ul medicului pe paginile medicale (admin, batch, etc.).
-    Se declanșează la încărcarea paginii (indiferent de prezența token-ului).
+    [SOLUȚIA A] Afișează footer-ul medicului pe paginile medicale (admin, batch, etc.).
+    Se declanșează la încărcarea paginii (trigger din force-routing-trigger Interval).
     """
     import doctor_settings
     

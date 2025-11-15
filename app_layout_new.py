@@ -355,15 +355,13 @@ medical_layout = html.Div([
                                 dcc.Store(id='admin-batch-session-id', data=None),
                                 
                                 # === INTERVAL PENTRU FORCE ROUTING TRIGGER ===
+                                # [SOLUȚIA A] Folosit pentru a declansa callback-uri la încărcare pagină
                                 dcc.Interval(
                                     id='force-routing-trigger',
                                     interval=100,  # 100ms - trigger la încărcare
                                     n_intervals=0,
                                     max_intervals=1  # Rulează o singură dată
-                                ),
-                                
-                                # === STORE PENTRU TOKEN DETECTARE (Pacienți) ===
-                                dcc.Store(id='url-token-detected', data=None)
+                                )
                             ]
                         )
                     ],
