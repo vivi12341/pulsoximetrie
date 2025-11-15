@@ -71,13 +71,12 @@ try:
     logger.warning("[APP_INSTANCE 5.1/10] Creating dummy components...")
     dummy_html = html.Div("Force registration")
     dummy_dcc = dcc.Store(id='dummy-registration-store')
-    dummy_table = dash_table.DataTable(id='dummy-registration-table', data=[])
+    # REMOVED: dummy_table - cauzează 500 error pentru dash_table bundle
     
-    # Pasul 2: Setăm layout DUMMY cu TOATE componentele
+    # Pasul 2: Setăm layout DUMMY cu componentele esențiale
     dummy_layout = html.Div([
         dummy_html,
-        dummy_dcc,
-        dummy_table
+        dummy_dcc
     ])
     
     # CRITICAL: Setăm layout IMEDIAT pentru a triggera înregistrarea

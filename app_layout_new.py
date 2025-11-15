@@ -19,8 +19,8 @@ import config
 
 def get_layout():
     """
-    Returnează layout-ul corespunzător bazat pe context (medic sau pacient).
-    Această funcție se execută la fiecare încărcare pagină.
+    [FIX v2] Returnează layout wrapper cu dcc.Location (necesar pentru callback-uri).
+    Callback-urile update_auth_header și altele depind de url pathname/search.
     """
     from flask import request
     from flask_login import current_user
@@ -32,28 +32,33 @@ def get_layout():
     
     logger.warning(f"[LAYOUT FUNCTION] Called for path: {request.path}, token: {token is not None}")
     
+    # Determinăm layout-ul bazat pe context
     if token:
         # Validare token pacient
         if patient_links.validate_token(token):
             logger.warning(f"[LAYOUT FUNCTION] Valid patient token → returning patient_layout")
-            return patient_layout
+            content_layout = patient_layout
         else:
             logger.warning(f"[LAYOUT FUNCTION] Invalid token → returning error")
-            return html.Div([
+            content_layout = html.Div([
                 html.H2("❌ Acces Interzis", style={'color': 'red', 'textAlign': 'center', 'marginTop': '50px'}),
                 html.P("Token-ul este invalid sau a expirat. Contactați medicul dumneavoastră.", 
                        style={'textAlign': 'center', 'color': '#666'})
             ], style={'padding': '50px'})
-    
-    # Fără token → verificăm autentificarea pentru medici
-    if current_user.is_authenticated:
+    elif current_user.is_authenticated:
         logger.warning(f"[LAYOUT FUNCTION] Authenticated user → returning medical_layout")
-        return medical_layout
+        content_layout = medical_layout
     else:
         logger.warning(f"[LAYOUT FUNCTION] NOT authenticated → returning login prompt")
         # Import login prompt
         from callbacks_medical import create_login_prompt
-        return create_login_prompt()
+        content_layout = create_login_prompt()
+    
+    # WRAPPER: Adaugă dcc.Location pentru callback-uri care depind de url
+    return html.Div([
+        dcc.Location(id='url', refresh=False),  # Necesar pentru update_auth_header și altele
+        content_layout
+    ])
 
 # Backward compatibility: păstrăm 'layout' pentru import-uri existente
 layout = get_layout
