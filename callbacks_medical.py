@@ -330,37 +330,6 @@ def route_layout_based_on_url(pathname, search):
     logger.warning(f"[LOG 49/40] 📊 medical_layout type before return: {type(medical_layout)}")
     logger.warning(f"[LOG 50/40] 🔚 CALLBACK END (medical path) - RETURNING NOW")
     return medical_layout, None
-        
-    except Exception as e:
-        # === LOG 51-60: EXCEPTION HANDLER ===
-        logger.critical(f"[LOG 51/60] ❌❌❌ EXCEPTION IN CALLBACK: {e}")
-        logger.critical(f"[LOG 52/60] ❌ Exception type: {type(e).__name__}")
-        logger.critical(f"[LOG 53/60] ❌ Exception args: {e.args}")
-        logger.critical(f"[LOG 54/60] ❌ Pathname: {pathname}")
-        logger.critical(f"[LOG 55/60] ❌ Search: {search}")
-        
-        # Full traceback
-        import traceback
-        tb = traceback.format_exc()
-        logger.critical(f"[LOG 56/60] ❌ Full traceback:\n{tb}")
-        
-        # Context info
-        logger.critical(f"[LOG 57/60] ❌ is_auth defined: {'is_auth' in locals()}")
-        logger.critical(f"[LOG 58/60] ❌ medical_layout defined: {'medical_layout' in locals()}")
-        logger.critical(f"[LOG 59/60] ❌ patient_layout defined: {'patient_layout' in locals()}")
-        
-        error_layout = html.Div([
-            html.H1("⚠️ Eroare Callback", style={'color': 'red', 'textAlign': 'center', 'marginTop': '100px'}),
-            html.P(f"Aplicația nu s-a putut inițializa.", 
-                   style={'textAlign': 'center', 'fontSize': '18px', 'color': '#666'}),
-            html.P(f"Eroare: {str(e)}", 
-                   style={'textAlign': 'center', 'fontSize': '14px', 'color': '#999', 'fontFamily': 'monospace'}),
-            html.P(f"Tip: {type(e).__name__}", 
-                   style={'textAlign': 'center', 'fontSize': '12px', 'color': '#ccc', 'fontFamily': 'monospace'})
-        ], style={'padding': '50px'})
-        
-        logger.critical(f"[LOG 60/60] 🔚 CALLBACK END (exception path) - Returning error layout")
-        return error_layout, None
 
 
 # ==============================================================================
