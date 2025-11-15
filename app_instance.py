@@ -63,17 +63,18 @@ app.title = "Analizator Pulsoximetrie"
 logger.warning("[APP_INSTANCE 5/10] 🔧 Forcing Dash library registration...")
 
 try:
-    # Creăm layout DUMMY cu TOATE componentele Dash pentru a forța înregistrarea
-    # Acest layout NU va fi văzut de utilizatori (va fi suprascris în wsgi.py)
+    # [FIX v2] Creăm layout DUMMY MINIMAL fără DataTable
+    # DataTable poate avea callback-uri implicite care cauzează "missing Inputs" warning
+    # Dash înregistrează bibliotecile când vede componente în layout (html, dcc suficient!)
     dummy_layout = html.Div([
         html.Div("Dummy"),  # html component → înregistrează dash.html
         dcc.Store(id='dummy-store'),  # dcc component → înregistrează dash.dcc
-        dash_table.DataTable(id='dummy-table', data=[])  # DataTable → înregistrează dash.dash_table
+        dcc.Upload(id='dummy-upload')  # Upload → înregistrează dash.dcc (încarcă dash_table implicit)
     ])
     
     # Setăm layout-ul DUMMY temporar (va fi suprascris în wsgi.py cu layout-ul real)
     app.layout = dummy_layout
-    logger.warning("[APP_INSTANCE 6/10] ✅ Dummy layout set to force library registration")
+    logger.warning("[APP_INSTANCE 6/10] ✅ Dummy layout set (MINIMAL - no DataTable to avoid callback conflicts)")
     
     # Verificăm că bibliotecile sunt înregistrate
     # Dash 3.x stochează bibliotecile înregistrate în app._registered_paths
