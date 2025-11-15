@@ -931,6 +931,18 @@ def admin_run_batch_processing(n_clicks, batch_mode, input_folder, uploaded_file
     if n_clicks == 0:
         return no_update, no_update, no_update, no_update, no_update, no_update
     
+    # [DEFENSIVE DEBUG] Logging extensiv pentru troubleshooting
+    logger.info("=" * 80)
+    logger.info("🚀 START BATCH PROCESSING - Verificare parametri...")
+    logger.info(f"📊 Mod selectat: {batch_mode}")
+    logger.info(f"📁 Input folder: {input_folder}")
+    logger.info(f"📁 Output folder: {output_folder}")
+    logger.info(f"⏱️ Window minutes: {window_minutes}")
+    logger.info(f"📦 Uploaded files store: {uploaded_files}")
+    logger.info(f"📦 Uploaded files type: {type(uploaded_files)}")
+    logger.info(f"📦 Uploaded files length: {len(uploaded_files) if uploaded_files else 0}")
+    logger.info("=" * 80)
+    
     # === VALIDARE ÎN FUNCȚIE DE MOD ===
     if batch_mode == 'local':
         # Mod local: verificăm folder
@@ -941,15 +953,55 @@ def admin_run_batch_processing(n_clicks, batch_mode, input_folder, uploaded_file
             ), no_update, no_update, no_update, no_update, no_update
         
         processing_folder = input_folder
-        logger.info(f"🚀 Procesare LOCALĂ din folder: {input_folder}")
+        logger.info(f"✅ Procesare LOCALĂ din folder: {input_folder}")
         
     else:  # batch_mode == 'upload'
-        # Mod upload: verificăm fișiere uploadate
-        if not uploaded_files or len(uploaded_files) == 0:
-            return html.Div(
-                "⚠️ Încărcați fișiere CSV + PDF înainte de procesare!",
-                style={'padding': '15px', 'backgroundColor': '#fff3cd', 'border': '1px solid #ffc107', 'borderRadius': '5px'}
-            ), no_update, no_update, no_update, no_update, no_update
+        # [FIX DEFENSIVE] Verificare detaliată fișiere uploadate
+        logger.info(f"🔍 Mod UPLOAD - Verificare fișiere uploadate...")
+        
+        if not uploaded_files:
+            logger.error("❌ Store 'uploaded_files' este None/False!")
+            logger.error(f"   Type: {type(uploaded_files)}")
+            logger.error(f"   Value: {uploaded_files}")
+            return html.Div([
+                html.H4("⚠️ Niciun fișier detectat în store!", style={'color': '#e67e22', 'marginBottom': '10px'}),
+                html.P("Încărcați fișiere CSV + PDF folosind butonul de upload de mai sus.", style={'marginBottom': '10px'}),
+                html.Div([
+                    html.P("DEBUG INFO:", style={'fontWeight': 'bold', 'marginBottom': '5px'}),
+                    html.P(f"• uploaded_files = {uploaded_files}", style={'fontSize': '11px', 'fontFamily': 'monospace', 'marginBottom': '3px'}),
+                    html.P(f"• type = {type(uploaded_files)}", style={'fontSize': '11px', 'fontFamily': 'monospace', 'marginBottom': '3px'}),
+                    html.P("• Possible cause: Store not initialized or reset", style={'fontSize': '11px', 'fontFamily': 'monospace', 'color': '#e74c3c'})
+                ], style={'backgroundColor': '#ecf0f1', 'padding': '10px', 'borderRadius': '5px', 'marginTop': '10px'})
+            ], style={'padding': '15px', 'backgroundColor': '#fff3cd', 'border': '1px solid #ffc107', 'borderRadius': '5px'}), \
+            no_update, no_update, no_update, no_update, no_update
+        
+        if not isinstance(uploaded_files, list):
+            logger.error(f"❌ Store 'uploaded_files' NU este listă! Type: {type(uploaded_files)}")
+            return html.Div([
+                html.H4("⚠️ Eroare format store fișiere!", style={'color': '#e67e22', 'marginBottom': '10px'}),
+                html.P(f"Store type: {type(uploaded_files)} (expected: list)", 
+                      style={'fontSize': '11px', 'color': '#95a5a6', 'fontFamily': 'monospace'})
+            ], style={'padding': '15px', 'backgroundColor': '#fff3cd', 'border': '1px solid #ffc107', 'borderRadius': '5px'}), \
+            no_update, no_update, no_update, no_update, no_update
+        
+        if len(uploaded_files) == 0:
+            logger.error("❌ Store 'uploaded_files' este listă GOALĂ!")
+            return html.Div([
+                html.H4("⚠️ Listă fișiere goală!", style={'color': '#e67e22', 'marginBottom': '10px'}),
+                html.P("Fișierele au fost șterse sau store-ul a fost resetat.", style={'marginBottom': '10px'}),
+                html.P("Încărcați din nou fișiere CSV + PDF.", style={'marginBottom': '10px'}),
+                html.Div([
+                    html.P("DEBUG INFO:", style={'fontWeight': 'bold', 'marginBottom': '5px'}),
+                    html.P(f"• uploaded_files = []", style={'fontSize': '11px', 'fontFamily': 'monospace', 'marginBottom': '3px'}),
+                    html.P(f"• length = 0", style={'fontSize': '11px', 'fontFamily': 'monospace', 'marginBottom': '3px'})
+                ], style={'backgroundColor': '#ecf0f1', 'padding': '10px', 'borderRadius': '5px', 'marginTop': '10px'})
+            ], style={'padding': '15px', 'backgroundColor': '#fff3cd', 'border': '1px solid #ffc107', 'borderRadius': '5px'}), \
+            no_update, no_update, no_update, no_update, no_update
+        
+        # [SUCCESS] Fișiere detectate
+        logger.info(f"✅ Fișiere detectate în store: {len(uploaded_files)}")
+        for idx, file_data in enumerate(uploaded_files):
+            logger.info(f"   [{idx}] {file_data.get('filename', 'N/A')} ({file_data.get('type', 'N/A')}) - {file_data.get('size', 0)} bytes")
         
         # Salvăm fișierele uploadate într-un folder temporar
         import tempfile
