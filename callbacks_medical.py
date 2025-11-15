@@ -420,38 +420,106 @@ def load_patient_data_from_token(token):
         )
         
         # === ÎNCĂRCĂM CSV-UL ȘI DATELE COMPLETE ===
-        patient_folder = patient_links.get_patient_storage_path(token)
-        logger.info(f"📂 Folder pacient: {patient_folder}")
-        logger.info(f"📊 Verificare existență folder: {os.path.exists(patient_folder)}")
-        
-        csv_path = None
+        csv_content = None
+        csv_filename = "Date Pulsoximetrie"
         df = None
         
-        # Căutăm CSV-ul în folderul pacientului
-        csv_folder = os.path.join(patient_folder, "csvs")
-        logger.info(f"📁 Verificare folder CSV: {csv_folder} → Există: {os.path.exists(csv_folder)}")
+        # ÎNCERCĂM SĂ ÎNCĂRCĂM CSV DIN RECORDINGS METADATA (R2 SAU LOCAL)
+        recordings = patient_links.get_patient_recordings(token)
         
-        if os.path.exists(csv_folder):
-            csv_files = [f for f in os.listdir(csv_folder) if f.endswith('.csv')]
-            logger.info(f"📄 CSV-uri găsite: {len(csv_files)} fișiere → {csv_files}")
+        if recordings and len(recordings) > 0:
+            # Folosim prima înregistrare (cea mai recentă)
+            recording = recordings[-1]  # Ultima adăugată
+            csv_filename = recording.get('original_filename', 'Date Pulsoximetrie')
+            storage_type = recording.get('storage_type', 'unknown')
             
-            if csv_files:
-                csv_path = os.path.join(csv_folder, csv_files[0])
-                logger.info(f"✅ CSV selectat: {csv_path}")
+            logger.info(f"📊 Încărcare CSV din recording (storage: {storage_type})")
+            
+            # PRIORITATE 1: Încărcăm din R2 (dacă e disponibil)
+            if storage_type == 'r2' and recording.get('r2_url'):
+                logger.info(f"☁️ Încărcare CSV din Cloudflare R2...")
+                try:
+                    from storage_service import download_patient_file
+                    
+                    # Extragem filename din r2_url sau csv_path
+                    csv_path_info = recording.get('csv_path', '')
+                    if 'csvs/' in csv_path_info:
+                        r2_filename = csv_path_info.split('csvs/')[-1]
+                    else:
+                        r2_filename = recording.get('original_filename', 'unknown.csv')
+                    
+                    logger.info(f"📥 Download R2: {token[:8]}... / csvs / {r2_filename}")
+                    csv_content = download_patient_file(token, 'csvs', r2_filename)
+                    
+                    if csv_content:
+                        logger.info(f"✅ CSV descărcat din R2: {len(csv_content)} bytes")
+                    else:
+                        logger.warning(f"⚠️ Download R2 eșuat, încercăm fallback LOCAL")
+                        storage_type = 'local'  # Fallback
+                except ImportError:
+                    logger.warning("⚠️ storage_service nu e disponibil, încercăm LOCAL")
+                    storage_type = 'local'
+                except Exception as e:
+                    logger.error(f"❌ Eroare download R2: {e}", exc_info=True)
+                    storage_type = 'local'  # Fallback
+            
+            # FALLBACK: Încărcăm din LOCAL (dacă R2 a eșuat sau nu e configurat)
+            if storage_type == 'local' and not csv_content:
+                logger.info(f"💾 Încărcare CSV din stocare LOCALĂ...")
+                csv_path = recording.get('csv_path')
                 
-                # Citim fișierul ca bytes
-                with open(csv_path, 'rb') as f:
-                    csv_content = f.read()
+                if csv_path and os.path.exists(csv_path):
+                    try:
+                        with open(csv_path, 'rb') as f:
+                            csv_content = f.read()
+                        logger.info(f"✅ CSV citit LOCAL: {len(csv_content)} bytes")
+                    except Exception as e:
+                        logger.error(f"❌ Eroare citire CSV local: {e}", exc_info=True)
+                else:
+                    logger.warning(f"⚠️ CSV LOCAL nu există: {csv_path}")
+        
+        # FALLBACK FINAL: Căutăm în old-style folder structure (compatibilitate backwards)
+        if not csv_content:
+            logger.info("🔄 Fallback: Căutare CSV în structura veche (patient_data/token/csvs/)")
+            patient_folder = patient_links.get_patient_storage_path(token)
+            csv_folder = os.path.join(patient_folder, "csvs")
+            
+            if os.path.exists(csv_folder):
+                csv_files = [f for f in os.listdir(csv_folder) if f.endswith('.csv')]
                 
-                logger.info(f"📊 CSV citit: {len(csv_content)} bytes")
-                df = parse_csv_data(csv_content, csv_files[0])
-                logger.info(f"✅ DataFrame creat: {len(df) if df is not None else 0} rânduri")
+                if csv_files:
+                    csv_path = os.path.join(csv_folder, csv_files[0])
+                    logger.info(f"✅ CSV găsit în structura veche: {csv_path}")
+                    
+                    try:
+                        with open(csv_path, 'rb') as f:
+                            csv_content = f.read()
+                        csv_filename = csv_files[0]
+                        logger.info(f"✅ CSV citit din fallback: {len(csv_content)} bytes")
+                    except Exception as e:
+                        logger.error(f"❌ Eroare citire fallback CSV: {e}", exc_info=True)
+                else:
+                    logger.warning(f"⚠️ Niciun CSV găsit în {csv_folder}")
+            else:
+                logger.warning(f"⚠️ Folder CSV nu există: {csv_folder}")
+        
+        # PARSĂM CSV-ul (dacă l-am încărcat)
+        if csv_content:
+            logger.info(f"📊 Parsare CSV: {len(csv_content)} bytes")
+            df = parse_csv_data(csv_content, csv_filename)
+            
+            if df is not None:
+                logger.info(f"✅ DataFrame creat: {len(df)} rânduri")
+            else:
+                logger.error("❌ Parsare CSV eșuată - DataFrame None")
         else:
-            logger.warning(f"⚠️ Folder CSV nu există: {csv_folder}")
+            logger.error(f"❌ NU S-A PUTUT ÎNCĂRCA CSV pentru token {token[:8]}... din NICIO SURSĂ!")
+            logger.error(f"   - R2: {'Configurat' if os.getenv('R2_ENABLED') == 'True' else 'NU configurat'}")
+            logger.error(f"   - Recordings metadata: {len(recordings) if recordings else 0} înregistrări")
         
         # Generăm figura
         if df is not None and not df.empty:
-            fig = create_plot(df, file_name=os.path.basename(csv_path) if csv_path else "Date Pulsoximetrie")
+            fig = create_plot(df, file_name=csv_filename)
             
             # Aplicăm logo-ul pe figura interactivă (dacă este configurat)
             try:
@@ -467,7 +535,12 @@ def load_patient_data_from_token(token):
                 yaxis_title="SpO2 (%)",
                 height=500
             )
-            logger.warning(f"Nu s-a găsit CSV pentru token {token[:8]}...")
+            
+            # Mesaj detaliat pentru debugging
+            if not recordings or len(recordings) == 0:
+                logger.warning(f"❌ Nicio înregistrare găsită pentru token {token[:8]}...")
+            else:
+                logger.warning(f"❌ CSV lipsă pentru token {token[:8]}... (recordings: {len(recordings)})")
         
         # === CONSTRUIM AFIȘAREA COMPLETĂ ===
         content_sections = []

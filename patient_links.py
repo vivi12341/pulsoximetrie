@@ -325,21 +325,56 @@ def add_recording(token: str, csv_filename: str, csv_content: bytes,
         bool: True dacă adăugarea a reușit
     """
     try:
+        # Import R2 storage service
+        try:
+            from storage_service import upload_patient_csv, r2_client
+            r2_available = r2_client.enabled
+        except ImportError:
+            logger.warning("⚠️ storage_service nu e disponibil - folosim stocare LOCALĂ (EPHEMERAL pe Railway!)")
+            r2_available = False
+        
         patient_folder = os.path.join(PATIENT_DATA_DIR, token)
         
         # Generăm un ID unic pentru înregistrare
         recording_id = str(uuid.uuid4())[:8]
         
-        # Salvăm CSV-ul original
-        csv_path = os.path.join(patient_folder, f"recording_{recording_id}.csv")
-        with open(csv_path, 'wb') as f:
-            f.write(csv_content)
+        # PRIORITATE 1: Încercăm să salvăm în R2 (PERSISTENT)
+        csv_path = None
+        r2_url = None
+        
+        if r2_available:
+            logger.info(f"☁️ Salvare CSV în Cloudflare R2 pentru {token[:8]}...")
+            try:
+                # Salvăm în R2 cu nume structurat
+                r2_filename = f"recording_{recording_id}_{csv_filename}"
+                r2_url = upload_patient_csv(token, csv_content, r2_filename)
+                
+                if r2_url:
+                    logger.info(f"✅ CSV salvat în R2: {r2_url}")
+                    csv_path = f"r2://{token}/csvs/{r2_filename}"  # Path virtual pentru referință
+                else:
+                    logger.warning(f"⚠️ Upload R2 eșuat, folosim fallback LOCAL")
+                    r2_available = False  # Fallback la local
+            except Exception as e:
+                logger.error(f"❌ Eroare upload R2: {e} - folosim fallback LOCAL", exc_info=True)
+                r2_available = False
+        
+        # FALLBACK: Salvăm LOCAL (EPHEMERAL pe Railway!)
+        if not r2_available or not r2_url:
+            logger.warning(f"💾 Salvare CSV LOCAL (EPHEMERAL - va dispărea la redeploy Railway!)")
+            os.makedirs(patient_folder, exist_ok=True)
+            csv_path = os.path.join(patient_folder, f"recording_{recording_id}.csv")
+            with open(csv_path, 'wb') as f:
+                f.write(csv_content)
+            logger.info(f"⚠️ CSV salvat LOCAL: {csv_path} (TEMPORARY!)")
         
         # Creăm metadata înregistrării
         recording_metadata = {
             "id": recording_id,
             "original_filename": csv_filename,
             "csv_path": csv_path,
+            "r2_url": r2_url,  # URL R2 dacă disponibil
+            "storage_type": "r2" if r2_available and r2_url else "local",
             "recording_date": recording_date,
             "start_time": start_time,
             "end_time": end_time,
@@ -356,7 +391,8 @@ def add_recording(token: str, csv_filename: str, csv_content: bytes,
         recordings.append(recording_metadata)
         
         if save_patient_recordings(token, recordings):
-            logger.info(f"✅ Înregistrare adăugată pentru pacientul {token[:8]}...: {csv_filename}")
+            storage_info = "☁️ R2 (PERSISTENT)" if r2_available and r2_url else "💾 LOCAL (EPHEMERAL!)"
+            logger.info(f"✅ Înregistrare adăugată pentru {token[:8]}... → {storage_info}: {csv_filename}")
             return True
         else:
             return False
