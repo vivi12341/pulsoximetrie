@@ -152,7 +152,19 @@ def initialize_application():
     from dash import dash_table  # Dash 2.x syntax (dash_table integrated in main package)
     logger.warning("✅ Dash component libraries imported (dcc, html, dash_table)")
     
+    # === CALLBACKS & LAYOUT ===
+    # CRITICAL: Trebuie setate ÎNAINTE de warmup pentru ca Dash să știe ce componente să înregistreze!
+    from app_layout_new import layout
+    import callbacks
+    import callbacks_medical
+    import admin_callbacks
+    
+    app.layout = layout
+    
+    logger.warning(f"✅ Layout & Callbacks registered: {len(app.callback_map)} callbacks")
+    
     # === DASH ASSET REGISTRY WARMUP (FIX: React 500 errors) ===
+    # CRITICAL: Warmup DUPĂ setare layout! Altfel Dash nu știe ce componente să înregistreze!
     # FORCE Dash to initialize asset serving infrastructure BEFORE first request
     # Dash lazy-loads assets, causing 500 errors in production with Gunicorn workers
     try:
@@ -181,16 +193,6 @@ def initialize_application():
         
     except Exception as warmup_err:
         logger.critical(f"❌ Asset registry warmup FAILED: {warmup_err}", exc_info=True)
-    
-    # === CALLBACKS & LAYOUT ===
-    from app_layout_new import layout
-    import callbacks
-    import callbacks_medical
-    import admin_callbacks
-    
-    app.layout = layout
-    
-    logger.warning(f"✅ Layout & Callbacks registered: {len(app.callback_map)} callbacks")
     
     # === ADMIN USER ===
     with application.app_context():
