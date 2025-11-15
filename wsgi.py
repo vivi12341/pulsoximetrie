@@ -88,6 +88,14 @@ def initialize_application():
     
     logger.warning("✅ Database & Authentication initialized")
     
+    # === DASH LIBRARIES REGISTRATION (CRITICAL!) ===
+    # MUST import Dash component libraries BEFORE setting layout
+    # Otherwise Dash won't register them and will return 500 for component assets
+    import dash.dcc
+    import dash.html
+    import dash_table
+    logger.warning("✅ Dash component libraries imported (dcc, html, dash_table)")
+    
     # === CALLBACKS & LAYOUT ===
     from app_layout_new import layout
     import callbacks
