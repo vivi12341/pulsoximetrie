@@ -13,7 +13,102 @@ from dash import dcc, html
 import plotly.graph_objects as go
 import config
 
-# --- Layout Principal - Condițional Medic/Pacient ---
+# ==============================================================================
+# WORKAROUND LAYOUT STATIC (bypass callback dinamic)
+# ==============================================================================
+# PROBLEMA: Callback-ul route_layout_based_on_url NU se execută în production
+# SOLUȚIE: Afișăm direct login_prompt_static (fără callback)
+# ==============================================================================
+
+def create_login_prompt_static():
+    """Pagină de login statică (fără dependență de callback)."""
+    from auth_ui_components import create_auth_header
+    
+    return html.Div([
+        # Header autentificare
+        html.Div(id='auth-header-container', children=[create_auth_header()]),
+        
+        html.Div([
+            # Icon mare
+            html.Div("🔐", style={
+                'fontSize': '80px',
+                'textAlign': 'center',
+                'marginBottom': '30px'
+            }),
+            
+            # Titlu
+            html.H1(
+                "Bine ați venit!",
+                style={
+                    'textAlign': 'center',
+                    'color': '#2c3e50',
+                    'marginBottom': '15px',
+                    'fontSize': '36px'
+                }
+            ),
+            
+            # Subtitlu
+            html.P(
+                "Platformă Pulsoximetrie - Sistem Medical Securizat",
+                style={
+                    'textAlign': 'center',
+                    'color': '#7f8c8d',
+                    'fontSize': '18px',
+                    'marginBottom': '40px'
+                }
+            ),
+            
+            # Mesaj informativ
+            html.Div([
+                html.P(
+                    "Pentru a accesa platforma medicală, trebuie să vă autentificați.",
+                    style={
+                        'textAlign': 'center',
+                        'color': '#555',
+                        'fontSize': '16px',
+                        'lineHeight': '1.6',
+                        'marginBottom': '10px'
+                    }
+                ),
+            ], style={
+                'maxWidth': '600px',
+                'margin': '0 auto',
+                'padding': '20px',
+                'backgroundColor': '#f8f9fa',
+                'borderRadius': '10px',
+                'marginBottom': '40px'
+            }),
+            
+            # Butoane de acțiune
+            html.Div([
+                html.A(
+                    "🔐 Autentificare Medici",
+                    href='/login',
+                    style={
+                        'display': 'inline-block',
+                        'padding': '18px 40px',
+                        'background': 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                        'color': 'white',
+                        'textDecoration': 'none',
+                        'borderRadius': '50px',
+                        'fontSize': '18px',
+                        'fontWeight': '600',
+                        'boxShadow': '0 4px 20px rgba(102, 126, 234, 0.4)',
+                        'transition': 'all 0.3s ease',
+                    }
+                ),
+            ], style={'textAlign': 'center', 'marginBottom': '30px'}),
+        ], style={
+            'maxWidth': '900px',
+            'margin': '100px auto',
+            'padding': '60px',
+            'backgroundColor': 'white',
+            'borderRadius': '20px',
+            'boxShadow': '0 10px 60px rgba(0,0,0,0.1)'
+        })
+    ])
+
+# --- Layout Principal - STATIC (WORKAROUND) ---
 layout = html.Div(
     id="main-container",
     style={
@@ -39,22 +134,10 @@ layout = html.Div(
         # Modal confirmare ștergere înregistrări
         html.Div(id='delete-confirmation-modal', style={'display': 'none'}),
         
-        # Container dinamic - se populează în funcție de prezența token-ului
-        # FIX CRITICAL: Adăugăm conținut inițial pentru a evita "Loading..." blocat
+        # WORKAROUND: Afișăm direct login prompt (FĂRĂ callback dinamic)
         html.Div(
             id='dynamic-layout-container',
-            children=[
-                dcc.Loading(
-                    id="initial-loading",
-                    type="circle",
-                    children=[
-                        html.Div([
-                            html.H2("🔄 Inițializare...", style={'textAlign': 'center', 'color': '#666', 'marginTop': '100px'}),
-                            html.P("Aplicația se încarcă...", style={'textAlign': 'center', 'color': '#999'})
-                        ])
-                    ]
-                )
-            ]
+            children=[create_login_prompt_static()]
         )
     ]
 )
