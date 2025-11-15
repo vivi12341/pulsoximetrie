@@ -220,8 +220,7 @@ medical_layout = html.Div([
                                                 'display': 'none'  # Ascuns inițial (apare doar când există fișiere)
                                             }
                                         )
-                                    ],
-                                    style={'display': 'block', 'marginBottom': '20px'}  # Vizibil inițial
+                                    ]  # FIX: Removed duplicate style parameter (already defined at line 166)
                                 ),
                                 
                                 # === CONFIGURARE GENERALĂ ===
