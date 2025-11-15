@@ -54,8 +54,18 @@ class CloudflareR2Client:
         self.bucket_name = R2_BUCKET_NAME
         self.client = None
         
+        # LOGGING DEFENSIV pentru Railway (debugging configuration)
+        logger.warning("=" * 80)
+        logger.warning("[R2 INIT 1/7] 🔧 Cloudflare R2 Client Initialization...")
+        logger.warning(f"[R2 INIT 2/7] 📊 R2_ENABLED={R2_ENABLED} (type: {type(R2_ENABLED).__name__})")
+        logger.warning(f"[R2 INIT 3/7] 📊 R2_ENDPOINT={'SET' if R2_ENDPOINT else 'NOT SET'} (len: {len(R2_ENDPOINT) if R2_ENDPOINT else 0})")
+        logger.warning(f"[R2 INIT 4/7] 📊 R2_ACCESS_KEY_ID={'SET' if R2_ACCESS_KEY_ID else 'NOT SET'} (len: {len(R2_ACCESS_KEY_ID) if R2_ACCESS_KEY_ID else 0})")
+        logger.warning(f"[R2 INIT 5/7] 📊 R2_SECRET_ACCESS_KEY={'SET' if R2_SECRET_ACCESS_KEY else 'NOT SET'} (len: {len(R2_SECRET_ACCESS_KEY) if R2_SECRET_ACCESS_KEY else 0})")
+        logger.warning(f"[R2 INIT 6/7] 📊 R2_BUCKET_NAME={R2_BUCKET_NAME}")
+        
         if not self.enabled:
-            logger.warning("⚠️ Cloudflare R2 DEZACTIVAT - folosim stocare LOCALĂ")
+            logger.warning("[R2 INIT 7/7] ⚠️ Cloudflare R2 DEZACTIVAT - folosim stocare LOCALĂ")
+            logger.warning("=" * 80)
             return
         
         if not all([R2_ENDPOINT, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY]):
@@ -65,6 +75,7 @@ class CloudflareR2Client:
         
         try:
             # Inițializare client boto3 pentru R2
+            logger.warning("[R2 INIT 7/7] 🚀 Creating boto3 S3 client for R2...")
             self.client = boto3.client(
                 's3',
                 endpoint_url=R2_ENDPOINT,
@@ -74,22 +85,39 @@ class CloudflareR2Client:
                 config=Config(signature_version='s3v4')
             )
             
+            logger.warning(f"[R2 INIT 7/7] ✅ boto3 client created, testing bucket access...")
+            
             # Test conexiune (verifică dacă bucket-ul există)
             self.client.head_bucket(Bucket=self.bucket_name)
-            logger.info(f"✅ Cloudflare R2 conectat cu succes! Bucket: {self.bucket_name}")
+            logger.warning(f"[R2 INIT 7/7] ✅✅✅ Cloudflare R2 conectat cu SUCCES! Bucket: {self.bucket_name}")
+            logger.warning("=" * 80)
             
         except ClientError as e:
             error_code = e.response.get('Error', {}).get('Code', 'Unknown')
+            logger.critical("=" * 80)
+            logger.critical(f"[R2 INIT 7/7] ❌❌❌ CLOUDFLARE R2 CONNECTION FAILED!")
+            logger.critical(f"[R2 INIT 7/7] Error Code: {error_code}")
+            
             if error_code == '404':
-                logger.error(f"❌ Bucket R2 '{self.bucket_name}' nu există! Creează-l în Cloudflare Dashboard.")
+                logger.critical(f"[R2 INIT 7/7] ❌ Bucket R2 '{self.bucket_name}' NU EXISTĂ!")
+                logger.critical("[R2 INIT 7/7] 🔧 FIX: Creează bucket în Cloudflare Dashboard → R2")
             elif error_code == '403':
-                logger.error(f"❌ Acces refuzat la bucket '{self.bucket_name}'. Verifică permisiunile token-ului R2.")
+                logger.critical(f"[R2 INIT 7/7] ❌ ACCES REFUZAT la bucket '{self.bucket_name}'!")
+                logger.critical("[R2 INIT 7/7] 🔧 FIX: Regenerează R2 API Token cu permisiuni Read+Write")
             else:
-                logger.error(f"❌ Eroare R2: {e}", exc_info=True)
+                logger.critical(f"[R2 INIT 7/7] ❌ Eroare ClientError: {e}", exc_info=True)
+            
+            logger.critical("[R2 INIT 7/7] ⚠️ FALLBACK: Aplicația va folosi stocare LOCALĂ (EPHEMERAL!)")
+            logger.critical("=" * 80)
             self.enabled = False
             
         except BotoCoreError as e:
-            logger.error(f"❌ Eroare boto3: {e}", exc_info=True)
+            logger.critical("=" * 80)
+            logger.critical(f"[R2 INIT 7/7] ❌❌❌ BOTO3 ERROR (R2 connection failed)!")
+            logger.critical(f"[R2 INIT 7/7] Error: {e}", exc_info=True)
+            logger.critical("[R2 INIT 7/7] 🔧 FIX: Verifică R2_ENDPOINT (format: https://...r2.cloudflarestorage.com)")
+            logger.critical("[R2 INIT 7/7] ⚠️ FALLBACK: Aplicația va folosi stocare LOCALĂ (EPHEMERAL!)")
+            logger.critical("=" * 80)
             self.enabled = False
     
     
