@@ -253,6 +253,26 @@ schedule_cleanup_task()
 # Importăm noul layout medical
 from app_layout_new import layout
 
+# [DEBUG PRODUCTION] Endpoint de debug pentru a verifica callback routing
+@app.server.route('/debug/callback-test')
+def debug_callback_test():
+    """Endpoint temporar de debug pentru a testa importul layout-urilor."""
+    from flask import jsonify
+    try:
+        from app_layout_new import medical_layout, patient_layout
+        from flask_login import current_user
+        
+        debug_info = {
+            "status": "ok",
+            "medical_layout_type": str(type(medical_layout)),
+            "patient_layout_type": str(type(patient_layout)),
+            "current_user_authenticated": current_user.is_authenticated if hasattr(current_user, 'is_authenticated') else None,
+            "current_user_type": str(type(current_user))
+        }
+        return jsonify(debug_info)
+    except Exception as e:
+        return jsonify({"status": "error", "error": str(e), "type": type(e).__name__}), 500
+
 # Importăm TOATE callbacks-urile (vechi + noi)
 import callbacks  # Callbacks originale (vizualizare + batch)
 import callbacks_medical  # Callbacks noi (admin + pacient)
