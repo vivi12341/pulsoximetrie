@@ -181,21 +181,23 @@ def create_login_prompt():
 @app.callback(
     [Output('dynamic-layout-container', 'children'),
      Output('url-token-detected', 'data')],
-    [Input('url', 'search')]
+    [Input('url', 'pathname'),
+     Input('url', 'search')]
 )
-def route_layout_based_on_url(search):
+def route_layout_based_on_url(pathname, search):
     """
     Detectează dacă URL conține token și afișează layout-ul corespunzător:
     - Cu token (?token=xxx) → Layout simplificat pentru PACIENȚI (fără autentificare)
     - Fără token → Layout complet pentru MEDICI (NECESITĂ AUTENTIFICARE!)
     
     DEFENSIVE: Error handling robust pentru production!
+    FIX CRITICAL: Adăugat Input pathname pentru a trigger callback la orice încărcare pagină!
     """
     try:
         from app_layout_new import medical_layout, patient_layout
         from flask_login import current_user
         
-        # Verificăm dacă există token în URL
+        # Verificăm dacă există token în URL (query string search)
         if search and 'token=' in search:
             # Extragem token-ul din URL
             try:
