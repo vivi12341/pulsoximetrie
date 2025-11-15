@@ -31,9 +31,13 @@ layout = html.Div(
         dcc.Store(id='current-patient-token'),
         dcc.Store(id='url-token-detected'),  # Nou: detectare token din URL
         dcc.Store(id='collapsed-groups-store', data=[]),  # Store pentru grupuri collapsed
+        dcc.Store(id='delete-recording-store'),  # Store pentru datele de ștergere înregistrări
         
         # Container notificări globale
         html.Div(id="global-notification-container"),
+        
+        # Modal confirmare ștergere înregistrări
+        html.Div(id='delete-confirmation-modal', style={'display': 'none'}),
         
         # Container dinamic - se populează în funcție de prezența token-ului
         html.Div(id='dynamic-layout-container')

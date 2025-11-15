@@ -402,6 +402,100 @@ def add_recording(token: str, csv_filename: str, csv_content: bytes,
         return False
 
 
+def delete_recording(token: str, recording_id: str) -> bool:
+    """
+    Șterge o înregistrare specifică pentru un pacient.
+    
+    ⚠️ IMPORTANT: Șterge fișierul CSV (din R2 sau local) și actualizează metadata!
+    
+    Args:
+        token: UUID-ul pacientului
+        recording_id: ID-ul unic al înregistrării de șters
+        
+    Returns:
+        bool: True dacă ștergerea a reușit
+    """
+    try:
+        # Încărcăm înregistrările existente
+        recordings = get_patient_recordings(token)
+        
+        if not recordings:
+            logger.warning(f"Nu există înregistrări pentru pacientul {token[:8]}...")
+            return False
+        
+        # Găsim înregistrarea de șters
+        recording_to_delete = None
+        for rec in recordings:
+            if rec['id'] == recording_id:
+                recording_to_delete = rec
+                break
+        
+        if not recording_to_delete:
+            logger.warning(f"Înregistrarea {recording_id} nu există pentru pacientul {token[:8]}...")
+            return False
+        
+        # Încercăm să ștergem fișierul fizic (R2 sau local)
+        csv_path = recording_to_delete.get('csv_path')
+        storage_type = recording_to_delete.get('storage_type', 'local')
+        
+        if storage_type == 'r2':
+            # Ștergem din R2
+            try:
+                from storage_service import r2_client
+                # Extragem key-ul din csv_path (format: r2://{token}/csvs/{filename})
+                if csv_path and csv_path.startswith('r2://'):
+                    r2_key = csv_path.replace('r2://', '')
+                    r2_client.delete_file(r2_key)
+                    logger.info(f"☁️ CSV șters din R2: {r2_key}")
+                else:
+                    logger.warning(f"⚠️ Path R2 invalid: {csv_path}")
+            except Exception as e:
+                logger.error(f"❌ Eroare ștergere R2: {e}", exc_info=True)
+                # Continuăm oricum cu ștergerea din metadata
+        else:
+            # Ștergem local
+            try:
+                if csv_path and os.path.exists(csv_path):
+                    os.remove(csv_path)
+                    logger.info(f"💾 CSV șters local: {csv_path}")
+                else:
+                    logger.warning(f"⚠️ Fișier local inexistent: {csv_path}")
+            except Exception as e:
+                logger.error(f"❌ Eroare ștergere locală: {e}", exc_info=True)
+        
+        # Ștergem și imaginile asociate (dacă există)
+        patient_folder = os.path.join(PATIENT_DATA_DIR, token)
+        images_folder = os.path.join(patient_folder, "images")
+        
+        if os.path.exists(images_folder):
+            # Căutăm imagini care conțin recording_id în nume
+            try:
+                for img_file in os.listdir(images_folder):
+                    if recording_id in img_file:
+                        img_path = os.path.join(images_folder, img_file)
+                        os.remove(img_path)
+                        logger.info(f"🖼️ Imagine ștearsă: {img_file}")
+            except Exception as e:
+                logger.warning(f"⚠️ Eroare la ștergerea imaginilor: {e}")
+        
+        # Eliminăm înregistrarea din lista de recordings
+        recordings.remove(recording_to_delete)
+        
+        # Salvăm lista actualizată
+        if save_patient_recordings(token, recordings):
+            logger.info(f"✅ Înregistrare ștearsă cu succes: {recording_id} pentru pacient {token[:8]}...")
+            logger.info(f"   📁 Fișier: {recording_to_delete.get('original_filename')}")
+            logger.info(f"   📅 Data: {recording_to_delete.get('recording_date')} {recording_to_delete.get('start_time')}")
+            return True
+        else:
+            logger.error(f"❌ Eroare la salvarea listei de înregistrări după ștergere")
+            return False
+            
+    except Exception as e:
+        logger.error(f"Eroare la ștergerea înregistrării {recording_id} pentru {token}: {e}", exc_info=True)
+        return False
+
+
 # ==============================================================================
 # FUNCȚII UTILITARE
 # ==============================================================================
