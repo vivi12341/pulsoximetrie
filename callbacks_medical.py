@@ -192,24 +192,32 @@ def route_layout_based_on_url(pathname, search):
     
     DEFENSIVE: Error handling robust pentru production!
     FIX CRITICAL: Adăugat Input pathname pentru a trigger callback la orice încărcare pagină!
+    FIX v2: Import layout-uri la ÎNCEPUT callback (nu lazy import)
     """
+    # [DEBUG PRODUCTION] Log explicit pentru a detecta când callback-ul se execută
+    logger.info(f"🔵 [ROUTE CALLBACK] START - pathname={pathname}, search={search}")
+    
     try:
+        # Importăm layout-urile la ÎNCEPUT (nu lazy import pentru a evita circular imports)
         from app_layout_new import medical_layout, patient_layout
         from flask_login import current_user
+        
+        logger.info(f"🔵 [ROUTE CALLBACK] Layout-uri importate cu succes")
+        logger.info(f"🔵 [ROUTE CALLBACK] current_user.is_authenticated = {current_user.is_authenticated if hasattr(current_user, 'is_authenticated') else 'N/A'}")
         
         # Verificăm dacă există token în URL (query string search)
         if search and 'token=' in search:
             # Extragem token-ul din URL
             try:
                 token = search.split('token=')[1].split('&')[0]
-                logger.info(f"🔵 Acces pacient detectat cu token: {token[:8]}...")
+                logger.info(f"🔵 [ROUTE CALLBACK] Token detectat: {token[:8]}...")
                 
                 # Validăm token-ul
                 if patient_links.validate_token(token):
-                    logger.info(f"✅ Token valid: {token[:8]}... → Afișare layout pacient")
+                    logger.info(f"✅ [ROUTE CALLBACK] Token valid → return patient_layout")
                     return patient_layout, token
                 else:
-                    logger.warning(f"⚠️ Token invalid: {token[:8]}...")
+                    logger.warning(f"⚠️ [ROUTE CALLBACK] Token INVALID → return error page")
                     return html.Div([
                         html.H2("❌ Acces Interzis", style={'color': 'red', 'textAlign': 'center', 'marginTop': '50px'}),
                         html.P("Token-ul este invalid sau a expirat. Contactați medicul dumneavoastră.", 
@@ -217,31 +225,41 @@ def route_layout_based_on_url(pathname, search):
                     ], style={'padding': '50px'}), None
                     
             except Exception as e:
-                logger.error(f"Eroare la extragerea token-ului din URL: {e}", exc_info=True)
+                logger.error(f"❌ [ROUTE CALLBACK] Eroare extragere token: {e}", exc_info=True)
                 # Eroare la parsare token → verificăm autentificare pentru acces medic
                 if not current_user.is_authenticated:
-                    logger.debug("⚠️ Eroare parsare token + utilizator neautentificat → redirect login")
+                    logger.debug("⚠️ [ROUTE CALLBACK] Eroare token + neautentificat → login prompt")
                     return create_login_prompt(), None
+                logger.debug("⚠️ [ROUTE CALLBACK] Eroare token dar autentificat → medical_layout")
                 return medical_layout, None
         
         # Fără token → Layout pentru medici (NECESITĂ AUTENTIFICARE!)
         if not current_user.is_authenticated:
-            logger.debug("🔐 Acces neautentificat detectat → Afișare pagină login")
-            return create_login_prompt(), None
+            logger.info("🔐 [ROUTE CALLBACK] Neautentificat + fără token → return login_prompt")
+            login_prompt_layout = create_login_prompt()
+            logger.info("🔐 [ROUTE CALLBACK] Login prompt creat cu succes")
+            return login_prompt_layout, None
         
-        logger.debug(f"🏥 Acces medic autentificat: {current_user.email} → Afișare layout complet")
+        logger.info(f"🏥 [ROUTE CALLBACK] Autentificat ({current_user.email}) → return medical_layout")
         return medical_layout, None
         
     except Exception as e:
         # FALLBACK: Dacă layout-ul nu se poate încărca, returnăm mesaj de eroare
-        logger.critical(f"❌ EROARE CRITICĂ la încărcarea layout-ului: {e}", exc_info=True)
+        logger.critical(f"❌❌❌ [ROUTE CALLBACK] EROARE CRITICĂ: {e}", exc_info=True)
+        logger.critical(f"❌ [ROUTE CALLBACK] Type: {type(e).__name__}")
+        logger.critical(f"❌ [ROUTE CALLBACK] Pathname: {pathname}")
+        logger.critical(f"❌ [ROUTE CALLBACK] Search: {search}")
+        
         error_layout = html.Div([
             html.H1("⚠️ Eroare Inițializare", style={'color': 'red', 'textAlign': 'center', 'marginTop': '100px'}),
             html.P(f"Aplicația nu s-a putut inițializa corect.", 
                    style={'textAlign': 'center', 'fontSize': '18px', 'color': '#666'}),
             html.P(f"Eroare tehnică: {str(e)}", 
-                   style={'textAlign': 'center', 'fontSize': '14px', 'color': '#999', 'fontFamily': 'monospace'})
+                   style={'textAlign': 'center', 'fontSize': '14px', 'color': '#999', 'fontFamily': 'monospace'}),
+            html.P(f"Tip eroare: {type(e).__name__}", 
+                   style={'textAlign': 'center', 'fontSize': '12px', 'color': '#ccc', 'fontFamily': 'monospace'})
         ], style={'padding': '50px'})
+        logger.info("🔵 [ROUTE CALLBACK] Returnez error_layout")
         return error_layout, None
 
 
