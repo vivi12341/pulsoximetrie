@@ -210,32 +210,63 @@ def generate_secure_password(length: int = 16) -> str:
     """
     Generează o parolă securizată aleatoriu (pentru admin).
     
+    ALGORITM DEFENSIV (Zero retry, zero warning-uri):
+    1. Start cu cerințe OBLIGATORII: 1 literă mare + 1 literă mică + 1 cifră + 1 caracter special
+    2. Completare rest cu caractere aleatoare din toate categoriile
+    3. Shuffle securizat cu secrets.SystemRandom() pentru randomizare poziții
+    4. GARANTEAZĂ validare fără recursivitate!
+    
     Args:
         length: Lungimea parolei (default: 16)
         
     Returns:
-        str: Parola generată
+        str: Parola generată (garantat validă)
     """
     if length < 12:
         length = 12
         logger.warning("⚠️ Lungime parolă prea mică - setată la 12 caractere")
     
-    # Compoziție: litere, cifre, caractere speciale
-    alphabet = string.ascii_letters + string.digits + string.punctuation
+    # === ALGORITM DEFENSIV: Garantare cerințe de la început ===
     
-    # Folosim secrets (cryptographically secure RNG)
-    password = ''.join(secrets.choice(alphabet) for _ in range(length))
+    # Definim seturile de caractere pentru fiecare cerință
+    uppercase_letters = string.ascii_uppercase
+    lowercase_letters = string.ascii_lowercase
+    digits = string.digits
+    special_chars = string.punctuation
     
-    # Asigurăm că parola respectă cerințele
-    # (foarte probabil cu 16+ caractere, dar verificăm)
+    # Pas 1: Garantăm prezența fiecărei cerințe (1 caracter din fiecare categorie)
+    password_chars = [
+        secrets.choice(uppercase_letters),  # Cerință: literă mare
+        secrets.choice(lowercase_letters),  # Cerință: literă mică
+        secrets.choice(digits),              # Cerință: cifră
+        secrets.choice(special_chars)        # Cerință: caracter special
+    ]
+    
+    # Pas 2: Completăm restul cu caractere aleatoare din TOATE categoriile
+    # (length - 4 caractere, deoarece deja avem 4 obligatorii)
+    all_chars = uppercase_letters + lowercase_letters + digits + special_chars
+    remaining_length = length - 4
+    
+    for _ in range(remaining_length):
+        password_chars.append(secrets.choice(all_chars))
+    
+    # Pas 3: Shuffle securizat pentru randomizare poziții
+    # (altfel primele 4 caractere sunt mereu în ordinea: Mare, mică, cifră, special)
+    random_generator = secrets.SystemRandom()
+    random_generator.shuffle(password_chars)
+    
+    # Pas 4: Construim parola finală
+    password = ''.join(password_chars)
+    
+    # VERIFICARE FINALĂ (doar pentru debug, ar trebui să fie întotdeauna validă)
     is_valid, message = validate_password_strength(password)
-    
     if not is_valid:
-        # Re-generăm recursiv dacă nu e validă (extrem de rar)
-        logger.warning(f"⚠️ Parolă generată invalidă ({message}) - regenerare...")
+        # Acest branch NU ar trebui să se execute niciodată cu algoritmul defensiv
+        logger.error(f"❌ ALGORITM DEFENSIV EȘUAT: Parolă invalidă: {message}")
+        # Fallback: recursivitate doar dacă algoritmul defensiv are bug (imposibil)
         return generate_secure_password(length)
     
-    logger.info(f"✅ Parolă securizată generată (lungime: {length})")
+    logger.info(f"✅ Parolă securizată generată (lungime: {length}, algoritm defensiv)")
     return password
 
 
