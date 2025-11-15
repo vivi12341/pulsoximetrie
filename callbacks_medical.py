@@ -421,22 +421,33 @@ def load_patient_data_from_token(token):
         
         # === ÎNCĂRCĂM CSV-UL ȘI DATELE COMPLETE ===
         patient_folder = patient_links.get_patient_storage_path(token)
+        logger.info(f"📂 Folder pacient: {patient_folder}")
+        logger.info(f"📊 Verificare existență folder: {os.path.exists(patient_folder)}")
+        
         csv_path = None
         df = None
         
         # Căutăm CSV-ul în folderul pacientului
         csv_folder = os.path.join(patient_folder, "csvs")
+        logger.info(f"📁 Verificare folder CSV: {csv_folder} → Există: {os.path.exists(csv_folder)}")
+        
         if os.path.exists(csv_folder):
             csv_files = [f for f in os.listdir(csv_folder) if f.endswith('.csv')]
+            logger.info(f"📄 CSV-uri găsite: {len(csv_files)} fișiere → {csv_files}")
+            
             if csv_files:
                 csv_path = os.path.join(csv_folder, csv_files[0])
-                logger.debug(f"CSV găsit: {csv_path}")
+                logger.info(f"✅ CSV selectat: {csv_path}")
                 
                 # Citim fișierul ca bytes
                 with open(csv_path, 'rb') as f:
                     csv_content = f.read()
                 
+                logger.info(f"📊 CSV citit: {len(csv_content)} bytes")
                 df = parse_csv_data(csv_content, csv_files[0])
+                logger.info(f"✅ DataFrame creat: {len(df) if df is not None else 0} rânduri")
+        else:
+            logger.warning(f"⚠️ Folder CSV nu există: {csv_folder}")
         
         # Generăm figura
         if df is not None and not df.empty:
@@ -499,8 +510,11 @@ def load_patient_data_from_token(token):
         
         # 2. IMAGINI GENERATE (dacă există)
         images_folder = os.path.join(patient_folder, "images")
+        logger.info(f"🖼️ Verificare folder imagini: {images_folder} → Există: {os.path.exists(images_folder)}")
+        
         if os.path.exists(images_folder):
             image_files = sorted([f for f in os.listdir(images_folder) if f.lower().endswith(('.jpg', '.jpeg', '.png'))])
+            logger.info(f"🖼️ Imagini găsite: {len(image_files)} fișiere")
             if image_files:
                 images_section = html.Div([
                     # Header cu opțiuni
@@ -603,6 +617,8 @@ def load_patient_data_from_token(token):
         
         # 3. PDF-URI (dacă există)
         all_pdfs = patient_links.get_all_pdfs_for_link(token)
+        logger.info(f"📄 PDF-uri găsite: {len(all_pdfs) if all_pdfs else 0}")
+        
         if all_pdfs:
             pdfs_section = html.Div([
                 html.H3("📄 Rapoarte PDF", style={'color': '#2980b9', 'marginBottom': '15px'}),
