@@ -11,6 +11,8 @@
 import base64
 import pandas as pd
 import os
+import pathlib
+import dash_uploader as du
 import plotly.graph_objects as go
 from dash.dependencies import Input, Output, State, ALL
 from dash import html, no_update, dcc
@@ -691,202 +693,122 @@ def load_patient_data_from_token(n_intervals):
     [Output('admin-batch-local-mode', 'style'),
      Output('admin-batch-upload-mode', 'style')],
     [Input('admin-batch-mode-selector', 'value')],
-    prevent_initial_call=False  # FIX: Execută callback la încărcarea inițială
+    prevent_initial_call=False 
 )
 def toggle_batch_mode_display(selected_mode):
     """
     [FIX v2] Comută între modul local (folder) și modul upload (fișiere).
-    
-    SOLUȚII IMPLEMENTATE:
-    - prevent_initial_call=False → callback se execută la încărcare
-    - Logging comprehensiv pentru debugging
-    - Stiluri complete (marginBottom + display)
     """
     tag = "toggle_batch_mode_display"
     logger.info(f"[{tag}] START - selected_mode: {selected_mode}")
     
     if selected_mode == 'local':
-        # Afișează mod local, ascunde upload
         local_style = {'display': 'block', 'marginBottom': '20px'}
         upload_style = {'display': 'none'}
         logger.info(f"[{tag}] Mode: LOCAL → local visible, upload hidden")
         return local_style, upload_style
-    else:  # 'upload' (default)
-        # Afișează upload, ascunde mod local
+    else:
         local_style = {'display': 'none'}
         upload_style = {'display': 'block', 'marginBottom': '20px'}
         logger.info(f"[{tag}] Mode: UPLOAD → upload visible, local hidden")
         return local_style, upload_style
 
 
-@app.callback(
-    [Output('admin-batch-uploaded-files-list', 'children'),
-     Output('admin-batch-uploaded-files-store', 'data')],
-    [Input('admin-batch-file-upload', 'contents')],
-    [State('admin-batch-file-upload', 'filename'),
-     State('admin-batch-uploaded-files-store', 'data')]
+# ==============================================================================
+# [T2 Solution] DASH UPLOADER CALLBACKS
+# ==============================================================================
+
+@du.callback(
+    output=[
+        Output('admin-batch-uploaded-files-store', 'data'),
+        Output('admin-batch-session-id', 'data')
+    ],
+    id='admin-batch-file-upload',
 )
-def handle_file_upload(list_of_contents, list_of_names, session_id):
+def on_upload_complete(status: du.UploadStatus):
     """
-    [WORKAROUND v3.0] Salvează fișierele pe disk în loc de dcc.Store.
-    PROBLEMA: dcc.Store nu propagă datele corect în Railway production.
-    SOLUȚIE: Salvăm pe disk și returnăm doar session_id.
+    [T2 Solution] Streaming Upload Finalizat.
     """
-    # Import TempFileManager
-    from temp_file_manager import get_manager
+    logger.info("=" * 80)
+    logger.info("🚀 [STREAMING] Upload completat!")
     
-    logger.warning("=" * 100)
-    logger.warning("🔍 [UPLOAD v3] HANDLE_FILE_UPLOAD - WORKAROUND cu disk storage")
-    logger.warning("=" * 100)
+    upload_id = status.upload_id
+    logger.info(f"🆔 Upload ID: {upload_id}")
     
-    logger.warning(f"🔍 [UPLOAD v3.1] INPUT list_of_contents: {list_of_contents is not None} (length: {len(list_of_contents) if list_of_contents else 0})")
-    logger.warning(f"🔍 [UPLOAD v3.2] STATE list_of_names: {list_of_names}")
-    logger.warning(f"🔍 [UPLOAD v3.3] STATE session_id (IN): {session_id}")
-    logger.warning("=" * 100)
-    
-    # LOG 13: Validare DEFENSIVĂ pentru contents
-    logger.warning("🔍 [LOG 13/20] START VALIDARE - Verificare list_of_contents")
-    
-    if not list_of_contents:
-        logger.error("❌ [LOG 14/20] VALIDATION FAILED: list_of_contents este None/False - RETURN no_update")
-        logger.error(f"❌ [LOG 14.1/20] Detalii: list_of_contents = {list_of_contents}")
+    new_files = status.uploaded_files
+    if not new_files:
         return no_update, no_update
+        
+    first_file = pathlib.Path(new_files[0])
+    session_folder = first_file.parent
+    logger.info(f"📂 Folder Sesiune: {session_folder}")
     
-    logger.warning("✅ [LOG 14/20] VALIDATION PASSED: list_of_contents există")
-    
-    # LOG 15: Verificare suplimentară dacă lista este goală
-    if isinstance(list_of_contents, list) and len(list_of_contents) == 0:
-        logger.error("❌ [LOG 15/20] VALIDATION FAILED: list_of_contents este listă GOALĂ - RETURN no_update")
+    all_files_metadata = []
+    try:
+        for entry in os.scandir(session_folder):
+            if entry.is_file():
+                fname = entry.name.lower()
+                f_type = 'PDF' if fname.endswith('.pdf') else 'CSV' if fname.endswith('.csv') else 'OTHER'
+                if f_type == 'OTHER': continue
+                    
+                all_files_metadata.append({
+                    'filename': entry.name,
+                    'temp_path': entry.path,
+                    'type': f_type,
+                    'size': entry.stat().st_size
+                })
+        logger.info(f"✅ Total fișiere pe disk: {len(all_files_metadata)}")
+    except Exception as e:
+        logger.error(f"❌ Eroare la scanarea folderului: {e}")
         return no_update, no_update
+        
+    return all_files_metadata, str(upload_id)
+
+
+@app.callback(
+    Output('admin-batch-uploaded-files-list', 'children'),
+    [Input('admin-batch-uploaded-files-store', 'data')]
+)
+def update_upload_ui_list(files_data):
+    """
+    Randează lista vizuală a fișierelor bazată pe datele din Store.
+    """
+    if not files_data:
+         return html.P("📭 Nu există fișiere încărcate încă.", style={
+            'textAlign': 'center', 'color': '#95a5a6', 'padding': '20px',
+            'backgroundColor': '#f8f9fa', 'borderRadius': '5px', 'border': '1px dashed #bdc3c7'
+        })
+        
+    csv_count = sum(1 for f in files_data if f.get('type') == 'CSV')
+    pdf_count = sum(1 for f in files_data if f.get('type') == 'PDF')
     
-    logger.warning("✅ [LOG 15/20] VALIDATION PASSED: list_of_contents are elemente")
-    
-    # LOG 16: Verificare că list_of_names există și are aceeași lungime
-    if not list_of_names or len(list_of_names) != len(list_of_contents):
-        logger.error(f"❌ [LOG 16/20] VALIDATION FAILED: list_of_names mismatch! contents={len(list_of_contents) if list_of_contents else 0}, names={len(list_of_names) if list_of_names else 0}")
-        return no_update, no_update
-    
-    logger.warning("✅ [UPLOAD v3.4] VALIDATION PASSED - Toate verificările OK")
-    
-    # [WORKAROUND v3.0] Creează/reutilizează session_id
-    import uuid
-    if not session_id or not isinstance(session_id, str):
-        session_id = str(uuid.uuid4())
-        logger.warning(f"🆕 [UPLOAD v3.5] Generat session_id NOU: {session_id}")
-    else:
-        logger.warning(f"♻️ [UPLOAD v3.5] Reutilizat session_id EXISTENT: {session_id}")
-    
-    # Inițializează TempFileManager
-    manager = get_manager(session_id)
-    logger.warning(f"📁 [UPLOAD v3.6] TempFileManager inițializat: {manager.session_folder}")
-    
-    # Salvează fișierele pe disk
-    saved_count = manager.save_uploaded_files(list_of_contents, list_of_names)
-    logger.warning(f"💾 [UPLOAD v3.7] Fișiere salvate pe disk: {saved_count}")
-    
-    # Citește metadata pentru UI (nu returnăm content, doar info)
-    all_files = manager.get_uploaded_files()
-    logger.warning(f"📊 [UPLOAD v3.8] Metadata citită: {len(all_files)} fișiere")
-    logger.warning(f"📋 [UPLOAD v3.9] Filenames: {[f['filename'] for f in all_files]}")
-    
-    # Generăm UI pentru listă fișiere
-    if not all_files:
-        return html.P("📭 Nu există fișiere încărcate încă.", style={
-            'textAlign': 'center',
-            'color': '#95a5a6',
-            'padding': '20px',
-            'backgroundColor': '#f8f9fa',
-            'borderRadius': '5px',
-            'border': '1px dashed #bdc3c7'
-        }), all_files
-    
-    # Generăm lista de fișiere cu statistici
-    csv_count = sum(1 for f in all_files if f['type'] == 'CSV')
-    pdf_count = sum(1 for f in all_files if f['type'] == 'PDF')
-    
-    files_display = html.Div([
-        # Header cu statistici
+    return html.Div([
         html.Div([
-            html.Strong(f"📊 Total: {len(all_files)} fișiere", style={'marginRight': '20px'}),
+            html.Strong(f"📊 Total: {len(files_data)} fișiere", style={'marginRight': '20px'}),
             html.Span(f"📄 CSV: {csv_count}", style={'marginRight': '15px', 'color': '#27ae60'}),
             html.Span(f"📕 PDF: {pdf_count}", style={'color': '#e74c3c'}),
             html.Button(
-                '🗑️ Șterge toate',
-                id='admin-batch-clear-files-btn',
-                n_clicks=0,
-                style={
-                    'padding': '5px 15px',
-                    'fontSize': '12px',
-                    'backgroundColor': '#e74c3c',
-                    'color': 'white',
-                    'border': 'none',
-                    'borderRadius': '3px',
-                    'cursor': 'pointer',
-                    'float': 'right'
-                }
+                '🗑️ Șterge toate', id='admin-batch-clear-files-btn', n_clicks=0,
+                style={'padding': '5px 15px', 'fontSize': '12px', 'backgroundColor': '#e74c3c', 'color': 'white', 'border': 'none', 'borderRadius': '3px', 'cursor': 'pointer', 'float': 'right'}
             )
-        ], style={
-            'padding': '12px',
-            'backgroundColor': '#ecf0f1',
-            'borderRadius': '5px 5px 0 0',
-            'borderBottom': '2px solid #bdc3c7',
-            'marginBottom': '10px'
-        }),
+        ], style={'padding': '12px', 'backgroundColor': '#ecf0f1', 'borderRadius': '5px 5px 0 0', 'borderBottom': '2px solid #bdc3c7', 'marginBottom': '10px'}),
         
-        # Lista de fișiere
         html.Div([
             html.Div([
                 html.Div([
-                    html.Span('📄' if f['type'] == 'CSV' else '📕', style={'fontSize': '20px', 'marginRight': '10px'}),
-                    html.Strong(f['filename'], style={'fontSize': '13px'}),
-                    html.Small(f" ({_format_file_size(f['size'])})", style={'color': '#7f8c8d', 'marginLeft': '8px'}),
+                    html.Span('📄' if f.get('type') == 'CSV' else '📕', style={'fontSize': '20px', 'marginRight': '10px'}),
+                    html.Strong(f.get('filename'), style={'fontSize': '13px'}),
+                    html.Small(f" ({_format_file_size(f.get('size', 0))})", style={'color': '#7f8c8d', 'marginLeft': '8px'}),
                 ], style={'display': 'flex', 'alignItems': 'center'}),
                 html.Button(
-                    '❌',
-                    id={'type': 'delete-uploaded-file', 'index': i},
-                    n_clicks=0,
-                    style={
-                        'padding': '4px 10px',
-                        'fontSize': '14px',
-                        'backgroundColor': '#e74c3c',
-                        'color': 'white',
-                        'border': 'none',
-                        'borderRadius': '3px',
-                        'cursor': 'pointer'
-                    }
+                    '❌', id={'type': 'delete-uploaded-file', 'index': i}, n_clicks=0,
+                    style={'padding': '4px 10px', 'fontSize': '14px', 'backgroundColor': '#e74c3c', 'color': 'white', 'border': 'none', 'borderRadius': '3px', 'cursor': 'pointer'}
                 )
-            ], style={
-                'display': 'flex',
-                'justifyContent': 'space-between',
-                'alignItems': 'center',
-                'padding': '10px',
-                'marginBottom': '8px',
-                'backgroundColor': '#e8f5e9' if f['type'] == 'CSV' else '#ffebee',
-                'borderRadius': '4px',
-                'border': f"1px solid {'#27ae60' if f['type'] == 'CSV' else '#e74c3c'}"
-            })
-            for i, f in enumerate(all_files)
+            ], style={'display': 'flex', 'justifyContent': 'space-between', 'alignItems': 'center', 'padding': '10px', 'marginBottom': '8px',
+                        'backgroundColor': '#e8f5e9' if f.get('type') == 'CSV' else '#ffebee', 'borderRadius': '4px', 'border': f"1px solid {'#27ae60' if f.get('type') == 'CSV' else '#e74c3c'}"})
+            for i, f in enumerate(files_data)
         ])
-    ], style={
-        'padding': '15px',
-        'backgroundColor': '#fff',
-        'borderRadius': '0 0 5px 5px',
-        'border': '1px solid #bdc3c7',
-        'maxHeight': '300px',
-        'overflowY': 'auto'
-    })
-    
-    # [WORKAROUND v3.0] RETURN: UI + session_id (NU lista de fișiere!)
-    logger.warning("=" * 100)
-    logger.warning("🔍 [UPLOAD v3.10] PREGĂTIRE RETURN")
-    logger.warning(f"🎯 [UPLOAD v3.11] RETURN OUTPUT 1 (UI): files_display TYPE = {type(files_display)}")
-    logger.warning(f"🎯 [UPLOAD v3.12] RETURN OUTPUT 2 (STORE): session_id = '{session_id}' (STRING, nu listă!)")
-    logger.warning("=" * 100)
-    logger.warning("🚀 [UPLOAD v3.13] CALLBACK EXIT - Returnez (files_display, session_id)")
-    logger.warning("=" * 100)
-    
-    # CRITICAL: Returnăm session_id în store, NU lista de fișiere!
-    return files_display, session_id
+    ], style={'padding': '15px', 'backgroundColor': '#fff', 'borderRadius': '0 0 5px 5px', 'border': '1px solid #bdc3c7', 'maxHeight': '300px', 'overflowY': 'auto'})
 
 
 def _format_file_size(size_bytes):
@@ -897,42 +819,6 @@ def _format_file_size(size_bytes):
         return f"{size_bytes / 1024:.1f} KB"
     else:
         return f"{size_bytes / (1024 * 1024):.1f} MB"
-
-
-# ==============================================================================
-# [DIAGNOSTIC v2.0] CALLBACK MONITORING STORE - DISABLED (cauza eroare Dash)
-# ==============================================================================
-# PROBLEMA: dummy-output-for-debug nu există în layout-ul inițial
-# Callback-ul referențiază un Output inexistent → Dash ERROR → blochează toate callback-urile
-# SOLUȚIE: Dezactivat temporar pentru debugging
-# 
-# @app.callback(
-#     Output('dummy-output-for-debug', 'children'),
-#     [Input('admin-batch-uploaded-files-store', 'data')]
-# )
-# def monitor_store_changes(store_data):
-#     """
-#     [DIAGNOSTIC] Callback care monitorizează ORICE schimbare în store.
-#     Acest callback se va declanșa DE FIECARE DATĂ când store-ul primește date noi.
-#     """
-#     logger.warning("=" * 100)
-#     logger.warning("🔍 [MONITOR LOG 1/5] STORE MONITORING - CALLBACK TRIGGERED!")
-#     logger.warning("=" * 100)
-#     
-#     logger.warning(f"🔍 [MONITOR LOG 2/5] Store data IS_NONE: {store_data is None}")
-#     logger.warning(f"🔍 [MONITOR LOG 3/5] Store data TYPE: {type(store_data)}")
-#     
-#     if store_data:
-#         logger.warning(f"✅ [MONITOR LOG 4/5] Store data LENGTH: {len(store_data)}")
-#         logger.warning(f"✅ [MONITOR LOG 5/5] Store data FILENAMES: {[f.get('filename', 'N/A') for f in store_data]}")
-#     else:
-#         logger.error(f"❌ [MONITOR LOG 4/5] Store data este GOLI/NONE!")
-#         logger.error(f"❌ [MONITOR LOG 5/5] Store data VALUE: {store_data}")
-#     
-#     logger.warning("=" * 100)
-#     
-#     # Return dummy value (nu afectează UI-ul)
-#     return ""
 
 
 @app.callback(
@@ -1006,17 +892,11 @@ def admin_run_batch_processing(n_clicks, batch_mode, input_folder, session_id, o
     if n_clicks == 0:
         return no_update, no_update, no_update, no_update, no_update, no_update
     
-    # [WORKAROUND v3.0] Citim fișierele de pe disk folosind session_id
-    logger.warning("=" * 100)
-    logger.warning("🔍 [BATCH v3.1] ADMIN_RUN_BATCH_PROCESSING - WORKAROUND cu disk storage")
-    logger.warning("=" * 100)
+    logger.warning(f"🔍 [BATCH] START PROCESSING - Mode: {batch_mode}, Session: {session_id}")
     
-    logger.warning(f"🔍 [BATCH v3.2] STATE session_id (IN): {session_id}")
-    logger.warning(f"🔍 [BATCH v3.3] STATE batch_mode: {batch_mode}")
-    logger.warning(f"🔍 [BATCH v3.4] STATE input_folder: {input_folder}")
-    logger.warning("=" * 100)
+    processing_folder = None
     
-    # === VALIDARE ÎN FUNCȚIE DE MOD ===
+    # === DETERMINARE FOLDER PROCESARE ===
     if batch_mode == 'local':
         # Mod local: verificăm folder
         if not input_folder or input_folder.strip() == '':
@@ -1029,54 +909,26 @@ def admin_run_batch_processing(n_clicks, batch_mode, input_folder, session_id, o
         logger.warning(f"✅ Procesare LOCALĂ din folder: {input_folder}")
         
     else:  # batch_mode == 'upload'
-        # [WORKAROUND v3.0] Citim fișierele de pe disk
-        logger.warning(f"🔍 [BATCH v3.5] MOD UPLOAD - Citire fișiere de pe disk...")
-        
-        # Verificăm session_id
+        # Verificăm session_id (care este upload_id din dash-uploader)
         if not session_id or not isinstance(session_id, str):
-            logger.error("=" * 100)
-            logger.error("❌ [BATCH v3.6] CRITICAL: session_id este None/invalid!")
-            logger.error(f"   Type: {type(session_id)}")
-            logger.error(f"   Value: {session_id}")
-            logger.error("=" * 100)
-            return html.Div([
-                html.H4("⚠️ Niciun session_id detectat!", style={'color': '#e67e22', 'marginBottom': '10px'}),
-                html.P("Încărcați fișiere CSV + PDF folosind butonul de upload de mai sus.", style={'marginBottom': '10px'}),
-                html.Div([
-                    html.P("DEBUG INFO [WORKAROUND v3.0]:", style={'fontWeight': 'bold', 'marginBottom': '5px'}),
-                    html.P(f"• session_id = {session_id}", style={'fontSize': '11px', 'fontFamily': 'monospace', 'marginBottom': '3px'}),
-                    html.P(f"• type = {type(session_id)}", style={'fontSize': '11px', 'fontFamily': 'monospace', 'marginBottom': '3px'}),
-                    html.P("• Possible cause: Upload callback nu s-a executat sau session_id nu a fost salvat", style={'fontSize': '11px', 'fontFamily': 'monospace', 'color': '#e74c3c'})
-                ], style={'backgroundColor': '#ecf0f1', 'padding': '10px', 'borderRadius': '5px', 'marginTop': '10px'})
-            ], style={'padding': '15px', 'backgroundColor': '#fff3cd', 'border': '1px solid #ffc107', 'borderRadius': '5px'}), \
-            no_update, no_update, no_update, no_update, no_update
+            logger.error(f"❌ [BATCH] Session ID invalid: {session_id}")
+            return html.Div(
+                "⚠️ Niciun fișier încărcat! Vă rugăm să încărcați fișierele întâi.",
+                style={'padding': '15px', 'backgroundColor': '#fff3cd', 'border': '1px solid #ffc107', 'borderRadius': '5px'}
+            ), no_update, no_update, no_update, no_update, no_update
         
-        # [WORKAROUND v3.0] Citim fișierele de pe disk folosind TempFileManager
-        from temp_file_manager import get_manager
+        # Construim calea către folderul de upload dash-uploader
+        # Acesta se află în ./temp_uploads/{session_id}
+        base_upload_dir = os.path.join(os.getcwd(), 'temp_uploads')
+        processing_folder = os.path.join(base_upload_dir, session_id)
         
-        manager = get_manager(session_id)
-        logger.warning(f"📁 [BATCH v3.7] TempFileManager inițializat: {manager.session_folder}")
-        
-        # Verificăm dacă există fișiere
-        files_metadata = manager.get_uploaded_files()
-        if not files_metadata:
-            logger.error("❌ [BATCH v3.8] Nu există fișiere în sesiune!")
-            return html.Div([
-                html.H4("⚠️ Nu există fișiere în sesiune!", style={'color': '#e67e22', 'marginBottom': '10px'}),
-                html.P(f"Session ID: {session_id}", style={'marginBottom': '10px', 'fontSize': '11px', 'fontFamily': 'monospace'}),
-                html.P("Fișierele au fost șterse sau sesiunea a expirat.", style={'marginBottom': '10px'}),
-                html.P("Încărcați din nou fișiere CSV + PDF.", style={'marginBottom': '10px'})
-            ], style={'padding': '15px', 'backgroundColor': '#fff3cd', 'border': '1px solid #ffc107', 'borderRadius': '5px'}), \
-            no_update, no_update, no_update, no_update, no_update
-        
-        # [SUCCESS] Fișiere detectate pe disk
-        logger.warning(f"✅ [BATCH v3.9] Fișiere detectate pe disk: {len(files_metadata)}")
-        for idx, file_meta in enumerate(files_metadata):
-            logger.warning(f"   [{idx}] {file_meta.get('filename', 'N/A')} ({file_meta.get('type', 'N/A')}) - {file_meta.get('size', 0)} bytes")
-        
-        # Folosim folderul sesiunii ca processing_folder
-        processing_folder = str(manager.session_folder)
-        logger.warning(f"🚀 [BATCH v3.10] Procesare UPLOAD din folder sesiune: {processing_folder}")
+        if not os.path.exists(processing_folder):
+             return html.Div(
+                f"⚠️ Sesiunea de upload nu a fost găsită pe server ({processing_folder}). Încercați să reîncărcați fișierele.",
+                style={'padding': '15px', 'backgroundColor': '#ffdddd', 'border': '1px solid red', 'borderRadius': '5px'}
+            ), no_update, no_update, no_update, no_update, no_update
+
+        logger.warning(f"🚀 [BATCH] Procesare UPLOAD din folder: {processing_folder}")
     
     # Folosim folder default pentru output dacă nu e specificat
     if not output_folder or output_folder.strip() == '':
@@ -1085,15 +937,8 @@ def admin_run_batch_processing(n_clicks, batch_mode, input_folder, session_id, o
     logger.info(f"📊 Admin pornește procesare batch: {processing_folder} → {output_folder}")
     
     try:
-        # Validăm existența folderului de procesare
-        if not os.path.exists(processing_folder):
-            return html.Div(
-                f"❌ Folderul de procesare nu există: {processing_folder}",
-                style={'padding': '15px', 'backgroundColor': '#ffdddd', 'border': '1px solid red', 'borderRadius': '5px', 'color': 'red'}
-            ), no_update, no_update, no_update, no_update, no_update
-        
         # Găsim toate fișierele CSV din folder
-        csv_files = [f for f in os.listdir(processing_folder) if f.endswith('.csv')]
+        csv_files = [f for f in os.listdir(processing_folder) if f.lower().endswith('.csv')]
         
         if not csv_files:
             return html.Div(
@@ -1102,30 +947,29 @@ def admin_run_batch_processing(n_clicks, batch_mode, input_folder, session_id, o
             ), no_update, no_update, no_update, no_update, no_update
         
         # Creăm sesiune batch cu tracking
-        session_id = batch_session_manager.create_batch_session(
+        batch_id = batch_session_manager.create_batch_session(
             total_files=len(csv_files),
             file_list=csv_files
         )
         
-        logger.info(f"📊 Sesiune batch creată: {session_id} cu {len(csv_files)} fișiere")
+        logger.info(f"📊 Sesiune batch creată: {batch_id} cu {len(csv_files)} fișiere")
         
         # ACTIVĂM bara de progres și interval-ul de refresh
         progress_style = {'display': 'block', 'marginBottom': '20px'}
         interval_disabled = False
         
-        # IMPORTANT: Salvăm session_id pentru ca interval callback-ul să-l poată citi
-        # și pornim procesarea într-un thread separat pentru a nu bloca UI-ul
-        
-        # Rulăm procesarea batch cu session_id pentru tracking
+        # Rulăm procesarea batch
+        # Nota: Deși avem dash-uploader, logica de procesare rămâne aceeași
+        # run_batch_job citește din folderul specificat
         generated_links = run_batch_job(
-            processing_folder,  # Folosim folderul de procesare (local SAU temp upload)
+            processing_folder,  
             output_folder, 
             window_minutes,
-            session_id=session_id  # Pasăm session_id pentru tracking
+            session_id=batch_id  
         )
         
         # Marcăm sesiunea ca finalizată
-        batch_session_manager.mark_session_completed(session_id)
+        batch_session_manager.mark_session_completed(batch_id)
         
         # Ștergem folderul temporar dacă e în mod upload
         if batch_mode == 'upload':

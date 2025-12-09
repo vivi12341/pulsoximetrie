@@ -169,6 +169,19 @@ else:
 from logger_setup import logger
 from app_instance import app
 
+# === CONFIGURARE DASH UPLOADER (STREAMING UPLOAD) ===
+# Soluție T2: Evităm crash-urile de memorie folosind chunked uploads
+import dash_uploader as du
+import os
+# Configurăm folderul temporar pentru upload-uri (acesta va fi curățat după procesare)
+UPLOAD_FOLDER_ROOT = os.path.join(os.getcwd(), 'temp_uploads')
+if not os.path.exists(UPLOAD_FOLDER_ROOT):
+    os.makedirs(UPLOAD_FOLDER_ROOT)
+    
+# Configurăm dash-uploader pentru aplicație
+du.configure_upload(app, UPLOAD_FOLDER_ROOT)
+
+
 # === INIȚIALIZARE DATABASE & AUTHENTICATION ===
 from auth.models import db, init_db, create_admin_user
 from auth.auth_manager import init_auth_manager

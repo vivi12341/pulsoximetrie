@@ -1,6 +1,34 @@
-# 📋 PROGRES - Sesiune 15 Noiembrie 2025 (TEST1 Browser Production) - ✅ REZOLVAT COMPLET!
+# 📋 PROGRES - Sesiune 15 Noiembrie 2025 (TEST1 Browser Production) - 🔧 HOTFIX CRITICAL
 
-## ✅ STATUS FINAL - SITE 100% FUNCȚIONAL!
+## 🚨 STATUS CURENT - HOTFIX SYNTAX ERROR (23:36)
+
+### PROBLEMA CRITICĂ (ACTIVĂ)
+- **Deployment:** ❌ CRASHED (100%)
+- **Cauză:** SyntaxError: keyword argument repeated: style
+- **Fișier:** app_layout_new.py, line 224
+- **Commit problematic:** 2008b49 (revert ClientSide callback)
+- **Impact:** Site blocat complet - Railway nu poate porni aplicația
+
+### ROOT CAUSE
+- Component `html.Div` pentru `admin-batch-upload-mode` avea parametrul `style` definit de **2 ori**:
+  * **Linia 166:** `style={'display': 'block', 'marginBottom': '20px'}` (plasare corectă după `id`)
+  * **Linia 224:** `style={'display': 'block', 'marginBottom': '20px'}` (duplicat - eroare sintaxă)
+- Python NU permite același keyword argument de 2 ori în apelul de funcție
+
+### FIX APLICAT (Commit e580441)
+- **Acțiune:** Șters parametrul duplicat de la linia 224
+- **Păstrat:** Stilul corect de la linia 166 (în locul potrivit)
+- **Status:** ⏳ PUSH-UIT, așteptăm redeploy Railway
+
+### ISTORIC PROBLEMA toggle_batch_mode_display
+1. **Server-side callback (commit 121403c):** NU se declanșa → ambele moduri vizibile simultan
+2. **ClientSide callback (commit c41d1e4):** → ❌ 502 Bad Gateway COMPLET (JavaScript/Dash 3.x conflict)
+3. **Revert ClientSide (commit 2008b49):** → ❌ SyntaxError duplicate `style` (conflict merge manual)
+4. **Hotfix syntax (commit e580441):** → ⏳ În curs de deploy...
+
+---
+
+## ✅ STATUS ANTERIOR (înainte de toggle_batch_mode fix) - SITE 100% FUNCȚIONAL!
 
 ### 🎉 SUCCESE FINALE
 
