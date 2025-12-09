@@ -246,6 +246,28 @@ def initialize_application():
     except Exception as force_err:
         logger.critical(f"[INIT 23/30] ❌ Force registration ERROR: {force_err}", exc_info=True)
     
+    # === DASH UPLOADER CONFIG (CRITICAL: Must be before callbacks!) ===
+    # Soluție T2: Configurare dash-uploader înainte de importul callback-urilor care folosesc @du.callback
+    import dash_uploader as du
+    
+    # Temp folder for uploads (cleaned up after processing)
+    # Folosim getcwd() pentru a fi siguri că e în root-ul aplicației (unde are drepturi de scriere)
+    UPLOAD_FOLDER_ROOT = os.path.join(os.getcwd(), 'temp_uploads')
+    
+    if not os.path.exists(UPLOAD_FOLDER_ROOT):
+        try:
+            os.makedirs(UPLOAD_FOLDER_ROOT)
+            logger.warning(f"[INIT 23.4/30] ✅ Created upload folder: {UPLOAD_FOLDER_ROOT}")
+        except Exception as e:
+            logger.warning(f"[INIT 23.4/30] ⚠️ Could not create upload folder: {e}")
+    
+    try:
+        du.configure_upload(app, UPLOAD_FOLDER_ROOT)
+        logger.warning(f"[INIT 23.5/30] ✅ Dash Uploader configured successfully")
+    except Exception as du_err:
+        logger.critical(f"[INIT 23.5/30] ❌ Dash Uploader config FAILED: {du_err}")
+        # Nu dăm raise aici pentru că vrem să vedem și alte erori, dar funcționalitatea de upload va fi broken
+    
     # === CALLBACKS & LAYOUT ===
     # CRITICAL: Trebuie setate ÎNAINTE de warmup pentru ca Dash să știe ce componente să înregistreze!
     logger.warning("[INIT 24/30] 📦 Importing layout and callbacks...")
