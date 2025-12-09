@@ -725,7 +725,7 @@ def toggle_batch_mode_display(selected_mode):
     ],
     id='admin-batch-file-upload',
 )
-def on_upload_complete(status: du.UploadStatus):
+def on_upload_complete(status):
     """
     [T2 Solution] Streaming Upload Finalizat.
     """
