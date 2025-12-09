@@ -773,11 +773,15 @@ def update_upload_ui_list(files_data):
     """
     Randează lista vizuală a fișierelor bazată pe datele din Store.
     """
+    tag = "update_upload_ui_list"
     if not files_data:
-         return html.P("📭 Nu există fișiere încărcate încă.", style={
+        logger.info(f"[{tag}] 📭 Nu există date în store (files_data e gol/None).")
+        return html.P("📭 Nu există fișiere încărcate încă.", style={
             'textAlign': 'center', 'color': '#95a5a6', 'padding': '20px',
             'backgroundColor': '#f8f9fa', 'borderRadius': '5px', 'border': '1px dashed #bdc3c7'
         })
+    
+    logger.info(f"[{tag}] 📊 Actualizare UI cu {len(files_data)} fișiere.")
         
     csv_count = sum(1 for f in files_data if f.get('type') == 'CSV')
     pdf_count = sum(1 for f in files_data if f.get('type') == 'PDF')

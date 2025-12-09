@@ -180,6 +180,10 @@ if not os.path.exists(UPLOAD_FOLDER_ROOT):
     
 # Configurăm dash-uploader pentru aplicație
 du.configure_upload(app, UPLOAD_FOLDER_ROOT)
+try:
+    logger.info(f"📦 Dash Uploader Version: {getattr(du, '__version__', 'unknown')}")
+except Exception:
+    pass
 
 
 # === INIȚIALIZARE DATABASE & AUTHENTICATION ===
