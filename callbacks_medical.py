@@ -876,7 +876,7 @@ def handle_file_deletion(clear_all_clicks, delete_clicks, current_files):
 @app.callback(
     [Output('admin-batch-result', 'children'),
      Output('admin-refresh-trigger', 'data'),
-     Output('admin-batch-session-id', 'data'),
+     Output('admin-batch-session-id', 'data', allow_duplicate=True),
      Output('admin-batch-progress-container', 'style'),
      Output('admin-batch-progress-interval', 'disabled'),
      Output('admin-batch-uploaded-files-store', 'data', allow_duplicate=True)],
