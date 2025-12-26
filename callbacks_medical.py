@@ -931,7 +931,7 @@ def handle_file_deletion(clear_all_clicks, delete_clicks, current_files):
      Output('admin-batch-progress-container', 'style'),
      Output('admin-batch-progress-interval', 'disabled'),
      Output('admin-batch-uploaded-files-store', 'data', allow_duplicate=True),
-     Output('active-date-filter', 'data')],  # [FIX] Resetăm filtrul dată după batch
+     Output('active-date-filter', 'data', allow_duplicate=True)],  # [FIX] Resetăm filtrul dată după batch
     [Input('admin-start-batch-button', 'n_clicks')],
     [State('admin-batch-mode-selector', 'value'),
      State('admin-batch-input-folder', 'value'),
