@@ -1452,35 +1452,86 @@ def load_data_view_with_accordion(n_clicks_refresh, trigger, expand_clicks, togg
     try:
         from datetime import datetime
         
+        logger.info("="*100)
+        logger.info("📊 [DATA VIEW] load_data_view_with_accordion CALLBACK START")
+        logger.info("="*100)
+        
+        # [LOG 1-5] Parametri callback
+        logger.info(f"📋 [LOG 1] date_filter param: {date_filter}")
+        logger.info(f"📋 [LOG 2] grouping param: {grouping}")
+        logger.info(f"📋 [LOG 3] n_clicks_refresh: {n_clicks_refresh}")
+        logger.info(f"📋 [LOG 4] trigger data: {trigger}")
+        logger.info(f"📋 [LOG 5] expanded_id: {expanded_id}")
+        
+        # [LOG 6-10] Încărcare date
+        logger.info(f"🔄 [LOG 6] Calling patient_links.get_all_links_for_admin()...")
         all_links = patient_links.get_all_links_for_admin()
+        logger.info(f"📊 [LOG 7] TOTAL LINKS RECEIVED: {len(all_links)}")
         
         if not all_links:
+            logger.warning("⚠️ [LOG 8] NO LINKS FOUND - returning empty state")
             return html.Div(
                 "📭 Nu există înregistrări încă. Procesați fișiere CSV din tab-ul 'Procesare Batch'.",
                 style={'padding': '50px', 'textAlign': 'center', 'color': '#666', 'fontStyle': 'italic', 'backgroundColor': '#f8f9fa', 'borderRadius': '10px'}
             ), current_expanded, collapsed_groups
         
+        # [LOG 11-15] Analiza date range
+        logger.info(f"📅 [LOG 11] Analyzing date range of all links...")
+        dates_found = []
+        for link in all_links:
+            if link.get('recording_date'):
+                dates_found.append(link['recording_date'])
+            elif link.get('created_at'):
+                try:
+                    created = datetime.fromisoformat(link['created_at']).date().isoformat()
+                    dates_found.append(created)
+                except:
+                    pass
+        
+        if dates_found:
+            logger.info(f"📅 [LOG 12] Oldest date in dataset: {min(dates_found)}")
+            logger.info(f"📅 [LOG 13] Newest date in dataset: {max(dates_found)}")
+            logger.info(f"📅 [LOG 14] Sample dates (first 5): {dates_found[:5]}")
+        else:
+            logger.warning("⚠️ [LOG 15] NO DATES FOUND in any link!")
+        
+        # [LOG 16-20] Detalii link-uri înainte de filtrare
+        logger.info(f"📋 [LOG 16] First 3 links details:")
+        for idx, link in enumerate(all_links[:3]):
+            logger.info(f"   [LOG 17.{idx}] Token: {link['token'][:8]}... | created_at: {link.get('created_at')} | recording_date: {link.get('recording_date')} | device: {link.get('device_name')[:30]}...")
+        
         # === FILTRARE TEMPORALĂ ===
+        logger.info(f"🔍 [LOG 18] Checking date filter...")
         if date_filter and date_filter.get('start') and date_filter.get('end'):
             start_date = datetime.fromisoformat(date_filter['start']).date()
             end_date = datetime.fromisoformat(date_filter['end']).date()
             filter_label = date_filter.get('label', 'Interval Personalizat')
             
-            logger.info(f"🔍 Aplicare filtru temporal: {filter_label} ({start_date} - {end_date})")
+            logger.info(f"🔍 [LOG 19] DATE FILTER ACTIVE!")
+            logger.info(f"🔍 [LOG 20] Filter label: '{filter_label}'")
+            logger.info(f"🔍 [LOG 21] Filter start_date: {start_date}")
+            logger.info(f"🔍 [LOG 22] Filter end_date: {end_date}")
+            logger.info(f"🔍 [LOG 23] Links BEFORE filtering: {len(all_links)}")
             
             # Filtrăm link-urile după dată
             filtered_links = []
-            for link in all_links:
+            for idx, link in enumerate(all_links):
                 if link.get('recording_date'):
                     try:
                         rec_date = datetime.strptime(link['recording_date'], '%Y-%m-%d').date()
-                        if start_date <= rec_date <= end_date:
+                        is_in_range = start_date <= rec_date <= end_date
+                        logger.info(f"   [LOG 24.{idx}] Token {link['token'][:8]}... | rec_date: {rec_date} | in_range: {is_in_range}")
+                        if is_in_range:
                             filtered_links.append(link)
-                    except:
-                        pass  # Ignorăm înregistrările cu dată invalidă
+                    except Exception as parse_err:
+                        logger.warning(f"   ⚠️ [LOG 25.{idx}] Token {link['token'][:8]}... | Date parse FAILED: {parse_err}")
+                else:
+                    logger.warning(f"   ⚠️ [LOG 26.{idx}] Token {link['token'][:8]}... | NO recording_date field!")
             
+            logger.info(f"✅ [LOG 27] Links AFTER filtering: {len(filtered_links)} (removed {len(all_links) - len(filtered_links)})")
             all_links = filtered_links
-            logger.info(f"✅ După filtrare: {len(all_links)} înregistrări")
+        else:
+            logger.info(f"ℹ️ [LOG 28] NO DATE FILTER active - showing ALL {len(all_links)} links")
         
         # === GRUPARE PE ZILE/SĂPTĂMÂNI/LUNI ===
         grouped_links = {}
