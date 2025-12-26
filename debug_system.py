@@ -1,5 +1,6 @@
 import logging
 import collections
+import threading
 from dash import html, dcc, Output, Input, State, callback, clientside_callback, no_update
 
 # ==============================================================================
@@ -11,26 +12,39 @@ MAX_LOGS = 2000
 class MemoryLogHandler(logging.Handler):
     """
     Un handler de logging custom care păstrează ultimele N mesaje în memorie.
+    Thread-safe pentru Gunicorn/Threading.
     """
     def __init__(self, maxlen=MAX_LOGS):
         super().__init__()
         self.logs = collections.deque(maxlen=maxlen)
-        # Format similar cu cel din fișier, dar poate fi simplificat pentru UI
+        self.lock = threading.RLock() # [FIX] Thread safety explicit pentru acces la deque
+        
         self.formatter = logging.Formatter(
             '%(asctime)s - %(levelname)s - [%(module)s] - %(message)s',
             datefmt='%H:%M:%S'
         )
 
     def emit(self, record):
+        """
+        Scrie un record în buffer.
+        Sistemul de logging are propriul lock, dar e bine să protejăm explicit
+        deque-ul pentru a evita race conditions cu get_logs_text.
+        """
         try:
             msg = self.format(record)
-            self.logs.append(msg)
+            with self.lock:
+                self.logs.append(msg)
         except Exception:
             self.handleError(record)
 
     def get_logs_text(self):
-        """Returnează toate log-urile ca un singur string."""
-        return "\n".join(self.logs)
+        """
+        Returnează toate log-urile ca un singur string.
+        Thread-safe: face o copie a listei sub lock.
+        """
+        with self.lock:
+            # [FIX] Iterare safe asupra dequeului (evită "RuntimeError: deque mutated during iteration")
+            return "\n".join(list(self.logs))
 
 # Instanța globală (Singleton)
 memory_handler = MemoryLogHandler()
@@ -122,7 +136,8 @@ def get_debug_footer():
             ),
             
             # Hidden Components for Logic
-            dcc.Interval(id='debug-refresh-interval', interval=2000, n_intervals=0, disabled=False), # Poll every 2s
+            # [FIX] Disabled by default so it doesn't poll when closed
+            dcc.Interval(id='debug-refresh-interval', interval=2000, n_intervals=0, disabled=True), 
             dcc.Store(id='debug-is-open-store', data=False), # Persist open/closed state
             dcc.Clipboard(id='debug-clipboard', target_id='debug-log-display')
         ]
@@ -164,7 +179,8 @@ def register_debug_callbacks(app):
     )
     def update_logs(n):
         logs = memory_handler.get_logs_text()
-        count = len(memory_handler.logs)
+        with memory_handler.lock:
+             count = len(memory_handler.logs)
         status = f"Active | {count} records | Last update: {n}"
         return logs, status
 
