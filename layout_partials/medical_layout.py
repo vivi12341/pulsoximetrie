@@ -119,6 +119,7 @@ def _get_batch_tab():
                                     pause_button=True,
                                     cancel_button=True,
                                     max_file_size=2000,  # 2GB
+                                    max_files=100,      # Allow up to 100 files at once
                                     filetypes=['csv', 'pdf'],
                                     default_style={'minHeight': '150px', 'lineHeight': '150px', 'border': '2px dashed #3498db', 'borderRadius': '10px', 'backgroundColor': '#ecf0f1', 'textAlign': 'center'},
                                 )
