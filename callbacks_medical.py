@@ -729,25 +729,65 @@ def on_upload_complete(status):
     """
     [T2 Solution] Streaming Upload Finalizat.
     """
-    logger.info("=" * 80)
-    logger.info("🚀 [STREAMING] Upload completat!")
     
-    # [FIX] Handle list of statuses (batch upload)
-    if isinstance(status, list):
-        if not status:
+    # [FIX v3] Robust handling for dash-uploader status
+    # Status can be:
+    # 1. Object with .uploaded_files (Single upload)
+    # 2. List of strings (Batch upload typical in some versions)
+    # 3. List of objects (Batch upload theoretical)
+    
+    upload_id = "unknown_batch_session"
+    new_files = []
+    
+    try:
+        # Case A: List
+        if isinstance(status, list):
+            if not status:
+                return no_update, no_update
+            
+            first_item = status[0]
+            
+            if isinstance(first_item, str):
+                # E.g. ['path/to/file1.pdf', 'path/to/file2.csv']
+                logger.info(f"ℹ️ Status este list[str]. Detectate {len(status)} fișiere.")
+                new_files = status
+                # Try to extract upload_id from the folder name of the first file
+                try:
+                    # typical path: .../temp_uploads/upload_id/filename
+                    path_obj = pathlib.Path(first_item)
+                    upload_id = path_obj.parent.name
+                except:
+                    pass
+            elif hasattr(first_item, 'uploaded_files'):
+                # E.g. [UploadStatus(...), UploadStatus(...)]
+                logger.info("ℹ️ Status este list[UploadStatus].")
+                for s in status:
+                    new_files.extend(s.uploaded_files)
+                if hasattr(first_item, 'upload_id'):
+                    upload_id = first_item.upload_id
+            else:
+                 logger.warning(f"⚠️ Tip necunoscut în lista status: {type(first_item)}")
+                 # Fallback: assume strings? No, unsafe.
+        
+        # Case B: Object (UploadStatus)
+        elif hasattr(status, 'uploaded_files'):
+            logger.info("ℹ️ Status este UploadStatus (single).")
+            new_files = status.uploaded_files
+            if hasattr(status, 'upload_id'):
+                upload_id = status.upload_id
+                
+        else:
+            logger.error(f"❌ Status primit are tip neașteptat: {type(status)}")
             return no_update, no_update
-        main_status = status[0]
-        new_files = []
-        for s in status:
-            new_files.extend(s.uploaded_files)
-    else:
-        main_status = status
-        new_files = status.uploaded_files
-    
-    upload_id = main_status.upload_id
-    logger.info(f"🆔 Upload ID: {upload_id}")
+
+    except Exception as e:
+         logger.error(f"❌ Eroare la parsarea status-ului de upload: {e}", exc_info=True)
+         return no_update, no_update
+
+    logger.info(f"🆔 Upload ID final: {upload_id}")
     
     if not new_files:
+        logger.warning("⚠️ Lista de fișiere noi este goală.")
         return no_update, no_update
         
     first_file = pathlib.Path(new_files[0])
