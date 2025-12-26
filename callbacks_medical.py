@@ -1786,17 +1786,7 @@ def load_data_view_with_accordion(n_clicks_refresh, trigger, expand_clicks, togg
         ), current_expanded, []
 
 
-# ===== CLIENTSIDE CALLBACK pentru DEBUG în CONSOLĂ BROWSER =====
-app.clientside_callback(
-    """
-    function(toggle_clicks, collapsed_groups) {
-        console.log("🔵 [BROWSER DEBUG] Toggle button clicked!");
-        console.log("🔵 [BROWSER DEBUG] toggle_clicks:", toggle_clicks);
-        console.log("🔵 [BROWSER DEBUG] collapsed_groups:", collapsed_groups);
-        return window.dash_clientside.no_update;
-    }
-    """
-)
+
 
 @app.callback(
     Output('admin-dashboard-table', 'children'),
