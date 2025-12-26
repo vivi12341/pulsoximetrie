@@ -202,49 +202,17 @@ def initialize_application():
     
     logger.warning("[INIT 21/30] ✅ Database & Authentication initialized COMPLETE")
     
-    # === DASH LIBRARIES REGISTRATION (FIX v3 - FORCE în wsgi.py!) ===
-    # PROBLEMA: app_instance.py setează dummy layout DAR Gunicorn fork workers DUPĂ import
-    # SOLUȚIA: Forțăm înregistrarea AICI în initialize_application() care rulează LA STARTUP
+    # === DASH LIBRARIES REGISTRATION ===
+    # We removed the forced registration hack as it was causing 500 errors on assets.
+    # We rely on standard Dash behavior (importing callbacks/layout should trigger it).
     
-    logger.warning("[INIT 22/30] 🔧 FORCING Dash library registration în wsgi.py startup...")
-    
-    # Verificăm starea ÎNAINTE de forțare
-    try:
-        if hasattr(app, '_registered_paths'):
-            initial_libs = list(app._registered_paths.keys())
-            logger.warning(f"[INIT 22.1/30] 📊 BEFORE force: {len(initial_libs)} libraries: {initial_libs}")
-        else:
-            logger.warning("[INIT 22.1/30] ⚠️ _registered_paths not found - Dash version issue?")
-    except Exception as e:
-        logger.warning(f"[INIT 22.1/30] ⚠️ Cannot read _registered_paths: {e}")
-    
-    # FORȚĂM înregistrarea prin accesare property (trigger lazy init)
-    try:
-        # Pasul 1: Trigger registered_paths property
-        if hasattr(app, 'registered_paths'):
-            _ = app.registered_paths  # Acesta ar trebui să triggere lazy init
-            logger.warning("[INIT 22.2/30] ✅ Triggered app.registered_paths property")
-        
-        # Pasul 2: Verificăm Flask routes (asset serving)
-        with application.app_context():
-            dash_routes = [r for r in application.url_map._rules if '_dash-component-suites' in str(r)]
-            logger.warning(f"[INIT 22.3/30] 🔍 Found {len(dash_routes)} Dash asset routes")
-            
-        # Pasul 3: Verificăm din nou _registered_paths DUPĂ forțare
-        if hasattr(app, '_registered_paths'):
-            after_libs = list(app._registered_paths.keys())
-            logger.warning(f"[INIT 23/30] 📊 AFTER force: {len(after_libs)} libraries: {after_libs}")
-            
-            if len(after_libs) == 0:
-                logger.critical("[INIT 23.1/30] ❌❌❌ CRITICAL: Registered libraries STILL EMPTY!")
-                logger.critical("[INIT 23.2/30] ❌ Dash library registration FAILED în wsgi.py")
-            else:
-                logger.warning(f"[INIT 23.1/30] ✅ SUCCESS: {len(after_libs)} libraries registered!")
-        else:
-            logger.warning("[INIT 23/30] ⚠️ _registered_paths not accessible after force")
-            
-    except Exception as force_err:
-        logger.critical(f"[INIT 23/30] ❌ Force registration ERROR: {force_err}", exc_info=True)
+    # Triggering registered_paths property just in case (safe side-effect)
+    if hasattr(app, 'registered_paths'):
+        try:
+             _ = app.registered_paths
+             logger.warning("[INIT 22/30] ✅ Triggered app.registered_paths (standard)")
+        except Exception:
+             pass
     
     # === DASH UPLOADER CONFIG (CRITICAL: Must be before callbacks!) ===
     # Soluție T2: Configurare dash-uploader înainte de importul callback-urilor care folosesc @du.callback
