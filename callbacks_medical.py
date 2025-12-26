@@ -1399,14 +1399,22 @@ def load_data_view_with_accordion(n_clicks_refresh, trigger, expand_clicks, togg
     
     logger.debug("Callback data-view apelat.")
     
-    # LOG: Afișăm ce a trigger-uit callback-ul
-    logger.info(f"🔍 Callback trigger: {ctx.triggered_id}")
-    logger.info(f"🔍 Trigger type: {type(ctx.triggered_id)}")
-    if isinstance(ctx.triggered_id, dict):
-        logger.info(f"🔍 Trigger dict keys: {ctx.triggered_id.keys()}")
-        logger.info(f"🔍 Trigger 'type': {ctx.triggered_id.get('type')}")
-        logger.info(f"🔍 Trigger 'index': {ctx.triggered_id.get('index')}")
+    # [DIAGNOSTIC LOG GLOBAL]
+    trigger_id = ctx.triggered_id
+    logger.info("="*80)
+    logger.info(f"⚡ [ADMIN_CALLBACK] TRIGGERED! ID: {trigger_id}")
     
+    # LOG: Afișăm ce a trigger-uit callback-ul
+    if trigger_id:
+        logger.info(f"   - Type: {type(trigger_id)}")
+        if isinstance(trigger_id, dict):
+             logger.info(f"   - Dict Keys: {trigger_id.keys()}")
+             logger.info(f"   - Index: {trigger_id.get('index')}")
+    else:
+        logger.info("   - Initial Call / No Trigger")
+    
+    logger.info("="*80)
+
     # Inițializăm collapsed_groups dacă e None
     if collapsed_groups is None:
         collapsed_groups = []
