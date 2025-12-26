@@ -509,25 +509,52 @@ def load_patient_data_from_token(n_intervals):
         
         # === ÎNCĂRCĂM CSV-UL ȘI DATELE COMPLETE ===
         # === ÎNCĂRCĂM DATELE PRIN DATA SERVICE (Refactorizat v2) ===
+        # [DIAGNOSTIC LOG 23] Apel DataService din Patient View
+        logger.info(f"🏥 [PATIENT_VIEW] Apel data_service.get_patient_dataframe pentru token {token[:8]}...")
+        
         # Folosim logica centralizată din data_service.py
         df, csv_filename, status_msg = data_service.get_patient_dataframe(token)
         
         if df is not None:
-             logger.info(f"✅ [PATIENT VIEW] Date încărcate cu succes via DataService: {len(df)} rânduri")
+             # [DIAGNOSTIC LOG 24] DataService returnat DF ok
+             logger.info(f"✅ [PATIENT_VIEW] Date încărcate cu succes via DataService: {len(df)} rânduri. Start generare grafic...")
         else:
-             logger.error(f"❌ [PATIENT VIEW] Eșec încărcare date via DataService: {status_msg}")
+             # [DIAGNOSTIC LOG 25] DataService fail
+             logger.error(f"❌ [PATIENT_VIEW] Eșec încărcare date via DataService: {status_msg}")
         
         # Generăm figura
         if df is not None and not df.empty:
-            fig = create_plot(df, file_name=csv_filename)
-            
-            # Aplicăm logo-ul pe figura interactivă (dacă este configurat)
             try:
-                from plot_generator import apply_logo_to_figure
-                fig = apply_logo_to_figure(fig)
-            except Exception as logo_error:
-                logger.warning(f"Nu s-a putut aplica logo pe figura interactivă: {logo_error}")
+                # [DIAGNOSTIC LOG 26] Start create_plot
+                logger.info(f"📈 [PATIENT_VIEW] Apel plot_generator.create_plot...")
+                fig = create_plot(df, file_name=csv_filename)
+                
+                # [DIAGNOSTIC LOG 27] Verificare obiect figura
+                if fig:
+                    logger.info("✅ [PATIENT_VIEW] Figura creată cu succes (Not None).")
+                    # Check if data exists in fig
+                    if hasattr(fig, 'data') and len(fig.data) > 0:
+                         logger.info(f"   - Fig Data Traces: {len(fig.data)}")
+                    else:
+                         logger.warning("⚠️ [PATIENT_VIEW] Figura există dar nu are trace-uri de date!")
+                else:
+                    logger.error("❌ [PATIENT_VIEW] create_plot a returnat None!")
+
+                # Aplicăm logo-ul pe figura interactivă (dacă este configurat)
+                try:
+                    from plot_generator import apply_logo_to_figure
+                    fig = apply_logo_to_figure(fig)
+                except Exception as logo_err:
+                     logger.warning(f"⚠️ [PATIENT_VIEW] Eroare aplicare logo (ignorat): {logo_err}")
+
+            except Exception as plot_err:
+                 logger.error(f"❌ [PATIENT_VIEW] Eroare critică la generarea graficului: {plot_err}", exc_info=True)
+                 # If plot generation fails, return an empty figure and an error message
+                 return html.Div(f"Eroare generare grafic: {plot_err}", style={'color': 'red', 'padding': '20px'}), go.Figure()
+        
         else:
+            # [DIAGNOSTIC LOG 29] Fallback UI pentru lipsă date
+            logger.warning(f"⚠️ [PATIENT_VIEW] Nu avem date (df is None/Empty). Afișăm mesaj eroare.")
             fig = go.Figure()
             fig.update_layout(
                 title="⚠️ Graficul nu este disponibil încă",
@@ -537,10 +564,12 @@ def load_patient_data_from_token(n_intervals):
             )
             
             # Mesaj detaliat pentru debugging
-            if not recordings or len(recordings) == 0:
-                logger.warning(f"❌ Nicio înregistrare găsită pentru token {token[:8]}...")
-            else:
-                logger.warning(f"❌ CSV lipsă pentru token {token[:8]}... (recordings: {len(recordings)})")
+            # The 'recordings' variable is not defined in this scope, so this part is removed to avoid NameError.
+            # The status_msg from data_service.get_patient_dataframe already provides context.
+            # if not recordings or len(recordings) == 0:
+            #     logger.warning(f"❌ Nicio înregistrare găsită pentru token {token[:8]}...")
+            # else:
+            #     logger.warning(f"❌ CSV lipsă pentru token {token[:8]}... (recordings: {len(recordings)})")
         
         # === CONSTRUIM AFIȘAREA COMPLETĂ ===
         content_sections = []
