@@ -1,5 +1,6 @@
 from dash import dcc, html
 import config
+from debug_system import get_debug_footer
 
 def get_medical_layout():
     return html.Div([
@@ -29,7 +30,10 @@ def get_medical_layout():
             ]
         ),
         
-        _get_footer()
+        _get_footer(),
+
+        # [NEW] Debug System Footer (Fixed position)
+        get_debug_footer()
     ])
 
 import dash_uploader as du

@@ -105,8 +105,17 @@ def setup_logger():
     if not app_logger.handlers:
         app_logger.addHandler(file_handler)
         app_logger.addHandler(console_handler)
+        
+        # [NEW] Adăugăm Memory Handler pentru Debug System din UI
+        try:
+            from debug_system import memory_handler
+            app_logger.addHandler(memory_handler)
+        except ImportError:
+            # Fallback dacă debug_system nu este disponibil (ex: scripturi izolate)
+            pass
 
     return app_logger
+
 
 # --- Instanțierea Logger-ului ---
 # Apelăm funcția o singură dată la importarea modulului pentru a crea instanța

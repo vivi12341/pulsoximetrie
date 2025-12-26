@@ -114,7 +114,12 @@ def initialize_application():
     import admin_callbacks
     import callbacks_medical
     import callbacks  # Original callbacks
-    logger.warning("✅ Callbacks imported")
+    
+    # [NEW] Register Debug System Callbacks
+    from debug_system import register_debug_callbacks
+    register_debug_callbacks(app)
+    
+    logger.warning("✅ Callbacks imported (including Debug System)")
 
     # Import Layout (CRITICAL FIX: Overwrite dummy layout)
     from app_layout_new import layout

@@ -286,6 +286,11 @@ logger.info("📋 Înregistrare callbacks (originale + admin)...")
 import admin_callbacks  # Callbacks pentru administrare utilizatori (doar admin)
 logger.info(f"✅ Callbacks înregistrate: {len(app.callback_map)} total")
 
+# [NEW] Register Debug System Callbacks
+from debug_system import register_debug_callbacks
+register_debug_callbacks(app)
+logger.info("🐞 Debug Callbacks registered.")
+
 
 # Importăm layout-ul DUPĂ ce callbacks-urile sunt înregistrate
 from app_layout_new import layout
