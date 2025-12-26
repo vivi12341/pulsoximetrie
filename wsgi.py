@@ -110,6 +110,12 @@ def initialize_application():
     du.configure_upload(app, os.path.join(os.getcwd(), 'temp_uploads'))
     logger.warning("✅ Dash Uploader configured")
     
+    # Import Callbacks
+    import admin_callbacks
+    import callbacks_medical
+    import callbacks  # Original callbacks
+    logger.warning("✅ Callbacks imported")
+    
     # Warmup
     with server.app_context():
         logger.warning(f"🔧 Routes: {len(server.url_map._rules)}")
