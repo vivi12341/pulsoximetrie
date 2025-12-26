@@ -906,53 +906,86 @@ def on_upload_complete(status):
     session_folder = first_file.parent
     logger.info(f"📂 Folder Sesiune: {session_folder}")
     
+    # [FIX v5] Retry-based folder scanning cu delay pentru async writes
+    # CAUZĂ: dash-uploader/resumable.js poate scrie fișiere async
+    # SOLUȚIE: Așteptăm și re-scanăm până când toate fișierele sunt vizibile
     all_files_metadata = []
-    try:
-        # [FIX v4] Ultra-Defensive Scanner
-        # Scanăm tot folderul, logăm tot, ignorăm case sensitivity
-        entries = list(os.scandir(session_folder))
-        logger.info(f"🔍 [SCAN] Start scanare folder sesiune. Intrări totale: {len(entries)}")
+    
+    max_retries = 10  # Max 10 încercări
+    retry_delay = 0.1  # Start cu 100ms
+    max_delay = 1.0    # Cap la 1 secundă
+    
+    for attempt in range(max_retries):
+        try:
+            if attempt > 0:
+                # Așteaptă înainte de re-scanare (exponential backoff)
+                current_delay = min(retry_delay * (1.5 ** attempt), max_delay)
+                logger.info(f"🔄 [SCAN] Încercare {attempt + 1}/{max_retries} - Aștept {current_delay:.2f}s...")
+                time.sleep(current_delay)
+            
+            # [FIX v4] Ultra-Defensive Scanner
+            # Scanăm tot folderul, logăm tot, ignorăm case sensitivity
+            temp_metadata = []
+            entries = list(os.scandir(session_folder))
+            logger.info(f"🔍 [SCAN #{attempt + 1}] Start scanare folder sesiune. Intrări totale: {len(entries)}")
+            
+            for entry in entries:
+                # Logăm fiecare intrare pentru diagnostic
+                logger.debug(f"   - Intrare găsită: '{entry.name}' (Dir: {entry.is_dir()})")
+                
+                # Ignorăm directoare și fișiere ascunse
+                if entry.is_dir():
+                    logger.debug(f"     -> Ignorat (Director)")
+                    continue
+                if entry.name.startswith('.'):
+                    logger.debug(f"     -> Ignorat (Ascuns)")
+                    continue
+                    
+                # Normalizăm numele pentru verificare extensie
+                fname = entry.name
+                fname_lower = fname.lower()
+                
+                f_type = 'OTHER'
+                if fname_lower.endswith('.pdf'):
+                    f_type = 'PDF'
+                elif fname_lower.endswith('.csv'):
+                    f_type = 'CSV'
+                    
+                if f_type == 'OTHER':
+                    logger.debug(f"     -> Ignorat (Tip necunoscut/neinteresant: {fname})")
+                    continue
+                    
+                logger.info(f"✅ [SCAN #{attempt + 1}] Fișier valid acceptat: {fname} [{f_type}] ({entry.stat().st_size} bytes)")
+                    
+                temp_metadata.append({
+                    'filename': fname, # Păstrăm numele original (case-sensitive) pentru display
+                    'temp_path': entry.path,
+                    'type': f_type,
+                    'size': entry.stat().st_size
+                })
+            
+            # Verificăm dacă am găsit fișiere noi față de scanarea anterioară
+            if len(temp_metadata) > len(all_files_metadata):
+                logger.info(f"📈 [SCAN #{attempt + 1}] Găsite {len(temp_metadata) - len(all_files_metadata)} fișiere noi!")
+                all_files_metadata = temp_metadata
+                # Continuăm să scanăm în caz că mai sunt fișiere în curs de scriere
+                continue
+            elif len(temp_metadata) == len(all_files_metadata) and len(all_files_metadata) > 0:
+                # Numărul de fișiere s-a stabilizat și avem cel puțin un fișier
+                logger.info(f"✅ [SCAN #{attempt + 1}] Număr fișiere stabilizat: {len(all_files_metadata)}")
+                all_files_metadata = temp_metadata
+                break  # Am terminat
+            else:
+                # Actualizăm lista chiar dacă e mai mică (edge case: cleanup partial)
+                all_files_metadata = temp_metadata
+                
+        except Exception as scan_error:
+            logger.error(f"❌ [SCAN #{attempt + 1}] Eroare la scanare: {scan_error}")
+            # Continuăm cu următoarea încercare
+            continue
+    
+    logger.info(f"✅ [SCAN] Finalizat după {attempt + 1} încercări. Fișiere valide pentru UI: {len(all_files_metadata)}")
         
-        for entry in entries:
-            # Logăm fiecare intrare pentru diagnostic
-            logger.debug(f"   - Intrare găsită: '{entry.name}' (Dir: {entry.is_dir()})")
-            
-            # Ignorăm directoare și fișiere ascunse
-            if entry.is_dir():
-                logger.debug(f"     -> Ignorat (Director)")
-                continue
-            if entry.name.startswith('.'):
-                logger.debug(f"     -> Ignorat (Ascuns)")
-                continue
-                
-            # Normalizăm numele pentru verificare extensie
-            fname = entry.name
-            fname_lower = fname.lower()
-            
-            f_type = 'OTHER'
-            if fname_lower.endswith('.pdf'):
-                f_type = 'PDF'
-            elif fname_lower.endswith('.csv'):
-                f_type = 'CSV'
-                
-            if f_type == 'OTHER':
-                logger.debug(f"     -> Ignorat (Tip necunoscut/neinteresant: {fname})")
-                continue
-                
-            logger.info(f"✅ [SCAN] Fișier valid acceptat: {fname} [{f_type}] ({entry.stat().st_size} bytes)")
-                
-            all_files_metadata.append({
-                'filename': fname, # Păstrăm numele original (case-sensitive) pentru display
-                'temp_path': entry.path,
-                'type': f_type,
-                'size': entry.stat().st_size
-            })
-            
-        logger.info(f"✅ [SCAN] Finalizat. Fișiere valide pentru UI: {len(all_files_metadata)}")
-        
-    except Exception as e:
-        logger.error(f"❌ Eroare critică la scanarea folderului: {e}", exc_info=True)
-        return no_update, no_update
         
     return all_files_metadata, str(upload_id)
 
