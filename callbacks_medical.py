@@ -934,7 +934,7 @@ def handle_file_deletion(clear_all_clicks, delete_clicks, current_files):
     [Input('admin-start-batch-button', 'n_clicks')],
     [State('admin-batch-mode-selector', 'value'),
      State('admin-batch-input-folder', 'value'),
-     State('admin-batch-uploaded-files-store', 'data'),
+     State('admin-batch-session-id', 'data'),
      State('admin-batch-output-folder', 'value'),
      State('admin-batch-window-minutes', 'value')],
     prevent_initial_call=True
