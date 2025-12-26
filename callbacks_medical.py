@@ -1381,11 +1381,28 @@ def admin_run_batch_processing(n_clicks, batch_mode, input_folder, session_id, o
         ], style={'padding': '20px', 'backgroundColor': '#d4edda', 'border': '1px solid #28a745', 'borderRadius': '10px'}), n_clicks, session_id, progress_style, interval_disabled, files_to_clear, None  # [FIX] Return None pentru resetare filtru dată
         
     except Exception as e:
-        logger.error(f"Eroare la procesare batch: {e}", exc_info=True)
-        return html.Div(
-            f"❌ EROARE: {str(e)}",
-            style={'padding': '15px', 'backgroundColor': '#ffdddd', 'border': '1px solid red', 'borderRadius': '5px', 'color': 'red'}
-        ), no_update, None, {'display': 'none'}, True, no_update, no_update, no_update
+        logger.error("="*100)
+        logger.error("💥 [BATCH PROCESSING] CRITICAL ERROR CAUGHT!")
+        logger.error(f"Exception type: {type(e).__name__}")
+        logger.error(f"Exception message: {str(e)}")
+        logger.error("="*100, exc_info=True)
+        
+        return (
+            html.Div(
+                [
+                    html.H4("❌ EROARE CRITICĂ", style={'color': 'red'}),
+                    html.P(f"Batch processing a eșuat: {str(e)}"),
+                    html.P("Verificați Railway logs pentru detalii complete.")
+                ],
+                style={'padding': '15px', 'backgroundColor': '#ffdddd', 'border': '1px solid red', 'borderRadius': '5px', 'color': 'red'}
+            ), 
+            no_update,  # admin-refresh-trigger
+            None,  # admin-batch-session-id
+            {'display': 'none'},  # admin-batch-progress-container
+            True,  # admin-batch-progress-interval disabled
+            no_update,  # admin-batch-uploaded-files-store
+            no_update  # active-date-filter
+        )
 
 
 @app.callback(
