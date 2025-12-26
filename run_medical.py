@@ -281,7 +281,7 @@ schedule_cleanup_task()
 # Altfel, @callback decorator-ii nu sunt procesați și avem KeyError în production
 # NOTE: callbacks_medical deja importat mai sus (după du.configure_upload)
 logger.info("📋 Înregistrare callbacks (originale + admin)...")
-import callbacks  # Callbacks originale (vizualizare + batch)
+# import callbacks  # [DISABLED BY TEAM] Ghost Code Elimination - Callbacks originale (vizualizare + batch) conflictuale
 # import callbacks_medical  # MOVED ABOVE (după du.configure_upload) - NU MAI IMPORTĂM AICI!
 import admin_callbacks  # Callbacks pentru administrare utilizatori (doar admin)
 logger.info(f"✅ Callbacks înregistrate: {len(app.callback_map)} total")

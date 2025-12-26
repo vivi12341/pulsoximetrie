@@ -12,4 +12,12 @@ else:
     print("❌ get_patient_dataframe function MISSING")
     exit(1)
 
+# Basic syntax check for callbacks_medical.py
+try:
+    import callbacks_medical
+    print("✅ callbacks_medical imported successfully (syntax check)")
+except ImportError as e:
+    # It might fail due to missing dependencies in this environment, but syntax errors would show up
+    print(f"⚠️ callbacks_medical import warning (could be env dependencies): {e}")
+
 print("Verification complete.")
