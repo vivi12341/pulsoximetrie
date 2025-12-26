@@ -732,10 +732,21 @@ def on_upload_complete(status):
     logger.info("=" * 80)
     logger.info("🚀 [STREAMING] Upload completat!")
     
-    upload_id = status.upload_id
+    # [FIX] Handle list of statuses (batch upload)
+    if isinstance(status, list):
+        if not status:
+            return no_update, no_update
+        main_status = status[0]
+        new_files = []
+        for s in status:
+            new_files.extend(s.uploaded_files)
+    else:
+        main_status = status
+        new_files = status.uploaded_files
+    
+    upload_id = main_status.upload_id
     logger.info(f"🆔 Upload ID: {upload_id}")
     
-    new_files = status.uploaded_files
     if not new_files:
         return no_update, no_update
         
