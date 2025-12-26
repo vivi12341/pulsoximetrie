@@ -978,8 +978,17 @@ def admin_run_batch_processing(n_clicks, batch_mode, input_folder, session_id, o
         processing_folder = os.path.join(base_upload_dir, session_id)
         
         if not os.path.exists(processing_folder):
+             # [DEBUG] Listare conținut folder părinte pentru a vedea ce există
+             try:
+                 available_folders = os.listdir(base_upload_dir) if os.path.exists(base_upload_dir) else ["DIR_MISSING"]
+             except:
+                 available_folders = ["ERROR_SCANNING"]
+                 
+             logger.error(f"❌ Folder lipsă: {processing_folder}")
+             logger.error(f"📂 Foldere disponibile în {base_upload_dir}: {available_folders}")
+             
              return html.Div(
-                f"⚠️ Sesiunea de upload nu a fost găsită pe server ({processing_folder}). Încercați să reîncărcați fișierele.",
+                f"⚠️ Sesiunea de upload nu a fost găsită. Căutat în: {processing_folder}. Disponibil: {available_folders}",
                 style={'padding': '15px', 'backgroundColor': '#ffdddd', 'border': '1px solid red', 'borderRadius': '5px'}
             ), no_update, no_update, no_update, no_update, no_update
 
