@@ -392,6 +392,7 @@ def _get_data_view_tab():
                     
                     dcc.Store(id='expanded-row-id', data=None),
                     dcc.Store(id='active-date-filter', data=None),
+                    dcc.Store(id='collapsed-groups-store', data=[]),  # Added for accordion state
                     
                     dcc.Loading(id="data-view-loading", type="default", children=html.Div(id='data-view-container'))
                 ]
