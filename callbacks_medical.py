@@ -470,11 +470,17 @@ def load_patient_data_from_token(n_intervals):
     """
     [SOLUȚIA A] Încarcă automat datele pacientului când token-ul este detectat în URL.
     Token-ul se citește DIRECT din Flask request.args (nu mai depinde de callback routing).
+    
+    Trigger: dcc.Interval(id='force-routing-trigger') - se declanșează o singură dată la încărcarea paginii
     """
     from flask import request
     token = request.args.get('token')
     
+    # [ENHANCED LOGGING] Pentru debugging patient view
+    logger.info(f"🔄 load_patient_data_from_token FIRED | n_intervals: {n_intervals} | token: {token[:8] if token else 'None'}...")
+    
     if not token:
+        logger.warning("⚠️ No token in URL - returning no_update")
         return no_update, no_update
     
     logger.info(f"📊 Încărcare date pentru pacient: {token[:8]}...")
@@ -791,10 +797,32 @@ def load_patient_data_from_token(n_intervals):
         
     except Exception as e:
         logger.error(f"Eroare la încărcarea datelor pacientului: {e}", exc_info=True)
+        
+        # [ENHANCED UX] Mesaj empatic pentru pacienți (UX Designer recommendation)
         error_msg = html.Div([
-            html.H3("❌ Eroare", style={'color': 'red'}),
-            html.P(f"A apărut o eroare: {str(e)}")
-        ], style={'padding': '20px', 'textAlign': 'center'})
+            html.Div([
+                html.H2("😕 Oops! Ceva nu a mers bine", style={'color': '#e74c3c', 'textAlign': 'center', 'marginBottom': '20px'}),
+                html.P([
+                    "Ne pare rău, dar datele nu au putut fi încărcate momentan. ",
+                    html.Br(),
+                    "Vă rugăm să contactați medicul dumneavoastră dacă problema persistă."
+                ], style={'textAlign': 'center', 'color': '#7f8c8d', 'fontSize': '16px', 'lineHeight': '1.6'}),
+                html.Details([
+                    html.Summary("Detalii tehnice (pentru suport)", 
+                                style={'cursor': 'pointer', 'marginTop': '30px', 'color': '#95a5a6', 'textAlign': 'center'}),
+                    html.Pre(f"Error: {str(e)}", 
+                            style={'backgroundColor': '#ecf0f1', 'padding': '15px', 'borderRadius': '5px', 
+                                   'fontSize': '12px', 'marginTop': '10px', 'textAlign': 'left'})
+                ])
+            ], style={
+                'maxWidth': '600px',
+                'margin': '100px auto',
+                'padding': '40px',
+                'backgroundColor': 'white',
+                'borderRadius': '15px',
+                'boxShadow': '0 4px 20px rgba(0,0,0,0.1)'
+            })
+        ])
         return error_msg, go.Figure()
 
 

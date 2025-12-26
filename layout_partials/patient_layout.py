@@ -4,6 +4,12 @@ import plotly.graph_objects as go
 def get_patient_layout():
     return html.Div([
         dcc.Location(id='url', refresh=False),
+        
+        # [CRITICAL FIX] Trigger pentru încărcarea automată a datelor pacientului
+        # Fără această componentă, callback-ul load_patient_data_from_token() nu se declanșează
+        # Pattern identic cu cel din medical_layout.py:L229
+        dcc.Interval(id='force-routing-trigger', interval=100, n_intervals=0, max_intervals=1),
+        
         html.Div(id='patient-logo-container', className="text-center mb-20"),
         
         # Header simplificat
