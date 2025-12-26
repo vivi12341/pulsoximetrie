@@ -185,6 +185,15 @@ try:
 except Exception:
     pass
 
+logger.info("="*80)
+logger.info("🔧 [CRITICAL FIX] Importing callbacks_medical IMEDIAT după du.configure_upload")
+logger.info("🔧 Aceasta asigură că @du.callback decorators sunt înregistrați CORECT")
+logger.info("="*80)
+
+# CRITICAL: Import callbacks_medical AICI pentru ca @du.callback să funcționeze!
+import callbacks_medical
+logger.info(f"✅ callbacks_medical imported: @du.callback decorators înregistrați")
+
 
 # === INIȚIALIZARE DATABASE & AUTHENTICATION ===
 from auth.models import db, init_db, create_admin_user
@@ -270,11 +279,13 @@ schedule_cleanup_task()
 # === IMPORTĂM CALLBACKS-URILE ÎNAINTE DE LAYOUT ===
 # CRITICAL FIX: Callbacks trebuie înregistrate ÎNAINTE ca layout-ul să fie creat
 # Altfel, @callback decorator-ii nu sunt procesați și avem KeyError în production
-logger.info("📋 Înregistrare callbacks...")
+# NOTE: callbacks_medical deja importat mai sus (după du.configure_upload)
+logger.info("📋 Înregistrare callbacks (originale + admin)...")
 import callbacks  # Callbacks originale (vizualizare + batch)
-import callbacks_medical  # Callbacks noi (admin + pacient)
+# import callbacks_medical  # MOVED ABOVE (după du.configure_upload) - NU MAI IMPORTĂM AICI!
 import admin_callbacks  # Callbacks pentru administrare utilizatori (doar admin)
 logger.info(f"✅ Callbacks înregistrate: {len(app.callback_map)} total")
+
 
 # Importăm layout-ul DUPĂ ce callbacks-urile sunt înregistrate
 from app_layout_new import layout

@@ -840,211 +840,222 @@ def toggle_batch_mode_display(selected_mode):
 )
 def on_upload_complete(status):
     """
-    [T2 Solution + v6 Enhanced Logging] Streaming Upload Finalizat.
+    [T2 Solution + v7 Defensive Error Handling] Streaming Upload Finalizat.
     """
     
-    logger.info("="*100)
-    logger.info("🚀 [UPLOAD CALLBACK] START - on_upload_complete trigerat")
-    logger.info("="*100)
-    
-    # [LOG 1] Tip status primit
-    logger.info(f"📦 [LOG 1] Status type: {type(status)}")
-    logger.info(f"📦 [LOG 2] Status repr: {repr(status)[:500]}...")  # Prima 500 caractere
-    
-    # [FIX v3] Robust handling for dash-uploader status
-    upload_id = "unknown_batch_session"
-    new_files = []
-    
     try:
-        # Case A: List
-        if isinstance(status, list):
-            logger.info(f"✅ [LOG 3] Status este listă cu {len(status)} elemente")
-            
-            if not status:
-                logger.warning("⚠️ [LOG 4] Listă goală, returnez no_update")
-                return no_update, no_update
-            
-            first_item = status[0]
-            logger.info(f"📦 [LOG 5] Primul element: type={type(first_item)}, repr={repr(first_item)[:200]}")
-            
-            if isinstance(first_item, str):
-                logger.info(f"✅ [LOG 6] Status este list[str]. Detectate {len(status)} fișiere path-uri.")
-                new_files = status
-                
-                # Log fiecare fișier detectat
-                for idx, file_path in enumerate(new_files):
-                    logger.info(f"   📄 [LOG 7.{idx}] File #{idx+1}: {file_path}")
-                
-                # Extrage upload_id din path
-                try:
-                    path_obj = pathlib.Path(first_item)
-                    upload_id = path_obj.parent.name
-                    logger.info(f"🆔 [LOG 8] Upload ID extras din path: {upload_id}")
-                except Exception as id_error:
-                    logger.warning(f"⚠️ [LOG 9] Nu s-a putut extrage upload_id din path: {id_error}")
-                    
-            elif hasattr(first_item, 'uploaded_files'):
-                logger.info("✅ [LOG 10] Status este list[UploadStatus].")
-                for s_idx, s in enumerate(status):
-                    logger.info(f"   📦 [LOG 11.{s_idx}] UploadStatus #{s_idx+1}: {len(s.uploaded_files)} files")
-                    new_files.extend(s.uploaded_files)
-                if hasattr(first_item, 'upload_id'):
-                    upload_id = first_item.upload_id
-                    logger.info(f"🆔 [LOG 12] Upload ID din UploadStatus: {upload_id}")
-            else:
-                 logger.error(f"❌ [LOG 13] Tip necunoscut în listă: {type(first_item)}")
+        logger.info("="*100)
+        logger.info("🚀 [UPLOAD CALLBACK] START - on_upload_complete trigerat")
+        logger.info("="*100)
         
-        # Case B: Object (UploadStatus)
-        elif hasattr(status, 'uploaded_files'):
-            logger.info("✅ [LOG 14] Status este UploadStatus object (single).")
-            new_files = status.uploaded_files
-            logger.info(f"📦 [LOG 15] uploaded_files count: {len(new_files)}")
-            
-            for idx, f in enumerate(new_files):
-                logger.info(f"   📄 [LOG 16.{idx}] File #{idx+1}: {f}")
-            
-            if hasattr(status, 'upload_id'):
-                upload_id = status.upload_id
-                logger.info(f"🆔 [LOG 17] Upload ID din status object: {upload_id}")
-        else:
-            logger.error(f"❌ [LOG 18] Status are tip complet neașteptat: {type(status)}")
-            logger.error(f"❌ [LOG 19] Dir(status): {dir(status)}")
-            return no_update, no_update
-
-    except Exception as e:
-         logger.error(f"❌ [LOG 20] EXCEPȚIE la parsarea status: {e}", exc_info=True)
-         return no_update, no_update
-
-    logger.info(f"🆔 [LOG 21] Upload ID FINAL: {upload_id}")
-    logger.info(f"📊 [LOG 22] New files count: {len(new_files)}")
-    
-    if not new_files:
-        logger.warning("⚠️ [LOG 23] new_files este goală, returnez no_update")
-        return no_update, no_update
+        # [LOG 1] Tip status primit
+        logger.info(f"📦 [LOG 1] Status type: {type(status)}")
+        logger.info(f"📦 [LOG 2] Status repr: {repr(status)[:500]}...")  # Prima 500 caractere
         
-    first_file = pathlib.Path(new_files[0])
-    session_folder = first_file.parent
-    logger.info(f"📂 [LOG 24] Session Folder: {session_folder}")
-    logger.info(f"📂 [LOG 25] Session Folder EXISTS: {os.path.exists(session_folder)}")
-    
-    # [FIX v5] Retry-based folder scanning cu delay pentru async writes
-    all_files_metadata = []
-    
-    max_retries = 10
-    retry_delay = 0.1
-    max_delay = 1.0
-    
-    logger.info(f"🔄 [LOG 26] Start retry loop: max_retries={max_retries}")
-    
-    for attempt in range(max_retries):
+        # [FIX v3] Robust handling for dash-uploader status
+        upload_id = "unknown_batch_session"
+        new_files = []
+        
         try:
-            if attempt > 0:
-                current_delay = min(retry_delay * (1.5 ** attempt), max_delay)
-                logger.info(f"⏳ [LOG 27.{attempt}] Aștept {current_delay:.3f}s înainte de retry...")
-                time.sleep(current_delay)
-            
-            temp_metadata = []
-            
-            # Scanare folder
-            logger.info(f"🔍 [LOG 28.{attempt}] === SCAN ATTEMPT #{attempt + 1}/{max_retries} ===")
-            
-            try:
-                entries = list(os.scandir(session_folder))
-                logger.info(f"📁 [LOG 29.{attempt}] os.scandir găsit: {len(entries)} intrări totale")
-            except Exception as scandir_error:
-                logger.error(f"❌ [LOG 30.{attempt}] EROARE os.scandir: {scandir_error}")
-                continue
-            
-            # Listare detaliată fișiere
-            for e_idx, entry in enumerate(entries):
-                logger.info(f"   🔎 [LOG 31.{attempt}.{e_idx}] Entry: '{entry.name}' | is_dir={entry.is_dir()} | is_file={entry.is_file()}")
+            # Case A: List
+            if isinstance(status, list):
+                logger.info(f"✅ [LOG 3] Status este listă cu {len(status)} elemente")
                 
-                if entry.is_dir():
-                    logger.info(f"      ⏭️ [LOG 32.{attempt}.{e_idx}] SKIP (director)")
-                    continue
+                if not status:
+                    logger.warning("⚠️ [LOG 4] Listă goală, returnez no_update")
+                    return no_update, no_update
+                
+                first_item = status[0]
+                logger.info(f"📦 [LOG 5] Primul element: type={type(first_item)}, repr={repr(first_item)[:200]}")
+                
+                if isinstance(first_item, str):
+                    logger.info(f"✅ [LOG 6] Status este list[str]. Detectate {len(status)} fișiere path-uri.")
+                    new_files = status
                     
-                if entry.name.startswith('.'):
-                    logger.info(f"      ⏭️ [LOG 33.{attempt}.{e_idx}] SKIP (ascuns)")
-                    continue
-                
-                # Verificare extensie
-                fname = entry.name
-                fname_lower = fname.lower()
-                
-                logger.info(f"      📝 [LOG 34.{attempt}.{e_idx}] Filename: '{fname}' | lowercase: '{fname_lower}'")
-                
-                f_type = 'OTHER'
-                if fname_lower.endswith('.pdf'):
-                    f_type = 'PDF'
-                    logger.info(f"      ✅ [LOG 35.{attempt}.{e_idx}] DETECTAT PDF!")
-                elif fname_lower.endswith('.csv'):
-                    f_type = 'CSV'
-                    logger.info(f"      ✅ [LOG 36.{attempt}.{e_idx}] DETECTAT CSV!")
+                    # Log fiecare fișier detectat
+                    for idx, file_path in enumerate(new_files):
+                        logger.info(f"   📄 [LOG 7.{idx}] File #{idx+1}: {file_path}")
+                    
+                    # Extrage upload_id din path
+                    try:
+                        path_obj = pathlib.Path(first_item)
+                        upload_id = path_obj.parent.name
+                        logger.info(f"🆔 [LOG 8] Upload ID extras din path: {upload_id}")
+                    except Exception as id_error:
+                        logger.warning(f"⚠️ [LOG 9] Nu s-a putut extrage upload_id din path: {id_error}")
+                        
+                elif hasattr(first_item, 'uploaded_files'):
+                    logger.info("✅ [LOG 10] Status este list[UploadStatus].")
+                    for s_idx, s in enumerate(status):
+                        logger.info(f"   📦 [LOG 11.{s_idx}] UploadStatus #{s_idx+1}: {len(s.uploaded_files)} files")
+                        new_files.extend(s.uploaded_files)
+                    if hasattr(first_item, 'upload_id'):
+                        upload_id = first_item.upload_id
+                        logger.info(f"🆔 [LOG 12] Upload ID din UploadStatus: {upload_id}")
                 else:
-                    logger.info(f"      ⏭️ [LOG 37.{attempt}.{e_idx}] SKIP (tip: {f_type})")
+                     logger.error(f"❌ [LOG 13] Tip necunoscut în listă: {type(first_item)}")
+            
+            # Case B: Object (UploadStatus)
+            elif hasattr(status, 'uploaded_files'):
+                logger.info("✅ [LOG 14] Status este UploadStatus object (single).")
+                new_files = status.uploaded_files
+                logger.info(f"📦 [LOG 15] uploaded_files count: {len(new_files)}")
+                
+                for idx, f in enumerate(new_files):
+                    logger.info(f"   📄 [LOG 16.{idx}] File #{idx+1}: {f}")
+                
+                if hasattr(status, 'upload_id'):
+                    upload_id = status.upload_id
+                    logger.info(f"🆔 [LOG 17] Upload ID din status object: {upload_id}")
+            else:
+                logger.error(f"❌ [LOG 18] Status are tip complet neașteptat: {type(status)}")
+                logger.error(f"❌ [LOG 19] Dir(status): {dir(status)}")
+                return no_update, no_update
+    
+        except Exception as e:
+             logger.error(f"❌ [LOG 20] EXCEPȚIE la parsarea status: {e}", exc_info=True)
+             return no_update, no_update
+    
+        logger.info(f"🆔 [LOG 21] Upload ID FINAL: {upload_id}")
+        logger.info(f"📊 [LOG 22] New files count: {len(new_files)}")
+        
+        if not new_files:
+            logger.warning("⚠️ [LOG 23] new_files este goală, returnez no_update")
+            return no_update, no_update
+            
+        first_file = pathlib.Path(new_files[0])
+        session_folder = first_file.parent
+        logger.info(f"📂 [LOG 24] Session Folder: {session_folder}")
+        logger.info(f"📂 [LOG 25] Session Folder EXISTS: {os.path.exists(session_folder)}")
+        
+        # [FIX v5] Retry-based folder scanning cu delay pentru async writes
+        all_files_metadata = []
+        
+        max_retries = 10
+        retry_delay = 0.1
+        max_delay = 1.0
+        
+        logger.info(f"🔄 [LOG 26] Start retry loop: max_retries={max_retries}")
+        
+        for attempt in range(max_retries):
+            try:
+                if attempt > 0:
+                    current_delay = min(retry_delay * (1.5 ** attempt), max_delay)
+                    logger.info(f"⏳ [LOG 27.{attempt}] Aștept {current_delay:.3f}s înainte de retry...")
+                    time.sleep(current_delay)
+                
+                temp_metadata = []
+                
+                # Scanare folder
+                logger.info(f"🔍 [LOG 28.{attempt}] === SCAN ATTEMPT #{attempt + 1}/{max_retries} ===")
+                
+                try:
+                    entries = list(os.scandir(session_folder))
+                    logger.info(f"📁 [LOG 29.{attempt}] os.scandir găsit: {len(entries)} intrări totale")
+                except Exception as scandir_error:
+                    logger.error(f"❌ [LOG 30.{attempt}] EROARE os.scandir: {scandir_error}")
                     continue
                 
-                # Obține dimensiune fișier
-                try:
-                    file_size = entry.stat().st_size
-                    logger.info(f"      📏 [LOG 38.{attempt}.{e_idx}] Size: {file_size} bytes")
-                except Exception as stat_error:
-                    logger.error(f"      ❌ [LOG 39.{attempt}.{e_idx}] EROARE stat: {stat_error}")
-                    file_size = 0
+                # Listare detaliată fișiere
+                for e_idx, entry in enumerate(entries):
+                    logger.info(f"   🔎 [LOG 31.{attempt}.{e_idx}] Entry: '{entry.name}' | is_dir={entry.is_dir()} | is_file={entry.is_file()}")
+                    
+                    if entry.is_dir():
+                        logger.info(f"      ⏭️ [LOG 32.{attempt}.{e_idx}] SKIP (director)")
+                        continue
+                        
+                    if entry.name.startswith('.'):
+                        logger.info(f"      ⏭️ [LOG 33.{attempt}.{e_idx}] SKIP (ascuns)")
+                        continue
+                    
+                    # Verificare extensie
+                    fname = entry.name
+                    fname_lower = fname.lower()
+                    
+                    logger.info(f"      📝 [LOG 34.{attempt}.{e_idx}] Filename: '{fname}' | lowercase: '{fname_lower}'")
+                    
+                    f_type = 'OTHER'
+                    if fname_lower.endswith('.pdf'):
+                        f_type = 'PDF'
+                        logger.info(f"      ✅ [LOG 35.{attempt}.{e_idx}] DETECTAT PDF!")
+                    elif fname_lower.endswith('.csv'):
+                        f_type = 'CSV'
+                        logger.info(f"      ✅ [LOG 36.{attempt}.{e_idx}] DETECTAT CSV!")
+                    else:
+                        logger.info(f"      ⏭️ [LOG 37.{attempt}.{e_idx}] SKIP (tip: {f_type})")
+                        continue
+                    
+                    # Obține dimensiune fișier
+                    try:
+                        file_size = entry.stat().st_size
+                        logger.info(f"      📏 [LOG 38.{attempt}.{e_idx}] Size: {file_size} bytes")
+                    except Exception as stat_error:
+                        logger.error(f"      ❌ [LOG 39.{attempt}.{e_idx}] EROARE stat: {stat_error}")
+                        file_size = 0
+                    
+                    # Adaugă la metadata
+                    file_meta = {
+                        'filename': fname,
+                        'temp_path': entry.path,
+                        'type': f_type,
+                        'size': file_size
+                    }
+                    temp_metadata.append(file_meta)
+                    logger.info(f"      ✅ [LOG 40.{attempt}.{e_idx}] ADĂUGAT la metadata: {f_type} - {fname}")
                 
-                # Adaugă la metadata
-                file_meta = {
-                    'filename': fname,
-                    'temp_path': entry.path,
-                    'type': f_type,
-                    'size': file_size
-                }
-                temp_metadata.append(file_meta)
-                logger.info(f"      ✅ [LOG 40.{attempt}.{e_idx}] ADĂUGAT la metadata: {f_type} - {fname}")
-            
-            # Sumarizare scan
-            csv_count = sum(1 for f in temp_metadata if f['type'] == 'CSV')
-            pdf_count = sum(1 for f in temp_metadata if f['type'] == 'PDF')
-            logger.info(f"📊 [LOG 41.{attempt}] Scan result: Total={len(temp_metadata)}, CSV={csv_count}, PDF={pdf_count}")
-            
-            # Logică stabilizare
-            if len(temp_metadata) > len(all_files_metadata):
-                logger.info(f"📈 [LOG 42.{attempt}] GĂSITE FIȘIERE NOI! Diferență: {len(temp_metadata) - len(all_files_metadata)}")
-                all_files_metadata = temp_metadata
-                logger.info(f"🔄 [LOG 43.{attempt}] Continuăm să scanăm (posibil mai multe fișiere în curs)...\r")
+                # Sumarizare scan
+                csv_count = sum(1 for f in temp_metadata if f['type'] == 'CSV')
+                pdf_count = sum(1 for f in temp_metadata if f['type'] == 'PDF')
+                logger.info(f"📊 [LOG 41.{attempt}] Scan result: Total={len(temp_metadata)}, CSV={csv_count}, PDF={pdf_count}")
+                
+                # Logică stabilizare
+                if len(temp_metadata) > len(all_files_metadata):
+                    logger.info(f"📈 [LOG 42.{attempt}] GĂSITE FIȘIERE NOI! Diferență: {len(temp_metadata) - len(all_files_metadata)}")
+                    all_files_metadata = temp_metadata
+                    logger.info(f"🔄 [LOG 43.{attempt}] Continuăm să scanăm (posibil mai multe fișiere în curs)...\r")
+                    continue
+                elif len(temp_metadata) == len(all_files_metadata) and len(all_files_metadata) > 0:
+                    logger.info(f"✅ [LOG 44.{attempt}] STABILIZAT! Număr constant: {len(all_files_metadata)}")
+                    all_files_metadata = temp_metadata
+                    logger.info(f"🏁 [LOG 45.{attempt}] BREAK din loop (stabilizat)")
+                    break
+                else:
+                    logger.info(f"🔄 [LOG 46.{attempt}] Actualizare metadata (edge case)")
+                    all_files_metadata = temp_metadata
+                    
+            except Exception as scan_error:
+                logger.error(f"❌ [LOG 47.{attempt}] EXCEPȚIE în scan: {scan_error}", exc_info=True)
                 continue
-            elif len(temp_metadata) == len(all_files_metadata) and len(all_files_metadata) > 0:
-                logger.info(f"✅ [LOG 44.{attempt}] STABILIZAT! Număr constant: {len(all_files_metadata)}")
-                all_files_metadata = temp_metadata
-                logger.info(f"🏁 [LOG 45.{attempt}] BREAK din loop (stabilizat)")
-                break
-            else:
-                logger.info(f"🔄 [LOG 46.{attempt}] Actualizare metadata (edge case)")
-                all_files_metadata = temp_metadata
-                
-        except Exception as scan_error:
-            logger.error(f"❌ [LOG 47.{attempt}] EXCEPȚIE în scan: {scan_error}", exc_info=True)
-            continue
-    
-    # Rezultat final
-    logger.info("="*100)
-    logger.info(f"🏁 [LOG 48] SCAN COMPLET după {attempt + 1} încercări")
-    logger.info(f"📊 [LOG 49] REZULTAT FINAL: {len(all_files_metadata)} fișiere detectate")
-    
-    if all_files_metadata:
-        csv_final = sum(1 for f in all_files_metadata if f['type'] == 'CSV')
-        pdf_final = sum(1 for f in all_files_metadata if f['type'] == 'PDF')
-        logger.info(f"📊 [LOG 50] BREAKDOWN: CSV={csv_final}, PDF={pdf_final}")
         
-        for idx, f_meta in enumerate(all_files_metadata):
-            logger.info(f"   [{idx+1}] {f_meta['type']}: {f_meta['filename']} ({f_meta['size']} bytes)")
-    else:
-        logger.warning("⚠️ [LOG 51] NICIUN FIȘIER DETECTAT! all_files_metadata este goală!")
-    
-    logger.info(f"🎯 [LOG 52] Returnez: metadata({len(all_files_metadata)} items), upload_id='{upload_id}'")
-    logger.info("="*100)
+        # Rezultat final
+        logger.info("="*100)
+        logger.info(f"🏁 [LOG 48] SCAN COMPLET după {attempt + 1} încercări")
+        logger.info(f"📊 [LOG 49] REZULTAT FINAL: {len(all_files_metadata)} fișiere detectate")
         
-    return all_files_metadata, str(upload_id)
+        if all_files_metadata:
+            csv_final = sum(1 for f in all_files_metadata if f['type'] == 'CSV')
+            pdf_final = sum(1 for f in all_files_metadata if f['type'] == 'PDF')
+            logger.info(f"📊 [LOG 50] BREAKDOWN: CSV={csv_final}, PDF={pdf_final}")
+            
+            for idx, f_meta in enumerate(all_files_metadata):
+                logger.info(f"   [{idx+1}] {f_meta['type']}: {f_meta['filename']} ({f_meta['size']} bytes)")
+        else:
+            logger.warning("⚠️ [LOG 51] NICIUN FIȘIER DETECTAT! all_files_metadata este goală!")
+        
+        logger.info(f"🎯 [LOG 52] Returnez: metadata({len(all_files_metadata)} items), upload_id='{upload_id}'")
+        logger.info("="*100)
+            
+        return all_files_metadata, str(upload_id)
+    
+    except Exception as callback_crash:
+        logger.error("="*100)
+        logger.error("💥💥💥 CALLBACK CRASH - EROARE CRITICĂ! 💥💥💥")
+        logger.error(f"💥 Exception type: {type(callback_crash).__name__}")
+        logger.error(f"💥 Exception message: {callback_crash}")
+        logger.error("💥 Full traceback:")
+        logger.error("="*100, exc_info=True)
+        # Re-raise pentru ca Dash să știe că a eșuat
+        raise
 
 
 @app.callback(
