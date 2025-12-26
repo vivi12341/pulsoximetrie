@@ -1858,36 +1858,56 @@ def load_data_view_with_accordion(n_clicks_refresh, trigger, expand_clicks, togg
                         # Secțiune grafic interactiv - IMPLEMENTAT v2.0
                         graph_content = []
                         try:
+                            # [DIAGNOSTIC LOG A1] Start Admin Graph
+                            logger.info(f"📊 [ADMIN_VIEW] Start generare grafic pentru token: {token[:8]}...")
+                            
                             # 1. Recuperăm datele folosind serviciul centralizat
+                            # [DIAGNOSTIC LOG A2] Apel DataService
                             graph_df, graph_filename, graph_status = data_service.get_patient_dataframe(token)
                             
                             if graph_df is not None and not graph_df.empty:
+                                # [DIAGNOSTIC LOG A3] Data Found
+                                logger.info(f"✅ [ADMIN_VIEW] Date găsite: {len(graph_df)} rânduri. Generare figură...")
+                                
                                 # 2. Generăm graficul
                                 admin_fig = create_plot(graph_df, file_name=graph_filename)
+                                
+                                # [DIAGNOSTIC LOG A4] Plot Created
+                                if admin_fig:
+                                     logger.info(f"✅ [ADMIN_VIEW] Figura creată. Traces: {len(admin_fig.data) if hasattr(admin_fig, 'data') else 'N/A'}")
+                                else:
+                                     logger.error("❌ [ADMIN_VIEW] create_plot a returnat None!")
+
                                 # Adăugăm logo dacă e configurat (opțional)
                                 try:
                                     from plot_generator import apply_logo_to_figure
                                     admin_fig = apply_logo_to_figure(admin_fig)
-                                except:
-                                    pass
+                                except Exception as logo_e:
+                                    logger.warning(f"⚠️ [ADMIN_VIEW] Eroare logo: {logo_e}")
                                 
                                 # 3. Randăm componenta Graph
+                                # [DIAGNOSTIC LOG A5] Rendering Graph
                                 graph_content = html.Div([
                                     html.H4("📈 Grafic Interactiv Detaliat", style={'color': '#2980b9', 'marginBottom': '10px'}),
                                     dcc.Graph(
                                         figure=admin_fig,
                                         config={'displayModeBar': True, 'scrollZoom': True},
-                                        style={'height': '500px'}
+                                        style={'height': '500px'},
+                                        id={"type": "admin-graph", "index": token} # ID unic pentru debug
                                     )
                                 ], style={'marginBottom': '25px', 'padding': '15px', 'backgroundColor': 'white', 'borderRadius': '8px', 'border': '1px solid #ddd'})
+                                logger.info(f"🚀 [ADMIN_VIEW] Componenta Graph adăugată în layout pentru {token[:8]}")
                             else:
                                  # Fallback: Mesaj că nu există date
+                                 # [DIAGNOSTIC LOG A6] No Data
+                                 logger.warning(f"⚠️ [ADMIN_VIEW] Nu există date (df is None). Status: {graph_status}")
                                  graph_content = html.Div([
                                     html.H4("📉 Date Grafic Indisponibile", style={'color': '#7f8c8d', 'marginBottom': '10px'}),
                                     html.P(f"Motiv: {graph_status}", style={'fontStyle': 'italic', 'color': '#e74c3c'})
                                 ], style={'marginBottom': '25px', 'padding': '20px', 'backgroundColor': '#f8f9fa', 'borderRadius': '8px'})
                         except Exception as graph_err:
-                            logger.error(f"Eroare generare grafic admin: {graph_err}", exc_info=True)
+                            # [DIAGNOSTIC LOG A7] Exception
+                            logger.error(f"❌ [ADMIN_VIEW] Eroare critică generare grafic: {graph_err}", exc_info=True)
                             graph_content = html.Div(f"Eroare generare grafic: {str(graph_err)}", style={'color': 'red'})
 
 
