@@ -115,6 +115,11 @@ def initialize_application():
     import callbacks_medical
     import callbacks  # Original callbacks
     logger.warning("✅ Callbacks imported")
+
+    # Import Layout (CRITICAL FIX: Overwrite dummy layout)
+    from app_layout_new import layout
+    app.layout = layout
+    logger.warning("✅ Real Application Layout Set")
     
     # Warmup
     with server.app_context():
