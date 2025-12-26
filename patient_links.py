@@ -523,15 +523,24 @@ def validate_token(token: str) -> bool:
     Returns:
         bool: True dacă token-ul este valid
     """
-    patient_data = get_patient_link(token)
+    logger.info(f"🔐 [TOKEN VALIDATION] START for token: {token[:8] if token else 'None'}...")
+    
+    patient_data = get_patient_link(token, track_view=False)
     
     if not patient_data:
+        logger.warning(f"❌ [TOKEN VALIDATION] Token NOT FOUND in patient_links.json")
         return False
     
-    if not patient_data.get('is_active', True):
-        logger.warning(f"Token inactiv: {token[:8]}...")
+    logger.info(f"✅ [TOKEN VALIDATION] Token found | device: {patient_data.get('device_name', 'N/A')[:30]}...")
+    
+    is_active = patient_data.get('is_active', True)
+    logger.info(f"🔍 [TOKEN VALIDATION] is_active status: {is_active}")
+    
+    if not is_active:
+        logger.warning(f"⚠️ [TOKEN VALIDATION] Token is INACTIVE (deactivated)")
         return False
     
+    logger.info(f"✅ [TOKEN VALIDATION] Token VALID - returning True")
     return True
 
 
