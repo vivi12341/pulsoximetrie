@@ -1405,6 +1405,11 @@ def load_data_view_with_accordion(n_clicks_refresh, trigger, expand_clicks, togg
                 # Status vizualizări
                 view_count = link_data.get('view_count', 0)
                 view_display = f"👁️ {view_count}"
+                
+                # Status PDF-uri
+                pdf_count = len(link_data.get('pdf_paths', []))
+                pdf_display = f" | 📕 {pdf_count}" if pdf_count > 0 else ""
+
                 logger.info(f"  ↳ Creare compact_row pentru {token[:8]}...")
                 
                 # === RÂND COMPACT (întotdeauna vizibil) - CLICKABIL PE ÎNTREAGA LINIE ===
@@ -1413,7 +1418,7 @@ def load_data_view_with_accordion(n_clicks_refresh, trigger, expand_clicks, togg
                         # Info condensată (FĂRĂ iconița play)
                         html.Div([
                             html.Strong(f"📅 {date_display}", style={'fontSize': '16px', 'color': '#2c3e50', 'display': 'block', 'marginBottom': '5px'}),
-                            html.Small(f"🔧 {link_data['device_name']} | {view_display}", style={'color': '#7f8c8d', 'display': 'block', 'fontSize': '13px'})
+                            html.Small(f"🔧 {link_data['device_name']} | {view_display}{pdf_display}", style={'color': '#7f8c8d', 'display': 'block', 'fontSize': '13px'})
                         ], style={'flex': '1', 'textAlign': 'left'})
                     ],
                     id={'type': 'expand-row-btn', 'index': token},

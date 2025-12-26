@@ -678,7 +678,8 @@ def get_all_links_for_admin() -> List[Dict]:
                 "sent_at": data.get("sent_at"),
                 "view_count": data.get("view_count", 0),
                 "first_viewed_at": data.get("first_viewed_at"),
-                "last_viewed_at": data.get("last_viewed_at")
+                "last_viewed_at": data.get("last_viewed_at"),
+                "pdf_paths": data.get("pdf_paths", [])
             })
     
     # Sortăm după created_at (cele mai noi primele)
