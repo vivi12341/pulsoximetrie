@@ -930,7 +930,8 @@ def handle_file_deletion(clear_all_clicks, delete_clicks, current_files):
      Output('admin-batch-session-id', 'data', allow_duplicate=True),
      Output('admin-batch-progress-container', 'style'),
      Output('admin-batch-progress-interval', 'disabled'),
-     Output('admin-batch-uploaded-files-store', 'data', allow_duplicate=True)],
+     Output('admin-batch-uploaded-files-store', 'data', allow_duplicate=True),
+     Output('active-date-filter', 'data')],  # [FIX] Resetăm filtrul dată după batch
     [Input('admin-start-batch-button', 'n_clicks')],
     [State('admin-batch-mode-selector', 'value'),
      State('admin-batch-input-folder', 'value'),
@@ -945,7 +946,7 @@ def admin_run_batch_processing(n_clicks, batch_mode, input_folder, session_id, o
     Suportă AMBELE moduri: local (folder) și upload (fișiere).
     """
     if n_clicks == 0:
-        return no_update, no_update, no_update, no_update, no_update, no_update
+        return no_update, no_update, no_update, no_update, no_update, no_update, no_update
     
     logger.warning(f"🔍 [BATCH] START PROCESSING - Mode: {batch_mode}, Session: {session_id}")
     
@@ -958,7 +959,7 @@ def admin_run_batch_processing(n_clicks, batch_mode, input_folder, session_id, o
             return html.Div(
                 "⚠️ Specificați folderul de intrare!",
                 style={'padding': '15px', 'backgroundColor': '#fff3cd', 'border': '1px solid #ffc107', 'borderRadius': '5px'}
-            ), no_update, no_update, no_update, no_update, no_update
+            ), no_update, no_update, no_update, no_update, no_update, no_update
         
         processing_folder = input_folder
         logger.warning(f"✅ Procesare LOCALĂ din folder: {input_folder}")
@@ -970,7 +971,7 @@ def admin_run_batch_processing(n_clicks, batch_mode, input_folder, session_id, o
             return html.Div(
                 "⚠️ Niciun fișier încărcat! Vă rugăm să încărcați fișierele întâi.",
                 style={'padding': '15px', 'backgroundColor': '#fff3cd', 'border': '1px solid #ffc107', 'borderRadius': '5px'}
-            ), no_update, no_update, no_update, no_update, no_update
+            ), no_update, no_update, no_update, no_update, no_update, no_update
         
         # Construim calea către folderul de upload dash-uploader
         # Acesta se află în ./temp_uploads/{session_id}
@@ -990,7 +991,7 @@ def admin_run_batch_processing(n_clicks, batch_mode, input_folder, session_id, o
              return html.Div(
                 f"⚠️ Sesiunea de upload nu a fost găsită. Căutat în: {processing_folder}. Disponibil: {available_folders}",
                 style={'padding': '15px', 'backgroundColor': '#ffdddd', 'border': '1px solid red', 'borderRadius': '5px'}
-            ), no_update, no_update, no_update, no_update, no_update
+            ), no_update, no_update, no_update, no_update, no_update, no_update
 
         logger.warning(f"🚀 [BATCH] Procesare UPLOAD din folder: {processing_folder}")
     
@@ -1001,18 +1002,19 @@ def admin_run_batch_processing(n_clicks, batch_mode, input_folder, session_id, o
     logger.info(f"📊 Admin pornește procesare batch: {processing_folder} → {output_folder}")
     
     try:
-        # Găsim toate fișierele CSV din folder
+        # Găsim toate fișierele CSV și PDF din folder
         csv_files = [f for f in os.listdir(processing_folder) if f.lower().endswith('.csv')]
+        pdf_files = [f for f in os.listdir(processing_folder) if f.lower().endswith('.pdf')]
         
         if not csv_files:
             return html.Div(
-                "⚠️ Nu există fișiere CSV în folderul specificat/uploadat!",
+                f"⚠️ Nu există fișiere CSV în folder! (Găsite: {len(pdf_files)} PDF-uri)",
                 style={'padding': '15px', 'backgroundColor': '#fff3cd', 'border': '1px solid #ffc107', 'borderRadius': '5px'}
-            ), no_update, no_update, no_update, no_update, no_update
+            ), no_update, no_update, no_update, no_update, no_update, no_update
         
         # Creăm sesiune batch cu tracking
         batch_id = batch_session_manager.create_batch_session(
-            total_files=len(csv_files),
+            total_files=len(csv_files),  # PDF-urile sunt procesate asociat, numărăm CSV-urile ca "task-uri"
             file_list=csv_files
         )
         
@@ -1055,7 +1057,7 @@ def admin_run_batch_processing(n_clicks, batch_mode, input_folder, session_id, o
             return html.Div([
                 html.H4("⚠️ Procesare Finalizată, Dar Fără Link-uri Generate", style={'color': 'orange'}),
                 html.P("Verificați dacă există fișiere CSV valide și log-urile pentru detalii.")
-            ], style={'padding': '20px', 'backgroundColor': '#fff3cd', 'border': '1px solid #ffc107', 'borderRadius': '10px'}), n_clicks, None, {'display': 'none'}, True, files_to_clear
+            ], style={'padding': '20px', 'backgroundColor': '#fff3cd', 'border': '1px solid #ffc107', 'borderRadius': '10px'}), n_clicks, None, {'display': 'none'}, True, files_to_clear, no_update, no_update
         
         # Construim mesajul de succes cu lista de link-uri
         # Obținem APP_URL din environment (Railway sau localhost)
@@ -1131,16 +1133,17 @@ def admin_run_batch_processing(n_clicks, batch_mode, input_folder, session_id, o
         return html.Div([
             html.H4(f"✅ Procesare Batch Finalizată Cu Succes!", style={'color': 'green'}),
             html.P(f"🔗 {len(generated_links)} link-uri generate automat:"),
+            html.Small(f"ℹ️ {len(pdf_files)} PDF-uri detectate în folder pentru asociere.", style={'color': '#666', 'display': 'block', 'marginBottom': '10px'}),
             html.Hr(),
             html.Div(link_rows, style={'maxHeight': '400px', 'overflowY': 'auto'})
-        ], style={'padding': '20px', 'backgroundColor': '#d4edda', 'border': '1px solid #28a745', 'borderRadius': '10px'}), n_clicks, session_id, progress_style, interval_disabled, files_to_clear
+        ], style={'padding': '20px', 'backgroundColor': '#d4edda', 'border': '1px solid #28a745', 'borderRadius': '10px'}), n_clicks, session_id, progress_style, interval_disabled, files_to_clear, None  # [FIX] Return None pentru resetare filtru dată
         
     except Exception as e:
         logger.error(f"Eroare la procesare batch: {e}", exc_info=True)
         return html.Div(
             f"❌ EROARE: {str(e)}",
             style={'padding': '15px', 'backgroundColor': '#ffdddd', 'border': '1px solid red', 'borderRadius': '5px', 'color': 'red'}
-        ), no_update, None, {'display': 'none'}, True, no_update
+        ), no_update, None, {'display': 'none'}, True, no_update, no_update, no_update
 
 
 @app.callback(
