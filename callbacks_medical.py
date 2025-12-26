@@ -345,6 +345,121 @@ def format_recording_date_ro(recording_date, start_time, end_time):
         return f"{recording_date} | {start_time} - {end_time}"
 
 
+
+def render_pdf_section(pdf_data, token):
+    """
+    Generează o secțiune HTML completă pentru afișarea datelor din PDF.
+    Stil: Card Medical cu secțiuni distincte pentru sumar, statistici detaliate, evenimente și interpretare.
+    Include ABSOLUT TOATE datele disponibile, inclusiv text brut pentru fallback.
+    """
+    if not pdf_data or 'data' not in pdf_data:
+        return html.Div("Date PDF incomplete.", style={'color': 'red'})
+
+    data = pdf_data['data']
+    pdf_path = pdf_data.get('pdf_path', '')
+    parsed_at = pdf_data.get('parsed_at', 'Necunoscut')
+    
+    # 1. HEADER SECȚIUNE
+    header = html.Div([
+        html.H3("📄 Raport Medical Automat", style={'color': '#2c3e50', 'marginBottom': '5px'}),
+        html.Small(f"Generat automat din PDF la data: {parsed_at}", style={'color': '#7f8c8d'})
+    ], style={'borderBottom': '1px solid #eee', 'paddingBottom': '15px', 'marginBottom': '20px'})
+
+    # 2. SUMAR PRINCIPAL (Box-uri colorate)
+    stats = data.get('statistics', {})
+    events = data.get('events', {})
+    
+    summary_cards = html.Div([
+        # SpO2 Mediu
+        html.Div([
+            html.H4("SpO2 Mediu", style={'margin': '0', 'fontSize': '14px', 'color': '#7f8c8d'}),
+            html.Div(f"{stats.get('avg_spo2', '-')}%", style={'fontSize': '28px', 'fontWeight': 'bold', 'color': '#2980b9'})
+        ], style={'flex': '1', 'textAlign': 'center', 'padding': '15px', 'backgroundColor': '#e8f4f8', 'borderRadius': '8px', 'marginRight': '10px'}),
+        
+        # Puls Mediu
+        html.Div([
+            html.H4("Puls Mediu", style={'margin': '0', 'fontSize': '14px', 'color': '#7f8c8d'}),
+            html.Div(f"{stats.get('avg_pulse', '-')} bpm", style={'fontSize': '28px', 'fontWeight': 'bold', 'color': '#27ae60'})
+        ], style={'flex': '1', 'textAlign': 'center', 'padding': '15px', 'backgroundColor': '#eafaf1', 'borderRadius': '8px', 'marginRight': '10px'}),
+        
+        # Desaturări
+        html.Div([
+            html.H4("Desaturări", style={'margin': '0', 'fontSize': '14px', 'color': '#7f8c8d'}),
+            html.Div(f"{events.get('desaturations_count', 0)}", style={'fontSize': '28px', 'fontWeight': 'bold', 'color': '#e74c3c'})
+        ], style={'flex': '1', 'textAlign': 'center', 'padding': '15px', 'backgroundColor': '#fadbd8', 'borderRadius': '8px'})
+    ], style={'display': 'flex', 'justifyContent': 'space-between', 'marginBottom': '25px'})
+
+    # 3. DETALII COMPLETE (Tabel 2 coloane)
+    details_content = html.Div([
+        # Coloana Stânga: Info & Statistici
+        html.Div([
+            html.H5("📊 Statistici Detaliate", style={'color': '#2c3e50', 'borderBottom': '2px solid #3498db', 'paddingBottom': '5px'}),
+            html.Table([
+                html.Tr([html.Td("Aparat:"), html.Td(html.Strong(data.get('device_info', {}).get('device_number', '-') + ' (' + data.get('device_info', {}).get('device_name', '-') + ')'))]),
+                html.Tr([html.Td("Data înreg.:"), html.Td(html.Strong(data.get('recording_info', {}).get('date', '-')))]),
+                html.Tr([html.Td("Ora Start:"), html.Td(html.Strong(data.get('recording_info', {}).get('start_time', '-')))]),
+                html.Tr([html.Td("Durată:"), html.Td(html.Strong(data.get('recording_info', {}).get('duration', '-')))]),
+                html.Tr([html.Td("SpO2 Minim:"), html.Td(html.Strong(f"{stats.get('min_spo2', '-')}%"))]),
+                html.Tr([html.Td("SpO2 Maxim:"), html.Td(html.Strong(f"{stats.get('max_spo2', '-')}%"))]),
+                html.Tr([html.Td("SpO2 Mediu:"), html.Td(html.Strong(f"{stats.get('avg_spo2', '-')}%"))]),
+                html.Tr([html.Td("Puls Minim:"), html.Td(html.Strong(f"{stats.get('min_pulse', '-')} bpm"))]),
+                html.Tr([html.Td("Puls Maxim:"), html.Td(html.Strong(f"{stats.get('max_pulse', '-')} bpm"))]),
+                html.Tr([html.Td("Puls Mediu:"), html.Td(html.Strong(f"{stats.get('avg_pulse', '-')} bpm"))]),
+            ], style={'width': '100%', 'fontSize': '14px', 'lineHeight': '1.8'})
+        ], style={'flex': '1', 'marginRight': '20px', 'minWidth': '300px'}),
+        
+        # Coloana Dreapta: Evenimente
+        html.Div([
+            html.H5("⚠️ Evenimente", style={'color': '#2c3e50', 'borderBottom': '2px solid #e74c3c', 'paddingBottom': '5px'}),
+             html.Table([
+                html.Tr([html.Td("Nr. Desaturări (<90%):"), html.Td(html.Strong(str(events.get('desaturations_count', 0))))]),
+                html.Tr([html.Td("Durată totală desaturări:"), html.Td(html.Strong(str(events.get('total_desaturation_duration', '-'))))]),
+                html.Tr([html.Td("Cea mai lungă desaturare:"), html.Td(html.Strong(str(events.get('longest_desaturation', '-'))))]),
+            ], style={'width': '100%', 'fontSize': '14px', 'lineHeight': '1.8'})
+        ], style={'flex': '1', 'minWidth': '300px'})
+    ], style={'display': 'flex', 'marginBottom': '25px', 'flexWrap': 'wrap'})
+
+    # 4. INTERPRETARE (Text complet)
+    interpretation = data.get('interpretation', '')
+    interp_section = None
+    if interpretation:
+        interp_section = html.Div([
+            html.H5("📝 Interpretare Automată", style={'color': '#2c3e50', 'borderBottom': '2px solid #f39c12', 'paddingBottom': '5px'}),
+            html.P(interpretation, style={'whiteSpace': 'pre-wrap', 'backgroundColor': '#fff3cd', 'padding': '15px', 'borderRadius': '5px', 'border': '1px solid #ffeeba'})
+        ], style={'marginBottom': '20px'})
+        
+    # 5. HEADER SECȚIUNE RAW TEXT (Fallback pentru absolut toate datele)
+    raw_text = data.get('raw_text', '')
+    raw_section = None
+    if raw_text:
+        raw_section = html.Details([
+            html.Summary("Vizualizare Text Complet (Raw Data)", style={'cursor': 'pointer', 'color': '#7f8c8d', 'marginBottom': '10px'}),
+            html.Pre(raw_text, style={'whiteSpace': 'pre-wrap', 'fontSize': '11px', 'backgroundColor': '#f8f9fa', 'padding': '10px', 'maxHeight': '300px', 'overflowY': 'auto', 'border': '1px solid #eee'})
+        ], style={'marginBottom': '20px'})
+
+    # 6. DOWNLOAD BUTTON
+    download_btn = html.A(
+        html.Button('📥 Descarcă PDF Original', style={
+            'padding': '10px 20px', 'backgroundColor': '#2c3e50', 'color': 'white', 
+            'border': 'none', 'borderRadius': '5px', 'cursor': 'pointer', 'width': '100%'
+        }),
+        # Folosim ruta de download PDF
+        href=f"/download_pdf/{token}/{os.path.basename(pdf_path)}" if pdf_path else "#",
+        target="_blank",
+        style={'textDecoration': 'none', 'display': 'block', 'marginTop': '10px'}
+    )
+
+    # ASAMBLARE CARD FINAL
+    return html.Div([
+        header,
+        summary_cards,
+        details_content,
+        interp_section,
+        raw_section,
+        download_btn
+    ], className="medical-card", style={'padding': '25px', 'backgroundColor': 'white', 'borderRadius': '10px', 'boxShadow': '0 4px 15px rgba(0,0,0,0.05)', 'marginTop': '30px', 'borderLeft': '5px solid #3498db'})
+
+
 @app.callback(
     [Output('patient-data-view', 'children'),
      Output('patient-main-graph', 'figure')],
@@ -658,17 +773,14 @@ def load_patient_data_from_token(n_intervals):
         logger.info(f"📄 PDF-uri găsite: {len(all_pdfs) if all_pdfs else 0}")
         
         if all_pdfs:
-            pdfs_section = html.Div([
-                html.H3("📄 Rapoarte PDF", style={'color': '#2980b9', 'marginBottom': '15px'}),
-                render_pdfs_display(token, all_pdfs)
-            ], style={
-                'padding': '25px',
-                'backgroundColor': '#fff',
-                'borderRadius': '10px',
-                'boxShadow': '0 2px 8px rgba(0,0,0,0.1)',
-                'marginBottom': '20px'
-            })
-            content_sections.append(pdfs_section)
+             # Iterăm prin fiecare PDF și generăm secțiunea detaliată
+            for pdf_item in all_pdfs:
+                try:
+                    pdf_section = render_pdf_section(pdf_item, token)
+                    content_sections.append(pdf_section)
+                except Exception as pdf_error:
+                    logger.error(f"Eroare la randarea secțiunii PDF: {pdf_error}", exc_info=True)
+                    content_sections.append(html.Div(f"Eroare afișare PDF: {pdf_error}", style={'color': 'red'}))
         
         # Combinăm toate secțiunile
         full_content = html.Div(content_sections)
