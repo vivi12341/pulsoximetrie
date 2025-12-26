@@ -16,40 +16,13 @@ import json
 
 
 # ==============================================================================
-# CALLBACK: Control vizibilitate secțiune admin (doar pentru admini)
+# CALLBACK ADMIN VISIBILITY - REMOVED
 # ==============================================================================
-
-@callback(
-    Output('admin-user-management-section', 'style'),
-    Input('url', 'pathname')
-)
-def toggle_admin_section(pathname):
-    """
-    Afișează secțiunea de administrare utilizatori doar pentru admini.
-    
-    Args:
-        pathname: URL-ul curent (pentru a declanșa callback-ul)
-        
-    Returns:
-        dict: Style pentru secțiunea admin (display: block/none)
-    """
-    # Verificăm dacă utilizatorul este admin
-    if not current_user.is_authenticated:
-        return {'display': 'none'}
-    
-    if not current_user.is_admin:
-        return {'display': 'none'}
-    
-    # Admin autentificat - afișăm secțiunea
-    return {
-        'display': 'block',
-        'padding': '25px',
-        'backgroundColor': '#fff9f9',
-        'borderRadius': '10px',
-        'boxShadow': '0 2px 8px rgba(231,76,60,0.15)',
-        'marginBottom': '30px',
-        'border': '2px solid #e74c3c'
-    }
+# NOTA: Callback-ul toggle_admin_section() a fost eliminat
+# MOTIV: Vizibilitatea admin section este acum controlată prin conditional
+#        rendering în layout_partials/medical_layout.py
+# FIX: Previne KeyError când callbacks încearcă să actualizeze componente
+#      care nu există în DOM pentru utilizatori non-admin
 
 
 # ==============================================================================

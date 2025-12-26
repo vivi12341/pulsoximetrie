@@ -234,6 +234,41 @@ def _get_batch_tab():
 
 
 def _get_settings_tab():
+    from flask_login import current_user
+    
+    # === CONDITIONAL ADMIN SECTION ===
+    # CRITICAL FIX: Admin section must ALWAYS render placeholder divs for callbacks
+    # even when user is not admin, otherwise we get KeyError
+    admin_section = html.Div(
+        id='admin-user-management-section',
+        style={'display': 'none'},  # Hidden by default
+        children=[
+            # Placeholder divs for callback outputs (required even when hidden)
+            html.Div(id='admin-user-form-container'),
+            html.Div(id='admin-users-list-container')
+        ]
+    )
+    
+    # If user is admin, show full admin UI
+    if current_user.is_authenticated and current_user.is_admin:
+        admin_section = html.Div(
+            id='admin-user-management-section',
+            children=[
+                html.H3("👥 Administrare Utilizatori", style={'color': '#e74c3c', 'marginBottom': '15px'}),
+                html.P("Gestionați conturile medicilor.", className="text-small mb-20", style={'color': '#555'}),
+                
+                html.Div([
+                    html.Button('➕ Creare Utilizator Nou', id='admin-create-user-button', n_clicks=0, className="btn-success", style={'marginRight': '10px'}),
+                    html.Button('🔄 Reîmprospătează Lista', id='admin-refresh-users-button', n_clicks=0, className="btn-primary")
+                ], className="mb-20"),
+                
+                html.Div(id='admin-user-form-container', className="mb-20"),
+                dcc.Loading(id="admin-users-loading", type="default", children=html.Div(id='admin-users-list-container'))
+            ],
+            className="medical-card",
+            style={'backgroundColor': '#fff9f9', 'border': '2px solid #e74c3c'}
+        )
+    
     return dcc.Tab(
         label="⚙️ Setări",
         value='tab-settings',
@@ -314,24 +349,8 @@ def _get_settings_tab():
                         
                     ], className="medical-card"),
                     
-                    # USER MANAGEMENT SECTION
-                    html.Div(
-                        id='admin-user-management-section',
-                        children=[
-                            html.H3("👥 Administrare Utilizatori", style={'color': '#e74c3c', 'marginBottom': '15px'}),
-                            html.P("Gestionați conturile medicilor.", className="text-small mb-20", style={'color': '#555'}),
-                            
-                            html.Div([
-                                html.Button('➕ Creare Utilizator Nou', id='admin-create-user-button', n_clicks=0, className="btn-success", style={'marginRight': '10px'}),
-                                html.Button('🔄 Reîmprospătează Lista', id='admin-refresh-users-button', n_clicks=0, className="btn-primary")
-                            ], className="mb-20"),
-                            
-                            html.Div(id='admin-user-form-container', className="mb-20"),
-                            dcc.Loading(id="admin-users-loading", type="default", children=html.Div(id='admin-users-list-container'))
-                        ],
-                        className="medical-card",
-                        style={'backgroundColor': '#fff9f9', 'border': '2px solid #e74c3c'}
-                    ),
+                    # USER MANAGEMENT SECTION (conditional)
+                    admin_section,
                     
                     html.Div(id='settings-status-notification', className="mt-20")
                 ]

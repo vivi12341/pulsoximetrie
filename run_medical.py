@@ -267,7 +267,16 @@ with app.server.app_context():
 from auth.rate_limiter import schedule_cleanup_task
 schedule_cleanup_task()
 
-# Importăm noul layout medical
+# === IMPORTĂM CALLBACKS-URILE ÎNAINTE DE LAYOUT ===
+# CRITICAL FIX: Callbacks trebuie înregistrate ÎNAINTE ca layout-ul să fie creat
+# Altfel, @callback decorator-ii nu sunt procesați și avem KeyError în production
+logger.info("📋 Înregistrare callbacks...")
+import callbacks  # Callbacks originale (vizualizare + batch)
+import callbacks_medical  # Callbacks noi (admin + pacient)
+import admin_callbacks  # Callbacks pentru administrare utilizatori (doar admin)
+logger.info(f"✅ Callbacks înregistrate: {len(app.callback_map)} total")
+
+# Importăm layout-ul DUPĂ ce callbacks-urile sunt înregistrate
 from app_layout_new import layout
 
 # [DEBUG PRODUCTION] Endpoint de debug pentru a verifica callback routing
@@ -289,11 +298,6 @@ def debug_callback_test():
         return jsonify(debug_info)
     except Exception as e:
         return jsonify({"status": "error", "error": str(e), "type": type(e).__name__}), 500
-
-# Importăm TOATE callbacks-urile (vechi + noi)
-import callbacks  # Callbacks originale (vizualizare + batch)
-import callbacks_medical  # Callbacks noi (admin + pacient)
-import admin_callbacks  # Callbacks pentru administrare utilizatori (doar admin)
 
 # Asamblăm aplicația
 app.layout = layout
