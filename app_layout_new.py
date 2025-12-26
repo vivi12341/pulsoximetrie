@@ -51,8 +51,10 @@ def get_layout():
 # Backward compatibility
 layout = get_layout
 
-# Placeholders pentru export (dacă sunt folosite în setup)
-medical_layout = get_medical_layout()
-patient_layout = get_patient_layout()
+# HOTFIX: Nu mai exportăm medical_layout/patient_layout static
+# MOTIV: Acestea se execută la import time când current_user este None
+# SOLUȚIE: Doar funcția get_layout() se folosește (se execută per-request)
+# medical_layout = get_medical_layout()  # ❌ REMOVED - caused AttributeError
+# patient_layout = get_patient_layout()  # ❌ REMOVED - not needed
 
 
