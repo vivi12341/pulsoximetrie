@@ -53,7 +53,16 @@ app = dash.Dash(
 logger.warning("[APP_INSTANCE 4/10] ✅ Dash app instance created")
 
 # Setăm un titlu pentru fereastra browser-ului
+# Setăm un titlu pentru fereastra browser-ului
 app.title = "Analizator Pulsoximetrie"
+
+# === FIX: SERVE SCRIPTS FROM CDN (Production Stabilization) ===
+# Problema: 500 Internal Server Error când serverul încearcă să servească
+# bibliotecile React/Dash din site-packages sub load.
+# Soluție: Folosim CDN public (unpkg/cdnjs) pentru fișierele standard.
+app.scripts.config.serve_locally = False
+app.css.config.serve_locally = False
+logger.warning("[APP_INSTANCE 4.1/10] 🌐 CDN Serving ENABLED (scripts + css)")
 
 # === FORCE DASH LIBRARY REGISTRATION (DEFENSIVE) ===
 # CRITICAL: Dash 3.x înregistrează biblioteci DOAR când găsește componente în layout!

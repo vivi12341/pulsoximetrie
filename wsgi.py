@@ -17,10 +17,30 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 # Import DOAR app instance (nu run_medical care face init!)
+# Import DOAR app instance (nu run_medical care face init!)
 from app_instance import app
 
-# Exportăm Flask application pentru Gunicorn
-application = app.server
+# === WHITENOISE STATIC SERVING (ROBUST) ===
+# Serving static files directly via Python is slow and can block workers.
+# Whitenoise handles this efficiently.
+try:
+    from whitenoise import WhiteNoise
+    
+    # Wrap Flask server with WhiteNoise
+    # root='assets' -> servește folderul assets local
+    # prefix='assets/' -> URL-ul începe cu /assets/
+    application = WhiteNoise(app.server, root=os.path.join(os.getcwd(), 'assets'), prefix='assets/')
+    
+    # Add client-side caching headers for static files
+    # (Whitenoise face asta automat, dar putem adăuga compressed files support)
+    
+    print("[WSGI] ✅ Whitenoise ENABLED for /assets/ serving")
+except ImportError:
+    print("[WSGI] ⚠️ Whitenoise not found, falling back to Flask serving")
+    application = app.server
+except Exception as e:
+    print(f"[WSGI] ❌ Whitenoise init failed: {e}")
+    application = app.server
 
 # === ERROR LOGGING MIDDLEWARE (pentru diagnostic 500 errors) ===
 from flask import request

@@ -51,4 +51,5 @@ python-dotenv==1.0.0
 # === PRODUCTION SERVER ===
 # Gunicorn pentru WSGI production server (Railway/Render)
 gunicorn==21.2.0
+whitenoise==6.6.0
 dash-uploader==0.6.1
