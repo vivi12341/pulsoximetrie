@@ -29,6 +29,7 @@ from batch_processor import run_batch_job
 import batch_session_manager
 import config
 from auth_ui_components import create_auth_header
+import data_service  # [NEW] Serviciu centralizat de date
 import os
 
 
@@ -507,102 +508,14 @@ def load_patient_data_from_token(n_intervals):
         )
         
         # === ÎNCĂRCĂM CSV-UL ȘI DATELE COMPLETE ===
-        csv_content = None
-        csv_filename = "Date Pulsoximetrie"
-        df = None
+        # === ÎNCĂRCĂM DATELE PRIN DATA SERVICE (Refactorizat v2) ===
+        # Folosim logica centralizată din data_service.py
+        df, csv_filename, status_msg = data_service.get_patient_dataframe(token)
         
-        # ÎNCERCĂM SĂ ÎNCĂRCĂM CSV DIN RECORDINGS METADATA (R2 SAU LOCAL)
-        recordings = patient_links.get_patient_recordings(token)
-        
-        if recordings and len(recordings) > 0:
-            # Folosim prima înregistrare (cea mai recentă)
-            recording = recordings[-1]  # Ultima adăugată
-            csv_filename = recording.get('original_filename', 'Date Pulsoximetrie')
-            storage_type = recording.get('storage_type', 'unknown')
-            
-            logger.info(f"📊 Încărcare CSV din recording (storage: {storage_type})")
-            
-            # PRIORITATE 1: Încărcăm din R2 (dacă e disponibil)
-            if storage_type == 'r2' and recording.get('r2_url'):
-                logger.info(f"☁️ Încărcare CSV din Cloudflare R2...")
-                try:
-                    from storage_service import download_patient_file
-                    
-                    # Extragem filename din r2_url sau csv_path
-                    csv_path_info = recording.get('csv_path', '')
-                    if 'csvs/' in csv_path_info:
-                        r2_filename = csv_path_info.split('csvs/')[-1]
-                    else:
-                        r2_filename = recording.get('original_filename', 'unknown.csv')
-                    
-                    logger.info(f"📥 Download R2: {token[:8]}... / csvs / {r2_filename}")
-                    csv_content = download_patient_file(token, 'csvs', r2_filename)
-                    
-                    if csv_content:
-                        logger.info(f"✅ CSV descărcat din R2: {len(csv_content)} bytes")
-                    else:
-                        logger.warning(f"⚠️ Download R2 eșuat, încercăm fallback LOCAL")
-                        storage_type = 'local'  # Fallback
-                except ImportError:
-                    logger.warning("⚠️ storage_service nu e disponibil, încercăm LOCAL")
-                    storage_type = 'local'
-                except Exception as e:
-                    logger.error(f"❌ Eroare download R2: {e}", exc_info=True)
-                    storage_type = 'local'  # Fallback
-            
-            # FALLBACK: Încărcăm din LOCAL (dacă R2 a eșuat sau nu e configurat)
-            if storage_type == 'local' and not csv_content:
-                logger.info(f"💾 Încărcare CSV din stocare LOCALĂ...")
-                csv_path = recording.get('csv_path')
-                
-                if csv_path and os.path.exists(csv_path):
-                    try:
-                        with open(csv_path, 'rb') as f:
-                            csv_content = f.read()
-                        logger.info(f"✅ CSV citit LOCAL: {len(csv_content)} bytes")
-                    except Exception as e:
-                        logger.error(f"❌ Eroare citire CSV local: {e}", exc_info=True)
-                else:
-                    logger.warning(f"⚠️ CSV LOCAL nu există: {csv_path}")
-        
-        # FALLBACK FINAL: Căutăm în old-style folder structure (compatibilitate backwards)
-        if not csv_content:
-            logger.info("🔄 Fallback: Căutare CSV în structura veche (patient_data/token/csvs/)")
-            patient_folder = patient_links.get_patient_storage_path(token)
-            csv_folder = os.path.join(patient_folder, "csvs")
-            
-            if os.path.exists(csv_folder):
-                csv_files = [f for f in os.listdir(csv_folder) if f.endswith('.csv')]
-                
-                if csv_files:
-                    csv_path = os.path.join(csv_folder, csv_files[0])
-                    logger.info(f"✅ CSV găsit în structura veche: {csv_path}")
-                    
-                    try:
-                        with open(csv_path, 'rb') as f:
-                            csv_content = f.read()
-                        csv_filename = csv_files[0]
-                        logger.info(f"✅ CSV citit din fallback: {len(csv_content)} bytes")
-                    except Exception as e:
-                        logger.error(f"❌ Eroare citire fallback CSV: {e}", exc_info=True)
-                else:
-                    logger.warning(f"⚠️ Niciun CSV găsit în {csv_folder}")
-            else:
-                logger.warning(f"⚠️ Folder CSV nu există: {csv_folder}")
-        
-        # PARSĂM CSV-ul (dacă l-am încărcat)
-        if csv_content:
-            logger.info(f"📊 Parsare CSV: {len(csv_content)} bytes")
-            df = parse_csv_data(csv_content, csv_filename)
-            
-            if df is not None:
-                logger.info(f"✅ DataFrame creat: {len(df)} rânduri")
-            else:
-                logger.error("❌ Parsare CSV eșuată - DataFrame None")
+        if df is not None:
+             logger.info(f"✅ [PATIENT VIEW] Date încărcate cu succes via DataService: {len(df)} rânduri")
         else:
-            logger.error(f"❌ NU S-A PUTUT ÎNCĂRCA CSV pentru token {token[:8]}... din NICIO SURSĂ!")
-            logger.error(f"   - R2: {'Configurat' if os.getenv('R2_ENABLED') == 'True' else 'NU configurat'}")
-            logger.error(f"   - Recordings metadata: {len(recordings) if recordings else 0} înregistrări")
+             logger.error(f"❌ [PATIENT VIEW] Eșec încărcare date via DataService: {status_msg}")
         
         # Generăm figura
         if df is not None and not df.empty:
@@ -1913,17 +1826,47 @@ def load_data_view_with_accordion(n_clicks_refresh, trigger, expand_clicks, togg
                             style={'color': '#e74c3c', 'fontStyle': 'italic'}
                         )]
                     
-                    expanded_content = html.Div([
-                        html.Hr(style={'margin': '15px 0', 'border': 'none', 'borderTop': '2px solid #bdc3c7'}),
-                        
-                        # Secțiune grafic interactiv (TODO: va fi implementat cu CSV stocat)
-                            html.Div([
-                                html.H4("📈 Grafic Interactiv", style={'color': '#2980b9', 'marginBottom': '10px'}),
-                                html.P(
-                                    "Graficul interactiv va fi disponibil după implementarea stocării CSV-urilor.",
-                                    style={'color': '#666', 'fontStyle': 'italic', 'fontSize': '14px'}
-                                )
-                            ], style={'marginBottom': '25px', 'padding': '20px', 'backgroundColor': '#f8f9fa', 'borderRadius': '8px'}),
+                        # Secțiune grafic interactiv - IMPLEMENTAT v2.0
+                        graph_content = []
+                        try:
+                            # 1. Recuperăm datele folosind serviciul centralizat
+                            graph_df, graph_filename, graph_status = data_service.get_patient_dataframe(token)
+                            
+                            if graph_df is not None and not graph_df.empty:
+                                # 2. Generăm graficul
+                                admin_fig = create_plot(graph_df, file_name=graph_filename)
+                                # Adăugăm logo dacă e configurat (opțional)
+                                try:
+                                    from plot_generator import apply_logo_to_figure
+                                    admin_fig = apply_logo_to_figure(admin_fig)
+                                except:
+                                    pass
+                                
+                                # 3. Randăm componenta Graph
+                                graph_content = html.Div([
+                                    html.H4("📈 Grafic Interactiv Detaliat", style={'color': '#2980b9', 'marginBottom': '10px'}),
+                                    dcc.Graph(
+                                        figure=admin_fig,
+                                        config={'displayModeBar': True, 'scrollZoom': True},
+                                        style={'height': '500px'}
+                                    )
+                                ], style={'marginBottom': '25px', 'padding': '15px', 'backgroundColor': 'white', 'borderRadius': '8px', 'border': '1px solid #ddd'})
+                            else:
+                                 # Fallback: Mesaj că nu există date
+                                 graph_content = html.Div([
+                                    html.H4("📉 Date Grafic Indisponibile", style={'color': '#7f8c8d', 'marginBottom': '10px'}),
+                                    html.P(f"Motiv: {graph_status}", style={'fontStyle': 'italic', 'color': '#e74c3c'})
+                                ], style={'marginBottom': '25px', 'padding': '20px', 'backgroundColor': '#f8f9fa', 'borderRadius': '8px'})
+                        except Exception as graph_err:
+                            logger.error(f"Eroare generare grafic admin: {graph_err}", exc_info=True)
+                            graph_content = html.Div(f"Eroare generare grafic: {str(graph_err)}", style={'color': 'red'})
+
+
+                        expanded_content = html.Div([
+                            html.Hr(style={'margin': '15px 0', 'border': 'none', 'borderTop': '2px solid #bdc3c7'}),
+                            
+                            # AICI INSERĂM GRAFICUL GENERAT
+                            html.Div(graph_content),
                             
                             # Secțiune imagini generate cu toggle view
                             html.Div([
