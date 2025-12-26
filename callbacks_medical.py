@@ -908,21 +908,50 @@ def on_upload_complete(status):
     
     all_files_metadata = []
     try:
-        for entry in os.scandir(session_folder):
-            if entry.is_file():
-                fname = entry.name.lower()
-                f_type = 'PDF' if fname.endswith('.pdf') else 'CSV' if fname.endswith('.csv') else 'OTHER'
-                if f_type == 'OTHER': continue
-                    
-                all_files_metadata.append({
-                    'filename': entry.name,
-                    'temp_path': entry.path,
-                    'type': f_type,
-                    'size': entry.stat().st_size
-                })
-        logger.info(f"✅ Total fișiere pe disk: {len(all_files_metadata)}")
+        # [FIX v4] Ultra-Defensive Scanner
+        # Scanăm tot folderul, logăm tot, ignorăm case sensitivity
+        entries = list(os.scandir(session_folder))
+        logger.info(f"🔍 [SCAN] Start scanare folder sesiune. Intrări totale: {len(entries)}")
+        
+        for entry in entries:
+            # Logăm fiecare intrare pentru diagnostic
+            logger.debug(f"   - Intrare găsită: '{entry.name}' (Dir: {entry.is_dir()})")
+            
+            # Ignorăm directoare și fișiere ascunse
+            if entry.is_dir():
+                logger.debug(f"     -> Ignorat (Director)")
+                continue
+            if entry.name.startswith('.'):
+                logger.debug(f"     -> Ignorat (Ascuns)")
+                continue
+                
+            # Normalizăm numele pentru verificare extensie
+            fname = entry.name
+            fname_lower = fname.lower()
+            
+            f_type = 'OTHER'
+            if fname_lower.endswith('.pdf'):
+                f_type = 'PDF'
+            elif fname_lower.endswith('.csv'):
+                f_type = 'CSV'
+                
+            if f_type == 'OTHER':
+                logger.debug(f"     -> Ignorat (Tip necunoscut/neinteresant: {fname})")
+                continue
+                
+            logger.info(f"✅ [SCAN] Fișier valid acceptat: {fname} [{f_type}] ({entry.stat().st_size} bytes)")
+                
+            all_files_metadata.append({
+                'filename': fname, # Păstrăm numele original (case-sensitive) pentru display
+                'temp_path': entry.path,
+                'type': f_type,
+                'size': entry.stat().st_size
+            })
+            
+        logger.info(f"✅ [SCAN] Finalizat. Fișiere valide pentru UI: {len(all_files_metadata)}")
+        
     except Exception as e:
-        logger.error(f"❌ Eroare la scanarea folderului: {e}")
+        logger.error(f"❌ Eroare critică la scanarea folderului: {e}", exc_info=True)
         return no_update, no_update
         
     return all_files_metadata, str(upload_id)
