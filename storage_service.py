@@ -21,10 +21,10 @@ from typing import Optional, BinaryIO, Union
 from logger_setup import logger
 
 # --- Configurare S3 din Environment Variables ---
-# NOTĂ: Suportă 3 naming conventions:
-#   1. S3_* (generic, prioritate 1)
-#   2. R2_* (Cloudflare R2 legacy, prioritate 2)
-#   3. SCW_* (Scaleway Object Storage, prioritate 3)
+# NOTĂ: Suportă 3 naming conventions cu PRIORITATE SCALEWAY:
+#   1. SCW_* (Scaleway Object Storage, PRIORITATE 1 - ACTIVE)
+#   2. S3_* (generic, prioritate 2)
+#   3. R2_* (Cloudflare R2 legacy, prioritate 3 - DEPRECATED)
 
 # Helper: Detectăm dacă folosim Scaleway
 SCW_ACCESS_KEY = os.getenv('SCW_ACCESS_KEY', '')
@@ -36,16 +36,29 @@ SCW_BUCKET = os.getenv('SCW_BUCKET_NAME', 'pulsoximetrie')
 if SCW_ACCESS_KEY and SCW_SECRET_KEY:
     SCW_ENDPOINT = f"https://s3.{SCW_REGION}.scw.cloud"
     logger.warning(f"🔍 [SCALEWAY_DETECTED] Auto-constructing endpoint: {SCW_ENDPOINT}")
+    logger.warning(f"🔍 [SCALEWAY_PRIORITY] Scaleway variables take precedence over R2/S3 variables")
 else:
     SCW_ENDPOINT = ''
 
-# Fallback chain: S3_* → R2_* → SCW_*
-S3_ENABLED = os.getenv('S3_ENABLED', os.getenv('R2_ENABLED', 'True' if SCW_ACCESS_KEY else 'False')).lower() == 'true'
-S3_ENDPOINT = os.getenv('S3_ENDPOINT', os.getenv('R2_ENDPOINT', SCW_ENDPOINT))
-S3_ACCESS_KEY_ID = os.getenv('S3_ACCESS_KEY_ID', os.getenv('R2_ACCESS_KEY_ID', SCW_ACCESS_KEY))
-S3_SECRET_ACCESS_KEY = os.getenv('S3_SECRET_ACCESS_KEY', os.getenv('R2_SECRET_ACCESS_KEY', SCW_SECRET_KEY))
-S3_BUCKET_NAME = os.getenv('S3_BUCKET_NAME', os.getenv('R2_BUCKET_NAME', SCW_BUCKET))
-S3_REGION = os.getenv('S3_REGION', os.getenv('R2_REGION', SCW_REGION))
+# [CRITICAL FIX] Fallback chain cu PRIORITATE SCALEWAY: SCW → S3 → R2
+# Dacă SCW există, NU permitem R2/S3 să suprascrie!
+if SCW_ACCESS_KEY and SCW_SECRET_KEY:
+    # SCALEWAY MODE: Ignore R2/S3 variables complet
+    S3_ENABLED = True
+    S3_ENDPOINT = SCW_ENDPOINT
+    S3_ACCESS_KEY_ID = SCW_ACCESS_KEY
+    S3_SECRET_ACCESS_KEY = SCW_SECRET_KEY
+    S3_BUCKET_NAME = SCW_BUCKET
+    S3_REGION = SCW_REGION
+    logger.warning(f"✅ [SCALEWAY_MODE] Using Scaleway Object Storage exclusively")
+else:
+    # FALLBACK MODE: S3 → R2
+    S3_ENABLED = os.getenv('S3_ENABLED', os.getenv('R2_ENABLED', 'False')).lower() == 'true'
+    S3_ENDPOINT = os.getenv('S3_ENDPOINT', os.getenv('R2_ENDPOINT', ''))
+    S3_ACCESS_KEY_ID = os.getenv('S3_ACCESS_KEY_ID', os.getenv('R2_ACCESS_KEY_ID', ''))
+    S3_SECRET_ACCESS_KEY = os.getenv('S3_SECRET_ACCESS_KEY', os.getenv('R2_SECRET_ACCESS_KEY', ''))
+    S3_BUCKET_NAME = os.getenv('S3_BUCKET_NAME', os.getenv('R2_BUCKET_NAME', 'pulsoximetrie-files'))
+    S3_REGION = os.getenv('S3_REGION', os.getenv('R2_REGION', 'auto'))
 
 # Fallback pentru stocare locală
 LOCAL_STORAGE_DIR = "patient_data"
