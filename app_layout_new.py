@@ -60,7 +60,7 @@ def get_layout():
         else:
             logger.info(f"👤 [LOG 12] PATIENT (unauthenticated) with token")
             if is_valid:
-                logger.info(f"✅ [LOG 13] Valid token → Returning Patient Layout")
+                logger.info(f"✅ [TRACE-DATA] [LOG 13] Valid token → Returning Patient Layout")
                 return get_patient_layout()
             else:
                 logger.warning(f"❌ [LOG 14] Invalid/Inactive token → Returning Error Layout")

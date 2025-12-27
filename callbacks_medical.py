@@ -477,14 +477,14 @@ def load_patient_data_from_token(n_intervals):
     from flask import request
     token = request.args.get('token')
     
-    # [ENHANCED LOGGING] Pentru debugging patient view
-    logger.info(f"🔄 load_patient_data_from_token FIRED | n_intervals: {n_intervals} | token: {token[:8] if token else 'None'}...")
+    # [TRACE-DATA] [LOG 18] Pentru debugging patient view
+    logger.info(f"🔄 [TRACE-DATA] [LOG 18] load_patient_data_from_token FIRED | n_intervals: {n_intervals} | token: {token[:8] if token else 'None'}...")
     
     if not token:
         logger.warning("⚠️ No token in URL - returning no_update")
         return no_update, no_update
     
-    logger.info(f"📊 Încărcare date pentru pacient: {token[:8]}...")
+    logger.info(f"📊 [TRACE-DATA] [LOG 19] Încărcare date pentru pacient: {token[:8]}...")
     
     try:
         # Tracking vizualizare
@@ -509,18 +509,18 @@ def load_patient_data_from_token(n_intervals):
         
         # === ÎNCĂRCĂM CSV-UL ȘI DATELE COMPLETE ===
         # === ÎNCĂRCĂM DATELE PRIN DATA SERVICE (Refactorizat v2) ===
-        # [DIAGNOSTIC LOG 23] Apel DataService din Patient View
-        logger.info(f"🏥 [PATIENT_VIEW] Apel data_service.get_patient_dataframe pentru token {token[:8]}...")
+        # [TRACE-DATA] [LOG 23] Apel DataService din Patient View
+        logger.info(f"🏥 [TRACE-DATA] [LOG 23] Apel data_service.get_patient_dataframe pentru token {token[:8]}...")
         
         # Folosim logica centralizată din data_service.py
         df, csv_filename, status_msg = data_service.get_patient_dataframe(token)
         
         if df is not None:
-             # [DIAGNOSTIC LOG 24] DataService returnat DF ok
-             logger.info(f"✅ [PATIENT_VIEW] Date încărcate cu succes via DataService: {len(df)} rânduri. Start generare grafic...")
+             # [TRACE-DATA] [LOG 24] DataService returnat DF ok
+             logger.info(f"✅ [TRACE-DATA] [LOG 24] Date încărcate cu succes via DataService: {len(df)} rânduri. Start generare grafic...")
         else:
-             # [DIAGNOSTIC LOG 25] DataService fail
-             logger.error(f"❌ [PATIENT_VIEW] Eșec încărcare date via DataService: {status_msg}")
+             # [TRACE-DATA] [LOG 25] DataService fail
+             logger.error(f"❌ [TRACE-DATA] [LOG 25] Eșec încărcare date via DataService: {status_msg}")
         
         # Generăm figura
         if df is not None and not df.empty:

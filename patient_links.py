@@ -122,10 +122,13 @@ def generate_patient_link(device_name: str, notes: str = "", recording_date: str
         }
         
         if save_patient_links(links):
-            logger.info(f"✅ Link nou generat pentru aparat '{device_name}': {token}")
+            # [TRACE-DATA] [LOG 08] Link generated
+            logger.info(f"✅ [TRACE-DATA] [LOG 08] Link nou generat pentru aparat '{device_name}': {token}")
+            logger.info(f"   [TRACE-DATA] PDF Path: {pdf_path}")
+            logger.info(f"   [TRACE-DATA] Recording Date: {recording_date}")
             return token
         else:
-            logger.error("Eroare la salvarea link-ului nou.")
+            logger.error("❌ [TRACE-DATA] Eroare la salvarea link-ului nou.")
             return None
             
     except Exception as e:

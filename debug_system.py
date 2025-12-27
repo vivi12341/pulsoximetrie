@@ -143,6 +143,7 @@ def get_debug_footer():
             
             # Hidden Components for Logic
             # [FIX] Disabled by default so it doesn't poll when closed
+            # [STABILIZATION] Auto-polling disabled to prevent 502s
             dcc.Interval(id='debug-refresh-interval', interval=2000, n_intervals=0, disabled=True), 
             dcc.Store(id='debug-is-open-store', data=False), # Persist open/closed state
             dcc.Clipboard(id='debug-clipboard', target_id='debug-log-display')
@@ -171,7 +172,8 @@ def register_debug_callbacks(app):
         
         if new_state:
             # Open
-            return {'display': 'block'}, True, False # Enable interval when open
+            # [STABILIZATION] Keep disabled even when open to prevent auto-polling flood
+            return {'display': 'block'}, True, True # Still disabled
         else:
             # Closed
             return {'display': 'none'}, False, True # Disable interval when closed to save resources
