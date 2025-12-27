@@ -1269,7 +1269,7 @@ def admin_run_batch_processing(n_clicks, batch_mode, input_folder, session_id, o
             return html.Div([
                 html.H4("⚠️ Procesare Finalizată, Dar Fără Link-uri Generate", style={'color': 'orange'}),
                 html.P("Verificați dacă există fișiere CSV valide și log-urile pentru detalii.")
-            ], style={'padding': '20px', 'backgroundColor': '#fff3cd', 'border': '1px solid #ffc107', 'borderRadius': '10px'}), n_clicks, None, {'display': 'none'}, True, files_to_clear, no_update, no_update
+            ], style={'padding': '20px', 'backgroundColor': '#fff3cd', 'border': '1px solid #ffc107', 'borderRadius': '10px'}), n_clicks, None, {'display': 'none'}, True, files_to_clear, no_update
         
         # Construim mesajul de succes cu lista de link-uri
         # Obținem APP_URL din environment (Railway sau localhost)
