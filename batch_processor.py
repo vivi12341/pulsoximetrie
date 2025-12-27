@@ -32,6 +32,8 @@ from plot_generator import create_plot
 from patient_links import generate_patient_link, add_recording
 import batch_session_manager
 from storage_service import upload_patient_csv
+import threading
+import time
 
 # --- Mapare Luni în Română ---
 MONTH_NAMES_RO = {
@@ -447,22 +449,31 @@ def run_batch_job(input_folder: str, output_folder: str, window_minutes: int, se
                             links[token]['images_count'] = slice_count - 1
                             links[token]['original_filename'] = file_name
                             
-                            # [FIX TEAM] Upload CSV to R2 & Update Metadata
-                            try:
-                                r2_filename = f"recording_batch_{token[:8]}_{file_name}"
-                                r2_url = upload_patient_csv(token, file_content, r2_filename)
-                                if r2_url:
-                                    logger.warning(f"☁️ [BATCH_R2_FIX] Uploaded CSV to R2: {r2_url}")
-                                    links[token]['r2_url'] = r2_url
-                                    links[token]['storage_type'] = 'r2'
-                                    links[token]['csv_path'] = f"r2://{token}/csvs/{r2_filename}"
-                                else:
-                                    logger.warning(f"⚠️ [BATCH_R2_FIX] R2 Upload failed/disabled. Using local fallback.")
-                                    links[token]['storage_type'] = 'local'
-                            except Exception as r2_e:
-                                logger.error(f"❌ [BATCH_R2_FIX] R2 Error: {r2_e}")
-                                links[token]['storage_type'] = 'local'
+                            # [FIX TEAM] Async R2 Upload (Threaded) to prevent 502 Timeout
+                            def upload_r2_background(token_val, content_val, filename_val):
+                                try:
+                                    logger.warning(f"🧵 [BATCH_THREAD] Starting Async R2 Upload for {token_val[:8]}...")
+                                    r2_url = upload_patient_csv(token_val, content_val, filename_val)
+                                    if r2_url:
+                                        logger.warning(f"☁️ [BATCH_R2_FIX] Async Upload Success: {r2_url}")
+                                        # Update links metadata after success
+                                        current_links = load_patient_links()
+                                        if token_val in current_links:
+                                            current_links[token_val]['r2_url'] = r2_url
+                                            current_links[token_val]['storage_type'] = 'r2'
+                                            current_links[token_val]['csv_path'] = f"r2://{token_val}/csvs/{filename_val}"
+                                            save_patient_links(current_links)
+                                    else:
+                                        logger.warning(f"⚠️ [BATCH_R2_FIX] R2 Upload failed (Async).")
+                                except Exception as e:
+                                    logger.error(f"❌ [BATCH_R2_FIX] Async R2 Error: {e}")
 
+                            # Start the thread
+                            r2_filename = f"recording_batch_{token[:8]}_{file_name}"
+                            threading.Thread(target=upload_r2_background, args=(token, file_content, r2_filename)).start()
+                            
+                            # Initial save as 'local' (will be updated by thread)
+                            links[token]['storage_type'] = 'local' 
                             save_patient_links(links)
                         
                         # [NEW v5.0] Căutăm și procesăm PDF asociat (același folder, același device)
