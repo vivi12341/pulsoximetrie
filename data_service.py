@@ -30,8 +30,8 @@ def get_patient_dataframe(token: str) -> Tuple[Optional[pd.DataFrame], str, str]
             - message: Mesaj descriptiv despre sursă sau eroare (pentru logging/display).
     """
     # [DIAGNOSTIC LOG 1] Start
-    logger.info(f"💾 [DS_TRACE_START] START Request for token: {token[:8]}...")
-    logger.info(f"   - Context: get_patient_dataframe")
+    logger.warning(f"💾 [DS_TRACE_START] START Request for token: {token[:8]}...")
+    logger.warning(f"   - Context: get_patient_dataframe")
     
     csv_content = None
     csv_filename = "Date Pulsoximetrie"
@@ -43,9 +43,9 @@ def get_patient_dataframe(token: str) -> Tuple[Optional[pd.DataFrame], str, str]
         
         # 1. Obținem metadata înregistrărilor
         # [DIAGNOSTIC LOG 3] Apel patient_links
-        logger.info(f"📋 [DS_TRACE_META] Querying patient_links metadata...")
+        logger.warning(f"📋 [DS_TRACE_META] Querying patient_links metadata...")
         recordings = patient_links.get_patient_recordings(token)
-        logger.info(f"   - Found {len(recordings)} recordings in metadata")
+        logger.warning(f"   - Found {len(recordings)} recordings in metadata")
         
         if not recordings:
              # [DIAGNOSTIC LOG 4] Nu există înregistrări
@@ -65,7 +65,7 @@ def get_patient_dataframe(token: str) -> Tuple[Optional[pd.DataFrame], str, str]
         r2_url = recording.get('r2_url', 'N/A')
         
         # [DIAGNOSTIC LOG 6] Detalii recording
-        logger.info(f"🔎 [DS_TRACE_REC] Selected Recording Details:")
+        logger.warning(f"🔎 [DS_TRACE_REC] Selected Recording Details:")
         logger.info(f"   - Filename: {csv_filename}")
         logger.info(f"   - Storage Type: {storage_type}")
         logger.info(f"   - CSV Path/Key: {csv_path_info}")
@@ -77,7 +77,7 @@ def get_patient_dataframe(token: str) -> Tuple[Optional[pd.DataFrame], str, str]
         if storage_type == 'r2' and recording.get('r2_url'):
             # [DIAGNOSTIC LOG 7] Tentativă R2
             # [DIAGNOSTIC LOG 7] Tentativă R2
-            logger.info("☁️ [DS_TRACE_STRATEGY] STRATEGY A: Attempting R2 Download...")
+            logger.warning("☁️ [DS_TRACE_STRATEGY] STRATEGY A: Attempting R2 Download...")
             try:
                 from storage_service import download_patient_file
                 
@@ -88,7 +88,7 @@ def get_patient_dataframe(token: str) -> Tuple[Optional[pd.DataFrame], str, str]
                     r2_filename = recording.get('original_filename', 'unknown.csv')
                 
                 # [DIAGNOSTIC LOG 8] Parametri download R2
-                logger.info(f"📥 [DS_TRACE_R2] Triggering download_patient_file: bucket='csvs', file='{r2_filename}'")
+                logger.warning(f"📥 [DS_TRACE_R2] Triggering download_patient_file: bucket='csvs', file='{r2_filename}'")
                 
                 csv_content = download_patient_file(token, 'csvs', r2_filename)
                 
@@ -110,8 +110,8 @@ def get_patient_dataframe(token: str) -> Tuple[Optional[pd.DataFrame], str, str]
         if storage_type == 'local' and not csv_content:
             # [DIAGNOSTIC LOG 11] Tentativă Locală
             # [DIAGNOSTIC LOG 11] Tentativă Locală
-            logger.info("💾 [DS_TRACE_STRATEGY] STRATEGY B: Attempting Local Read...")
-            logger.info(f"   - Target Path: '{csv_path_info}'")
+            logger.warning("💾 [DS_TRACE_STRATEGY] STRATEGY B: Attempting Local Read...")
+            logger.warning(f"   - Target Path: '{csv_path_info}'")
             
             if csv_path_info and os.path.exists(csv_path_info):
                 try:
@@ -132,7 +132,7 @@ def get_patient_dataframe(token: str) -> Tuple[Optional[pd.DataFrame], str, str]
         if not csv_content:
             # [DIAGNOSTIC LOG 15] Tentativă Legacy
             # [DIAGNOSTIC LOG 15] Tentativă Legacy
-            logger.info("🕰️ [DS_TRACE_STRATEGY] STRATEGY C: Legacy Fallback...")
+            logger.warning("🕰️ [DS_TRACE_STRATEGY] STRATEGY C: Legacy Fallback...")
             patient_folder = patient_links.get_patient_storage_path(token)
             legacy_csv_folder = os.path.join(patient_folder, "csvs")
             logger.info(f"   - Folder Legacy țintă: {legacy_csv_folder}")
@@ -160,7 +160,7 @@ def get_patient_dataframe(token: str) -> Tuple[Optional[pd.DataFrame], str, str]
         if csv_content:
             # [DIAGNOSTIC LOG 17] Start Parsare
             # [DIAGNOSTIC LOG 17] Start Parsare
-            logger.info(f"⚙️ [DS_TRACE_PARSE] Start CSV Parsing | Size: {len(csv_content)} bytes")
+            logger.warning(f"⚙️ [DS_TRACE_PARSE] Start CSV Parsing | Size: {len(csv_content)} bytes")
             try:
                 df = parse_csv_data(csv_content, csv_filename)
                 if df is not None and not df.empty:

@@ -76,10 +76,10 @@ class CloudflareR2Client:
             
             # Test conexiune (verifică dacă bucket-ul există)
             self.client.head_bucket(Bucket=self.bucket_name)
-            logger.info(f"✅ [R2_TRACE_INIT] Cloudflare R2 conectat cu succes!")
-            logger.info(f"   - Endpoint: {R2_ENDPOINT}")
-            logger.info(f"   - Bucket: {self.bucket_name}")
-            logger.info(f"   - Region: {R2_REGION}")
+            logger.warning(f"✅ [R2_TRACE_INIT] Cloudflare R2 conectat cu succes!")
+            logger.warning(f"   - Endpoint: {R2_ENDPOINT}")
+            logger.warning(f"   - Bucket: {self.bucket_name}")
+            logger.warning(f"   - Region: {R2_REGION}")
             
         except ClientError as e:
             error_code = e.response.get('Error', {}).get('Code', 'Unknown')
@@ -120,7 +120,7 @@ class CloudflareR2Client:
             
             file_size_bytes = len(file_content)
             file_size_mb = file_size_bytes / (1024 * 1024)
-            logger.info(f"🚀 [R2_TRACE_UPLOAD] START Upload: {key} | Size: {file_size_mb:.2f} MB ({file_size_bytes} bytes)")
+            logger.warning(f"🚀 [R2_TRACE_UPLOAD] START Upload: {key} | Size: {file_size_mb:.2f} MB ({file_size_bytes} bytes)")
             
             # Upload către R2
             self.client.put_object(
@@ -130,7 +130,7 @@ class CloudflareR2Client:
                 ContentType=content_type
             )
             
-            logger.info(f"✅ [R2_TRACE_UPLOAD] SUCCESS Upload: {key} | Size: {file_size_mb:.2f} MB")
+            logger.warning(f"✅ [R2_TRACE_UPLOAD] SUCCESS Upload: {key} | Size: {file_size_mb:.2f} MB")
             
             # Returnăm URL-ul (format: https://bucket.endpoint/key)
             url = f"{R2_ENDPOINT}/{self.bucket_name}/{key}"
@@ -157,7 +157,7 @@ class CloudflareR2Client:
             return self._read_local_fallback(key)
         
         try:
-            logger.info(f"🔽 [R2_TRACE_DOWNLOAD] START Download: {key}")
+            logger.warning(f"🔽 [R2_TRACE_DOWNLOAD] START Download: {key}")
             response = self.client.get_object(
                 Bucket=self.bucket_name,
                 Key=key
@@ -165,7 +165,7 @@ class CloudflareR2Client:
             
             file_content = response['Body'].read()
             file_size_mb = len(file_content) / (1024 * 1024)
-            logger.info(f"✅ [R2_TRACE_DOWNLOAD] SUCCESS Download: {key} | Size: {file_size_mb:.2f} MB")
+            logger.warning(f"✅ [R2_TRACE_DOWNLOAD] SUCCESS Download: {key} | Size: {file_size_mb:.2f} MB")
             
             return file_content
             
@@ -195,12 +195,12 @@ class CloudflareR2Client:
             return self._delete_local_fallback(key)
         
         try:
-            logger.info(f"🗑️ [R2_TRACE_DELETE] Attempt delete: {key}")
+            logger.warning(f"🗑️ [R2_TRACE_DELETE] Attempt delete: {key}")
             self.client.delete_object(
                 Bucket=self.bucket_name,
                 Key=key
             )
-            logger.info(f"✅ [R2_TRACE_DELETE] SUCCESS Delete: {key}")
+            logger.warning(f"✅ [R2_TRACE_DELETE] SUCCESS Delete: {key}")
             return True
             
         except ClientError as e:

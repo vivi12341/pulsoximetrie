@@ -346,7 +346,7 @@ def add_recording(token: str, csv_filename: str, csv_content: bytes,
         r2_url = None
         
         if r2_available:
-            logger.info(f"☁️ [LINK_TRACE_SAVE] Attempting R2 Storage for {token[:8]}...")
+            logger.warning(f"☁️ [LINK_TRACE_SAVE] Attempting R2 Storage for {token[:8]}...")
             try:
                 # Salvăm în R2 cu nume structurat
                 r2_filename = f"recording_{recording_id}_{csv_filename}"
@@ -395,7 +395,7 @@ def add_recording(token: str, csv_filename: str, csv_content: bytes,
         
         if save_patient_recordings(token, recordings):
             storage_info = "☁️ R2 (PERSISTENT)" if r2_available and r2_url else "💾 LOCAL (EPHEMERAL!)"
-            logger.info(f"✅ [LINK_TRACE_SAVE] Recording Added | Token: {token[:8]} | Storage: {storage_info} | File: {csv_filename}")
+            logger.warning(f"✅ [LINK_TRACE_SAVE] Recording Added | Token: {token[:8]} | Storage: {storage_info} | File: {csv_filename}")
             return True
         else:
             return False
@@ -526,7 +526,7 @@ def validate_token(token: str) -> bool:
     Returns:
         bool: True dacă token-ul este valid
     """
-    logger.info(f"🔐 [LINK_TRACE_VALIDATE] START Validate Token: {token[:8] if token else 'None'}")
+    logger.warning(f"🔐 [LINK_TRACE_VALIDATE] START Validate Token: {token[:8] if token else 'None'}")
     
     patient_data = get_patient_link(token, track_view=False)
     

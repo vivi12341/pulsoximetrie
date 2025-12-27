@@ -478,7 +478,7 @@ def load_patient_data_from_token(n_intervals):
     token = request.args.get('token')
     
     # [TRACE-DATA] [LOG 18] Pentru debugging patient view
-    logger.info(f"🔄 [UI_TRACE_LOAD] Callback Triggered | Token: {token[:8] if token else 'NONE'} | Intervals: {n_intervals}")
+    logger.warning(f"🔄 [UI_TRACE_LOAD] Callback Triggered | Token: {token[:8] if token else 'NONE'} | Intervals: {n_intervals}")
     
     if not token:
         logger.warning("⚠️ [UI_TRACE_LOAD] MISSING TOKEN in URL. Returning no_update.")
@@ -517,7 +517,7 @@ def load_patient_data_from_token(n_intervals):
         
         if df is not None:
              # [TRACE-DATA] [LOG 24] DataService returnat DF ok
-             logger.info(f"✅ [UI_TRACE_LOAD] DataService SUCCESS | Rows: {len(df)} | Start Graph Generation")
+             logger.warning(f"✅ [UI_TRACE_LOAD] DataService SUCCESS | Rows: {len(df)} | Start Graph Generation")
         else:
              # [TRACE-DATA] [LOG 25] DataService fail
              logger.error(f"❌ [UI_TRACE_LOAD] DataService FAILED | Msg: {status_msg}")

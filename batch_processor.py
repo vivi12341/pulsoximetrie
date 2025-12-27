@@ -29,8 +29,9 @@ import config
 from logger_setup import logger
 from data_parser import parse_csv_data
 from plot_generator import create_plot
-from patient_links import generate_patient_link
+from patient_links import generate_patient_link, add_recording
 import batch_session_manager
+from storage_service import upload_patient_csv
 
 # --- Mapare Luni în Română ---
 MONTH_NAMES_RO = {
@@ -289,7 +290,7 @@ def run_batch_job(input_folder: str, output_folder: str, window_minutes: int, se
         List[Dict]: Listă cu link-urile generate (token, device, date, etc.)
     """
     logger.info("=" * 50)
-    logger.info(f"🚀 [BATCH_TRACE_START] JOB STARTED | Input: {input_folder}")
+    logger.warning(f"🚀 [BATCH_TRACE_START] JOB STARTED | Input: {input_folder}")
     logger.info(f"Folder intrare: {input_folder}")
     logger.info(f"Folder ieșire: {output_folder}")
     logger.info(f"Durată fereastră: {window_minutes} minute")
@@ -441,7 +442,27 @@ def run_batch_job(input_folder: str, output_folder: str, window_minutes: int, se
                             links[token]['output_folder'] = file_output_folder_name
                             links[token]['output_folder_path'] = file_output_path
                             links[token]['images_count'] = slice_count - 1
+                            links[token]['output_folder'] = file_output_folder_name
+                            links[token]['output_folder_path'] = file_output_path
+                            links[token]['images_count'] = slice_count - 1
                             links[token]['original_filename'] = file_name
+                            
+                            # [FIX TEAM] Upload CSV to R2 & Update Metadata
+                            try:
+                                r2_filename = f"recording_batch_{token[:8]}_{file_name}"
+                                r2_url = upload_patient_csv(token, file_content, r2_filename)
+                                if r2_url:
+                                    logger.warning(f"☁️ [BATCH_R2_FIX] Uploaded CSV to R2: {r2_url}")
+                                    links[token]['r2_url'] = r2_url
+                                    links[token]['storage_type'] = 'r2'
+                                    links[token]['csv_path'] = f"r2://{token}/csvs/{r2_filename}"
+                                else:
+                                    logger.warning(f"⚠️ [BATCH_R2_FIX] R2 Upload failed/disabled. Using local fallback.")
+                                    links[token]['storage_type'] = 'local'
+                            except Exception as r2_e:
+                                logger.error(f"❌ [BATCH_R2_FIX] R2 Error: {r2_e}")
+                                links[token]['storage_type'] = 'local'
+
                             save_patient_links(links)
                         
                         # [NEW v5.0] Căutăm și procesăm PDF asociat (același folder, același device)
@@ -463,9 +484,9 @@ def run_batch_job(input_folder: str, output_folder: str, window_minutes: int, se
                             "output_folder": file_output_folder_name,
                             "images_count": slice_count - 1
                         })
-                        logger.info(f"🔗 [BATCH_TRACE_LINK] Link Generated: {token} | Device: {device_display_name}")
-                        logger.info(f"   - Output Folder: {file_output_folder_name}")
-                        logger.info(f"   - PDF Asoc: {pdf_processed}")
+                        logger.warning(f"🔗 [BATCH_TRACE_LINK] Link Generated: {token} | Device: {device_display_name}")
+                        logger.warning(f"   - Output Folder: {file_output_folder_name}")
+                        logger.warning(f"   - PDF Asoc: {pdf_processed}")
                         
                         # [NEW v6.0] Actualizăm status la "completed" pentru tracking
                         if session_id:
