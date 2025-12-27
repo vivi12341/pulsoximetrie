@@ -346,7 +346,7 @@ def add_recording(token: str, csv_filename: str, csv_content: bytes,
         r2_url = None
         
         if r2_available:
-            logger.info(f"☁️ Salvare CSV în Cloudflare R2 pentru {token[:8]}...")
+            logger.info(f"☁️ [LINK_TRACE_SAVE] Attempting R2 Storage for {token[:8]}...")
             try:
                 # Salvăm în R2 cu nume structurat
                 r2_filename = f"recording_{recording_id}_{csv_filename}"
@@ -364,7 +364,7 @@ def add_recording(token: str, csv_filename: str, csv_content: bytes,
         
         # FALLBACK: Salvăm LOCAL (EPHEMERAL pe Railway!)
         if not r2_available or not r2_url:
-            logger.warning(f"💾 Salvare CSV LOCAL (EPHEMERAL - va dispărea la redeploy Railway!)")
+            logger.warning(f"💾 [LINK_TRACE_SAVE] Fallback to LOCAL STORAGE (Ephemeral Mode)")
             os.makedirs(patient_folder, exist_ok=True)
             csv_path = os.path.join(patient_folder, f"recording_{recording_id}.csv")
             with open(csv_path, 'wb') as f:
@@ -395,7 +395,7 @@ def add_recording(token: str, csv_filename: str, csv_content: bytes,
         
         if save_patient_recordings(token, recordings):
             storage_info = "☁️ R2 (PERSISTENT)" if r2_available and r2_url else "💾 LOCAL (EPHEMERAL!)"
-            logger.info(f"✅ Înregistrare adăugată pentru {token[:8]}... → {storage_info}: {csv_filename}")
+            logger.info(f"✅ [LINK_TRACE_SAVE] Recording Added | Token: {token[:8]} | Storage: {storage_info} | File: {csv_filename}")
             return True
         else:
             return False
@@ -526,12 +526,12 @@ def validate_token(token: str) -> bool:
     Returns:
         bool: True dacă token-ul este valid
     """
-    logger.info(f"🔐 [TOKEN VALIDATION] START for token: {token[:8] if token else 'None'}...")
+    logger.info(f"🔐 [LINK_TRACE_VALIDATE] START Validate Token: {token[:8] if token else 'None'}")
     
     patient_data = get_patient_link(token, track_view=False)
     
     if not patient_data:
-        logger.warning(f"❌ [TOKEN VALIDATION] Token NOT FOUND in patient_links.json")
+        logger.warning(f"❌ [LINK_TRACE_VALIDATE] Token NOT FOUND in database")
         return False
     
     logger.info(f"✅ [TOKEN VALIDATION] Token found | device: {patient_data.get('device_name', 'N/A')[:30]}...")

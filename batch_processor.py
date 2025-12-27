@@ -289,7 +289,7 @@ def run_batch_job(input_folder: str, output_folder: str, window_minutes: int, se
         List[Dict]: Listă cu link-urile generate (token, device, date, etc.)
     """
     logger.info("=" * 50)
-    logger.info("A ÎNCEPUT PROCESUL DE PROCESARE ÎN LOT (BATCH) + GENERARE LINK-URI.")
+    logger.info(f"🚀 [BATCH_TRACE_START] JOB STARTED | Input: {input_folder}")
     logger.info(f"Folder intrare: {input_folder}")
     logger.info(f"Folder ieșire: {output_folder}")
     logger.info(f"Durată fereastră: {window_minutes} minute")
@@ -463,7 +463,9 @@ def run_batch_job(input_folder: str, output_folder: str, window_minutes: int, se
                             "output_folder": file_output_folder_name,
                             "images_count": slice_count - 1
                         })
-                        logger.info(f"🔗 Link generat automat: {token[:8]}... pentru {device_display_name}")
+                        logger.info(f"🔗 [BATCH_TRACE_LINK] Link Generated: {token} | Device: {device_display_name}")
+                        logger.info(f"   - Output Folder: {file_output_folder_name}")
+                        logger.info(f"   - PDF Asoc: {pdf_processed}")
                         
                         # [NEW v6.0] Actualizăm status la "completed" pentru tracking
                         if session_id:

@@ -478,10 +478,10 @@ def load_patient_data_from_token(n_intervals):
     token = request.args.get('token')
     
     # [TRACE-DATA] [LOG 18] Pentru debugging patient view
-    logger.info(f"🔄 [TRACE-DATA] [LOG 18] load_patient_data_from_token FIRED | n_intervals: {n_intervals} | token: {token[:8] if token else 'None'}...")
+    logger.info(f"🔄 [UI_TRACE_LOAD] Callback Triggered | Token: {token[:8] if token else 'NONE'} | Intervals: {n_intervals}")
     
     if not token:
-        logger.warning("⚠️ No token in URL - returning no_update")
+        logger.warning("⚠️ [UI_TRACE_LOAD] MISSING TOKEN in URL. Returning no_update.")
         return no_update, no_update
     
     logger.info(f"📊 [TRACE-DATA] [LOG 19] Încărcare date pentru pacient: {token[:8]}...")
@@ -517,10 +517,10 @@ def load_patient_data_from_token(n_intervals):
         
         if df is not None:
              # [TRACE-DATA] [LOG 24] DataService returnat DF ok
-             logger.info(f"✅ [TRACE-DATA] [LOG 24] Date încărcate cu succes via DataService: {len(df)} rânduri. Start generare grafic...")
+             logger.info(f"✅ [UI_TRACE_LOAD] DataService SUCCESS | Rows: {len(df)} | Start Graph Generation")
         else:
              # [TRACE-DATA] [LOG 25] DataService fail
-             logger.error(f"❌ [TRACE-DATA] [LOG 25] Eșec încărcare date via DataService: {status_msg}")
+             logger.error(f"❌ [UI_TRACE_LOAD] DataService FAILED | Msg: {status_msg}")
         
         # Generăm figura
         if df is not None and not df.empty:
