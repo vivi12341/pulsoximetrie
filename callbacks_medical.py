@@ -610,6 +610,19 @@ def load_patient_data_from_token(n_intervals):
         })
         content_sections.append(info_card)
         
+        # [CRITICAL FIX] Define patient_folder PRZED użytem
+        patient_folder = os.path.join(patient_links.PATIENT_DATA_DIR, token)
+        logger.warning(f"📁 [PATIENT_VIEW_FIX] patient_folder: {patient_folder}")
+        logger.warning(f"📁 [PATIENT_VIEW_FIX] patient_folder exists: {os.path.exists(patient_folder)}")
+        
+        # [DIAGNOSTIC] Log DF status
+        logger.warning(f"📊 [PATIENT_VIEW_FIX] df is None: {df is None}")
+        if df is not None:
+            logger.warning(f"📊 [PATIENT_VIEW_FIX] df.shape: {df.shape}")
+            logger.warning(f"📊 [PATIENT_VIEW_FIX] df.empty: {df.empty}")
+        else:
+            logger.error(f"❌ [PATIENT_VIEW_FIX] DataFrame is NONE! Data not available!")
+        
         # 2. IMAGINI GENERATE (dacă există)
         images_folder = os.path.join(patient_folder, "images")
         logger.info(f"🖼️ Verificare folder imagini: {images_folder} → Există: {os.path.exists(images_folder)}")
