@@ -459,7 +459,7 @@ def run_batch_job(input_folder: str, output_folder: str, window_minutes: int, se
                             links[token]['images_count'] = slice_count - 1
                             links[token]['original_filename'] = file_name
                             
-                            # [FIX TEAM] Async R2 Upload (Threaded) to prevent 502 Timeout
+                            # [FIX TEAM] Async Scaleway Upload (Threaded) to prevent 502 Timeout
                             def upload_r2_background(token_val, content_val, filename_val):
                                 # [ITERATION 2] Thread lifecycle tracking
                                 import threading
@@ -467,7 +467,7 @@ def run_batch_job(input_folder: str, output_folder: str, window_minutes: int, se
                                 logger.warning(f"🧵 [BATCH_THREAD_{thread_id}] Thread STARTED for {token_val[:8]}...")
                                 
                                 try:
-                                    logger.warning(f"🧵 [BATCH_THREAD_{thread_id}] Starting Async R2 Upload for {token_val[:8]}...")
+                                    logger.warning(f"🧵 [BATCH_THREAD_{thread_id}] Starting Async Scaleway Upload for {token_val[:8]}...")
                                     
                                     # [ITERATION 2] Log file size
                                     file_size_mb = len(content_val) / (1024 * 1024)
@@ -504,11 +504,11 @@ def run_batch_job(input_folder: str, output_folder: str, window_minutes: int, se
                                     logger.warning(f"🧵 [BATCH_THREAD_{thread_id}] Thread COMPLETED for {token_val[:8]}")
                                     
                                 except FileNotFoundError as fnf:
-                                    logger.error(f"❌ [BATCH_R2_FIX] File Not Found Error: {fnf}")
+                                    logger.error(f"❌ [BATCH_SCALEWAY_FIX] File Not Found Error: {fnf}")
                                 except KeyError as ke:
-                                    logger.error(f"❌ [BATCH_R2_FIX] Metadata Key Error: {ke}")
+                                    logger.error(f"❌ [BATCH_SCALEWAY_FIX] Metadata Key Error: {ke}")
                                 except Exception as e:
-                                    logger.error(f"❌ [BATCH_R2_FIX] Async R2 Error: {e}", exc_info=True)
+                                    logger.error(f"❌ [BATCH_SCALEWAY_FIX] Async R2 Error: {e}", exc_info=True)
                                 finally:
                                     logger.warning(f"🧵 [BATCH_THREAD_{thread_id}] Thread FINISHED (cleanup)")
 

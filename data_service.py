@@ -71,13 +71,13 @@ def get_patient_dataframe(token: str) -> Tuple[Optional[pd.DataFrame], str, str]
         logger.info(f"   - CSV Path/Key: {csv_path_info}")
         logger.info(f"   - R2 URL: {r2_url}")
         
-        # 2. Încercăm recuperarea conținutului (Strategy Pattern: R2 -> Local -> Fallback)
+        # 2. Încercăm recuperarea conținutului (Strategy Pattern: Scaleway -> Local -> Fallback)
         
         # STRATEGIA A: Cloudflare R2
         if storage_type == 'r2' and recording.get('r2_url'):
             # [DIAGNOSTIC LOG 7] Tentativă R2
             # [DIAGNOSTIC LOG 7] Tentativă R2
-            logger.warning("☁️ [DS_TRACE_STRATEGY] STRATEGY A: Attempting R2 Download...")
+            logger.warning("☁️ [DS_TRACE_STRATEGY] STRATEGY A: Attempting Scaleway Download...")
             try:
                 from storage_service import download_patient_file
                 
@@ -93,11 +93,11 @@ def get_patient_dataframe(token: str) -> Tuple[Optional[pd.DataFrame], str, str]
                 csv_content = download_patient_file(token, 'csvs', r2_filename)
                 
                 if csv_content:
-                    # [DIAGNOSTIC LOG 9] R2 Succes
-                    logger.info(f"✅ [DATA_SERVICE] Download R2 reușit: {len(csv_content)} bytes")
+                    # [DIAGNOSTIC LOG 9] Scaleway Succes
+                    logger.info(f"✅ [DATA_SERVICE] Download Scaleway reușit: {len(csv_content)} bytes")
                 else:
-                    # [DIAGNOSTIC LOG 10] R2 Fail Empty
-                    logger.warning("⚠️ [DATA_SERVICE] Download R2 a returnat empty content. Trecem la Fallback.")
+                    # [DIAGNOSTIC LOG 10] Scaleway Fail Empty
+                    logger.warning("⚠️ [DATA_SERVICE] Download Scaleway a returnat empty content. Trecem la Fallback.")
                     storage_type = 'local' # Force fallback
             except ImportError:
                 logger.warning("⚠️ [DATA_SERVICE] storage_service module lipsă. Trecem la fallback Local.")

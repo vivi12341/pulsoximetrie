@@ -348,7 +348,7 @@ def add_recording(token: str, csv_filename: str, csv_content: bytes,
         bool: True dacă adăugarea a reușit
     """
     try:
-        # Import R2 storage service
+        # Import Scaleway storage service
         try:
             from storage_service import upload_patient_csv, r2_client
             r2_available = r2_client.enabled
@@ -361,12 +361,12 @@ def add_recording(token: str, csv_filename: str, csv_content: bytes,
         # Generăm un ID unic pentru înregistrare
         recording_id = str(uuid.uuid4())[:8]
         
-        # PRIORITATE 1: Încercăm să salvăm în R2 (PERSISTENT)
+        # PRIORITATE 1: Încercăm să salvăm în Scaleway (PERSISTENT)
         csv_path = None
         r2_url = None
         
         if r2_available:
-            logger.warning(f"☁️ [LINK_TRACE_SAVE] Attempting R2 Storage for {token[:8]}...")
+            logger.warning(f"☁️ [LINK_TRACE_SAVE] Attempting Scaleway Storage for {token[:8]}...")
             try:
                 # Salvăm în R2 cu nume structurat
                 r2_filename = f"recording_{recording_id}_{csv_filename}"
@@ -376,7 +376,7 @@ def add_recording(token: str, csv_filename: str, csv_content: bytes,
                     logger.info(f"✅ CSV salvat în R2: {r2_url}")
                     csv_path = f"r2://{token}/csvs/{r2_filename}"  # Path virtual pentru referință
                 else:
-                    logger.warning(f"⚠️ Upload R2 eșuat, folosim fallback LOCAL")
+                    logger.warning(f"⚠️ Upload Scaleway eșuat, folosim fallback LOCAL")
                     r2_available = False  # Fallback la local
             except Exception as e:
                 logger.error(f"❌ Eroare upload R2: {e} - folosim fallback LOCAL", exc_info=True)
@@ -471,7 +471,7 @@ def delete_recording(token: str, recording_id: str) -> bool:
                     r2_client.delete_file(r2_key)
                     logger.info(f"☁️ CSV șters din R2: {r2_key}")
                 else:
-                    logger.warning(f"⚠️ Path R2 invalid: {csv_path}")
+                    logger.warning(f"⚠️ Path Scaleway invalid: {csv_path}")
             except Exception as e:
                 logger.error(f"❌ Eroare ștergere R2: {e}", exc_info=True)
                 # Continuăm oricum cu ștergerea din metadata

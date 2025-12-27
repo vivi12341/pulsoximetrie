@@ -21,7 +21,7 @@ from typing import Optional, BinaryIO, Union
 from logger_setup import logger
 
 # --- Configurare S3 din Environment Variables ---
-# NOTĂ: Suportă și vechile variabile R2_ pentru compatibilitate, dar preferă S3_
+# NOTĂ: Suportă și vechile variabile R2_ pentru compatibilitate retroactivă (Scaleway Object Storage)
 S3_ENABLED = os.getenv('S3_ENABLED', os.getenv('R2_ENABLED', 'False')).lower() == 'true'
 S3_ENDPOINT = os.getenv('S3_ENDPOINT', os.getenv('R2_ENDPOINT', ''))
 S3_ACCESS_KEY_ID = os.getenv('S3_ACCESS_KEY_ID', os.getenv('R2_ACCESS_KEY_ID', ''))
@@ -205,7 +205,7 @@ class S3StorageClient:
             
             # [ITERATION 4] Detect specific error scenarios
             if error_code == 'QuotaExceeded' or 'quota' in str(e).lower():
-                logger.critical(f"💾 [S3_QUOTA] BUCKET QUOTA EXCEEDED! Check Cloudflare R2 storage limits.")
+                logger.critical(f"💾 [S3_QUOTA] BUCKET QUOTA EXCEEDED! Check Scaleway Object Storage limits.")
             elif error_code == 'AccessDenied' or error_code == '403':
                 logger.critical(f"🔒 [S3_PERMISSION] Token lacks WRITE permission. Check API Token scopes.")
             elif 'cors' in str(e).lower():
@@ -424,7 +424,7 @@ class S3StorageClient:
     def _check_write_permission(self):
         """
         [DIAGNOSTIC] Testează explicit permisiunea de scriere (PUT).
-        Unele token-uri R2 au doar 'Object Read' dar nu 'Object Write'.
+        Unele token-uri Scaleway au doar 'Object Read' dar nu 'Object Write'.
         """
         try:
             test_key = "diagnostic_write_check.txt"
@@ -444,7 +444,9 @@ class S3StorageClient:
         except ClientError as e:
             error_code = e.response.get('Error', {}).get('Code', 'Unknown')
             logger.critical(f"❌ [S3_PERM_CHECK] WRITE Permission FAILED! Code: {error_code}")
-            logger.critical(f"   - Sfat: Verifică Token Permissions în Cloudflare (trebuie 'Object Read & Write')")
+            logger.critical(f"   - Sfat: Verifică Token Permissions în Scaleway Console")
+            logger.critical(f"   - Token trebuie să aibă: ObjectStorageReadOnly=false + ObjectStorageReadWrite=true")
+            logger.critical(f"   - Location: Scaleway Console → Identity and Access Management (IAM) → API Keys")
         except Exception as e:
             logger.critical(f"❌ [S3_PERM_CHECK] Write Check Failed Unexpectedly: {e}")
 
