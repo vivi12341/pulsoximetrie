@@ -3,16 +3,20 @@ import collections
 import threading
 from dash import html, dcc, Output, Input, State, callback, clientside_callback, no_update
 
+# Get logger for internal errors
+logger = logging.getLogger(__name__)
+
 # ==============================================================================
 # CONFIG & STATE
 # ==============================================================================
 
-MAX_LOGS = 2000
+MAX_LOGS = 300  # [OPTIMIZATION] Redus de la 2000 la 300 pentru performanță
 
 class MemoryLogHandler(logging.Handler):
     """
     Un handler de logging custom care păstrează ultimele N mesaje în memorie.
     Thread-safe pentru Gunicorn/Threading.
+    Include limitare de lungime pentru mesaje.
     """
     def __init__(self, maxlen=MAX_LOGS):
         super().__init__()
@@ -27,11 +31,13 @@ class MemoryLogHandler(logging.Handler):
     def emit(self, record):
         """
         Scrie un record în buffer.
-        Sistemul de logging are propriul lock, dar e bine să protejăm explicit
-        deque-ul pentru a evita race conditions cu get_logs_text.
         """
         try:
             msg = self.format(record)
+            # [OPTIMIZATION] Trunchiere mesaje foarte lungi (ex: base64, dump-uri mari)
+            if len(msg) > 1000:
+                msg = msg[:1000] + " ... [TRUNCATED]"
+                
             with self.lock:
                 self.logs.append(msg)
         except Exception:
@@ -178,11 +184,15 @@ def register_debug_callbacks(app):
         prevent_initial_call=False
     )
     def update_logs(n):
-        logs = memory_handler.get_logs_text()
-        with memory_handler.lock:
-             count = len(memory_handler.logs)
-        status = f"Active | {count} records | Last update: {n}"
-        return logs, status
+        try:
+            logs = memory_handler.get_logs_text()
+            with memory_handler.lock:
+                 count = len(memory_handler.logs)
+            status = f"Active | {count} records | Last update: {n}"
+            return logs, status
+        except Exception as e:
+            logger.error(f"Debug System Error: {e}")
+            return f"Error fetching logs: {str(e)}", "Error"
 
     # 3. Clear Logs
     @app.callback(

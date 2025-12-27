@@ -19,12 +19,19 @@ print("Verificare integritate sistem debug...")
 try:
     import logging
     from debug_system import memory_handler
-    memory_handler.emit(logging.LogRecord("test", logging.INFO, "test", 1, "Mesaj test", None, None))
+    
+    # Test Truncation
+    long_msg = "A" * 1500
+    memory_handler.emit(logging.LogRecord("test_long", logging.INFO, "test", 1, long_msg, None, None))
+    
     logs = memory_handler.get_logs_text()
-    if "Mesaj test" in logs:
-        print("✅ Memory Handler functioning correctly (Thread Safe)")
+    
+    # Check if truncated
+    if "TRUNCATED" in logs:
+            print("✅ Log truncation working (Long message handled)")
     else:
-        print("❌ Memory Handler failed to store log")
+            print("❌ Log truncation FAILED")
+
 except Exception as e:
     print(f"❌ Error testing Memory Handler: {e}")
 
