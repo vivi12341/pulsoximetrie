@@ -98,6 +98,17 @@ if is_railway:
     print("🚨 DETECTAT: Aplicația rulează pe RAILWAY (PRODUCTION)")
     print("=" * 80)
     
+    # [FIX] SQLAlchemy 1.4+ requires postgresql://, not postgres://
+    if database_url and database_url.startswith("postgres://"):
+        database_url = database_url.replace("postgres://", "postgresql://", 1)
+        print("🔧 Fixed DATABASE_URL scheme (postgres:// -> postgresql://)")
+
+    # [FIX] Enforce SSL for Railway/Production
+    if database_url and "sslmode" not in database_url:
+        separator = "&" if "?" in database_url else "?"
+        database_url += f"{separator}sslmode=require"
+        print("🔒 SSL Mode enforced (sslmode=require)")
+    
     if not database_url:
         print("")
         print("❌❌❌ EROARE CRITICĂ ❌❌❌")
