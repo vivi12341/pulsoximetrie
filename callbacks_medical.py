@@ -1527,20 +1527,22 @@ def load_data_view_with_accordion(n_clicks_refresh, trigger, expand_clicks, togg
             logger.info(f"🔍 [LOG 22] Filter end_date: {end_date}")
             logger.info(f"🔍 [LOG 23] Links BEFORE filtering: {len(all_links)}")
             
-            # Filtrăm link-urile după dată
+            # Filtrăm link-urile după dată UPLOAD (created_at), NU după dată medicală
             filtered_links = []
             for idx, link in enumerate(all_links):
-                if link.get('recording_date'):
+                # [CRITICAL FIX] Folosim created_at (când a fost uploadat) în loc de recording_date
+                if link.get('created_at'):
                     try:
-                        rec_date = datetime.strptime(link['recording_date'], '%Y-%m-%d').date()
-                        is_in_range = start_date <= rec_date <= end_date
-                        logger.info(f"   [LOG 24.{idx}] Token {link['token'][:8]}... | rec_date: {rec_date} | in_range: {is_in_range}")
+                        # Parse created_at (ISO format with time)
+                        upload_date = datetime.fromisoformat(link['created_at']).date()
+                        is_in_range = start_date <= upload_date <= end_date
+                        logger.info(f"   [LOG 24.{idx}] Token {link['token'][:8]}... | upload_date: {upload_date} | in_range: {is_in_range}")
                         if is_in_range:
                             filtered_links.append(link)
                     except Exception as parse_err:
                         logger.warning(f"   ⚠️ [LOG 25.{idx}] Token {link['token'][:8]}... | Date parse FAILED: {parse_err}")
                 else:
-                    logger.warning(f"   ⚠️ [LOG 26.{idx}] Token {link['token'][:8]}... | NO recording_date field!")
+                    logger.warning(f"   ⚠️ [LOG 26.{idx}] Token {link['token'][:8]}... | NO created_at field!")
             
             logger.info(f"✅ [LOG 27] Links AFTER filtering: {len(filtered_links)} (removed {len(all_links) - len(filtered_links)})")
             all_links = filtered_links
