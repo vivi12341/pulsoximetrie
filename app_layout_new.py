@@ -14,6 +14,7 @@ from dash import html
 from flask import request
 from flask_login import current_user
 from logger_setup import logger
+from datetime import datetime  # For diagnostic logging
 import patient_links
 
 # Import layouts modulare
@@ -26,6 +27,12 @@ def get_layout():
     Returnează layout-ul corespunzător bazat pe context (medic sau pacient).
     Router logic centralizat.
     """
+    # [CRITICAL DIAGNOSTIC] Track EVERY execution
+    logger.critical("🚨"*50)
+    logger.critical("🚨 [LAYOUT_DEBUG] get_layout() FUNCTION CALLED!")
+    logger.critical(f"🚨 [LAYOUT_DEBUG] Timestamp: {datetime.now().isoformat()}")
+    logger.critical("🚨"*50)
+    
     logger.info("="*100)
     logger.info("🔀 [ROUTING] get_layout() START")
     logger.info("="*100)
@@ -40,6 +47,7 @@ def get_layout():
     
     # 1. Verifică dacă există token în URL (PACIENT)
     token = request.args.get('token')
+    logger.critical(f"🔑 [CRITICAL] Token extracted: {token if not token else token[:8] + '...'}")
     logger.info(f"🔑 [LOG 6] Token extracted from URL: {'YES - ' + token[:8] + '...' if token else 'NO (None)'}")
     
     if token:
