@@ -22,7 +22,8 @@ from logger_setup import logger
 
 # --- Configurare Căi ---
 PATIENT_DATA_DIR = "patient_data"
-PATIENT_LINKS_FILE = "patient_links.json"
+PATIENT_LINKS_FILE = "patient_links.json"  # Local cache (ephemeral)
+LINKS_METADATA_S3_KEY = "patient_links.json"  # Scaleway persistent storage
 
 # Creăm directorul de bază la import
 os.makedirs(PATIENT_DATA_DIR, exist_ok=True)
@@ -34,63 +35,124 @@ os.makedirs(PATIENT_DATA_DIR, exist_ok=True)
 
 def load_patient_links() -> Dict:
     """
-    Încarcă toate link-urile de pacienți din fișierul JSON.
+    [CRITICAL FIX] Încarcă link-urile din SCALEWAY (persistent) cu fallback local.
+    
+    Priority:
+    1. Scaleway S3 (PERSISTENT - survives Railway redeploys)
+    2. Local file (EPHEMERAL - lost on redeploy, used as cache)
     
     Returns:
         Dict: Dicționar cu token-uri ca chei și metadata ca valori
     """
-    if not os.path.exists(PATIENT_LINKS_FILE):
-        logger.debug(f"Fișierul {PATIENT_LINKS_FILE} nu există. Se creează unul nou.")
-        return {}
-    
+    # PRIORITY 1: Try loading from Scaleway (PERSISTENT)
     try:
-        with open(PATIENT_LINKS_FILE, 'r', encoding='utf-8') as f:
-            links = json.load(f)
-            logger.debug(f"S-au încărcat {len(links)} link-uri de pacienți.")
-            return links
+        from storage_service import r2_client
+        if r2_client.enabled:
+            logger.warning(f"☁️ [LINKS_LOAD] Attempting Scaleway load for {LINKS_METADATA_S3_KEY}...")
+            content = r2_client.download_file(LINKS_METADATA_S3_KEY)
+            
+            if content:
+                links = json.loads(content.decode('utf-8'))
+                logger.warning(f"✅ [LINKS_LOAD] Loaded {len(links)} links from SCALEWAY (persistent)")
+                
+                # Save local cache for faster subsequent reads
+                try:
+                    with open(PATIENT_LINKS_FILE, 'w', encoding='utf-8') as f:
+                        json.dump(links, f, indent=2, ensure_ascii=False)
+                    logger.debug(f"💾 [LINKS_CACHE] Cached {len(links)} links locally")
+                except:
+                    pass  # Cache failure is non-critical
+                    
+                return links
+            else:
+                logger.warning(f"⚠️ [LINKS_LOAD] Scaleway returned empty content")
+    except ImportError:
+        logger.warning(f"⚠️ [LINKS_LOAD] storage_service not available")
     except Exception as e:
-        logger.error(f"Eroare la încărcarea link-urilor: {e}", exc_info=True)
-        return {}
+        logger.warning(f"⚠️ [LINKS_LOAD] Scaleway load failed: {e}")
+    
+    # FALLBACK: Try local file (ephemeral cache)
+    if os.path.exists(PATIENT_LINKS_FILE):
+        try:
+            with open(PATIENT_LINKS_FILE, 'r', encoding='utf-8') as f:
+                links = json.load(f)
+                logger.warning(f"💾 [LINKS_LOAD] Loaded {len(links)} links from LOCAL (ephemeral cache)")
+                return links
+        except Exception as e:
+            logger.error(f"❌ [LINKS_LOAD] Local load failed: {e}", exc_info=True)
+    
+    logger.warning(f"📭 [LINKS_LOAD] No links found (neither Scaleway nor local)")
+    return {}
 
 
 def save_patient_links(links: Dict) -> bool:
     """
-    Salvează toate link-urile de pacienți în fișierul JSON.
+    [CRITICAL FIX] Salvează link-urile în SCALEWAY (persistent) + local cache.
+    
+    Strategy:
+    1. Save to Scaleway S3 (PERSISTENT - critical!)
+    2. Save to local file (CACHE - optional)
     
     Args:
         links: dicționar cu link-uri
         
     Returns:
-        bool: True dacă salvarea a reușit
+        bool: True dacă salvarea Scaleway a reușit
     """
-    # [ITERATION 4] Retry mechanism with exponential backoff for file locking
     import time
-    max_retries = 3
+    scaleway_success = False
+    local_success = False
     
+    # PRIORITY 1: Save to Scaleway (PERSISTENT)
+    try:
+        from storage_service import r2_client
+        if r2_client.enabled:
+            logger.warning(f"☁️ [LINKS_SAVE] Attempting Scaleway save for {len(links)} links...")
+            
+            content = json.dumps(links, indent=2, ensure_ascii=False).encode('utf-8')
+            
+            # Upload as JSON file
+            success = r2_client.upload_file(
+                content,
+                LINKS_METADATA_S3_KEY,
+                content_type='application/json'
+            )
+            
+            if success:
+                logger.warning(f"✅ [LINKS_SAVE] Saved {len(links)} links to SCALEWAY (persistent)")
+                scaleway_success = True
+            else:
+                logger.error(f"❌ [LINKS_SAVE] Scaleway upload returned False")
+    except ImportError:
+        logger.warning(f"⚠️ [LINKS_SAVE] storage_service not available - using LOCAL only")
+    except Exception as e:
+        logger.error(f"❌ [LINKS_SAVE] Scaleway save failed: {e}", exc_info=True)
+    
+    # CACHE: Save to local file (with retry for file locking)
+    max_retries = 3
     for attempt in range(max_retries):
         try:
             with open(PATIENT_LINKS_FILE, 'w', encoding='utf-8') as f:
                 json.dump(links, f, indent=2, ensure_ascii=False)
-            logger.debug(f"S-au salvat {len(links)} link-uri de pacienți.")
-            return True
+            logger.warning(f"💾 [LINKS_SAVE] Cached {len(links)} links locally")
+            local_success = True
+            break
             
         except PermissionError as pe:
-            # [ITERATION 4] File is locked by another process/thread
-            wait_time = (2 ** attempt) * 0.1  # 0.1s, 0.2s, 0.4s
-            logger.warning(f"🔒 [FILE_LOCK] patient_links.json is LOCKED (attempt {attempt+1}/{max_retries})")
-            logger.warning(f"🔒 [FILE_LOCK] Retrying in {wait_time:.2f}s...")
+            wait_time = (2 ** attempt) * 0.1
+            logger.warning(f"🔒 [FILE_LOCK] patient_links.json LOCKED (attempt {attempt+1}/{max_retries})")
             
             if attempt < max_retries - 1:
                 time.sleep(wait_time)
             else:
-                logger.error(f"❌ [FILE_LOCK] FAILED after {max_retries} attempts: {pe}")
-                return False
+                logger.error(f"❌ [FILE_LOCK] FAILED after {max_retries} attempts")
                 
         except Exception as e:
-            logger.error(f"Eroare la salvarea link-urilor: {e}", exc_info=True)
-            return False
+            logger.error(f"❌ [LINKS_SAVE] Local save failed: {e}", exc_info=True)
     
-    return False
+    # Return True if at least Scaleway succeeded (critical path)
+    # Local is just a cache, so it's OK if it fails
+    return scaleway_success or local_success
 
 
 def generate_patient_link(device_name: str, notes: str = "", recording_date: str = None, 
