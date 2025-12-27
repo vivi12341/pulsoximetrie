@@ -25,6 +25,7 @@ nixPkgs = [
 ]
 
 # Pachete APT necesare pentru dependențele de sistem ale Chromium/Kaleido
+aptPkgs = [
     'libnss3',
     'libatk-bridge2.0-0t64',
     'libcups2t64',
