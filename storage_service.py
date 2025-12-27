@@ -78,21 +78,37 @@ class S3StorageClient:
                 config=Config(signature_version='s3v4')
             )
             
-            # Test conexiune (verifică dacă bucket-ul există)
-            self.client.head_bucket(Bucket=self.bucket_name)
-            logger.warning(f"✅ [S3_TRACE_INIT] S3 Storage conectat cu succes! (Read Access OK)")
+            # [ITERATION 5] Test conexiune - try HEAD, but don't fail if 403
+            try:
+                self.client.head_bucket(Bucket=self.bucket_name)
+                logger.warning(f"✅ [S3_TRACE_INIT] S3 Storage conectat cu succes! (Read Access OK)")
+            except ClientError as head_err:
+                error_code = head_err.response.get('Error', {}).get('Code', 'Unknown')
+                logger.warning(f"⚠️ [S3_TRACE_INIT] head_bucket FAILED: {error_code}")
+                if error_code == '403':
+                    logger.warning(f"⚠️ [S3_READ_PERM] Token lacks READ permission (head_bucket denied)")
+                    logger.warning(f"⚠️ [S3_READ_PERM] Will still attempt WRITE test...")
+                elif error_code == '404':
+                    logger.critical(f"❌ [S3_BUCKET] Bucket '{self.bucket_name}' NOT FOUND!")
+                    self.init_error = f"Bucket '{self.bucket_name}' not found"
+                    self.enabled = False
+                    return
+                # Don't disable S3 yet - maybe write works even if read doesn't
+            
             logger.warning(f"   - Endpoint: {S3_ENDPOINT}")
             logger.warning(f"   - Bucket: {self.bucket_name}")
             logger.warning(f"   - Region: {S3_REGION}")
             
-            # [DIAGNOSTIC] Check Write Permissions explicitly
+            # [ITERATION 5] Check Write Permissions ALWAYS (even if head failed)
             self._check_write_permission()
             
             # [ITERATION 2] Log boto3 client configuration details
             logger.warning(f"🔍 [S3_CONFIG] Signature Version: s3v4")
             logger.warning(f"🔍 [S3_CONFIG] Using boto3 client with endpoint: {S3_ENDPOINT}")
             
-            self.init_error = None
+            # If we got here without errors, consider S3 enabled
+            if self.init_error is None:
+                self.init_error = None  # Explicitly clear
             
         except ClientError as e:
             error_code = e.response.get('Error', {}).get('Code', 'Unknown')

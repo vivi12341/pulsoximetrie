@@ -57,8 +57,28 @@ def log_server_errors(response):
     
     if response.status_code >= 500:
         logger.critical(f"❌❌❌ {request.method} {request.path} → {response.status_code}")
+        
+        # [ITERATION 6] Log specific details for 502 Bad Gateway
+        if response.status_code == 502:
+            logger.critical(f"🚨 [502_ERROR] Bad Gateway detected!")
+            logger.critical(f"🚨 [502_ERROR] Path: {request.path}")
+            logger.critical(f"🚨 [502_ERROR] Method: {request.method}")
+            logger.critical(f"🚨 [502_ERROR] User-Agent: {request.headers.get('User-Agent', 'N/A')[:100]}")
     
     return response
+
+# [ITERATION 6] Add exception handler for unhandled exceptions
+@server.errorhandler(Exception)
+def handle_exception(e):
+    """Catch and log all unhandled exceptions that might cause 502."""
+    from logger_setup import logger
+    import traceback
+    
+    logger.critical(f"💥 [UNHANDLED_EXCEPTION] {type(e).__name__}: {str(e)}")
+    logger.critical(f"💥 [UNHANDLED_EXCEPTION] Traceback:\n{traceback.format_exc()}")
+    
+    # Return 500 to avoid confusing 502 with actual timeout
+    return {"error": "Internal Server Error", "detail": str(e)}, 500
 
 # === INIȚIALIZARE LA STARTUP ===
 def initialize_application():
@@ -105,7 +125,13 @@ def initialize_application():
             
             # Check psycopg2 version
             import psycopg2
-            logger.warning(f"🔍 [DB_DEBUG] libpq version: {psycopg2.libpq_version()}")
+            try:
+                # [ITERATION 5] psycopg2-binary doesn't have libpq_version()
+                libpq_ver = psycopg2.libpq_version()
+                logger.warning(f"🔍 [DB_DEBUG] libpq version: {libpq_ver}")
+            except AttributeError:
+                logger.warning(f"⚠️ [DB_DEBUG] libpq_version() not available (psycopg2-binary)")
+            
             logger.warning(f"🔍 [DB_DEBUG] psycopg2 version: {psycopg2.__version__}")
             
             # [ITERATION 2] Check SSL-related environment variables
