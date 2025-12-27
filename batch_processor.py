@@ -293,6 +293,16 @@ def run_batch_job(input_folder: str, output_folder: str, window_minutes: int, se
     """
     logger.info("=" * 50)
     logger.warning(f"🚀 [BATCH_TRACE_START] JOB STARTED | Input: {input_folder}")
+    
+    # [DIAGNOSTIC TEAM] FORCE ENV DUMP
+    import os
+    r2_en = os.getenv('R2_ENABLED', 'False')
+    r2_end = os.getenv('R2_ENDPOINT', 'MISSING')
+    r2_key = os.getenv('R2_ACCESS_KEY_ID', 'MISSING')
+    logger.warning(f"🕵️ [ENV_CHECK] R2_ENABLED: '{r2_en}' (Type: {type(r2_en)})")
+    logger.warning(f"🕵️ [ENV_CHECK] R2_ENDPOINT: '{r2_end[:10]}...'")
+    logger.warning(f"🕵️ [ENV_CHECK] R2_ACCESS_KEY_ID: '{r2_key[:5]}...'")
+    
     logger.info(f"Folder intrare: {input_folder}")
     logger.info(f"Folder ieșire: {output_folder}")
     logger.info(f"Durată fereastră: {window_minutes} minute")
@@ -454,7 +464,7 @@ def run_batch_job(input_folder: str, output_folder: str, window_minutes: int, se
                                 try:
                                     logger.warning(f"🧵 [BATCH_THREAD] Starting Async R2 Upload for {token_val[:8]}...")
                                     r2_url = upload_patient_csv(token_val, content_val, filename_val)
-                                    if r2_url:
+                                    if r2_url and r2_url.startswith('http'):
                                         logger.warning(f"☁️ [BATCH_R2_FIX] Async Upload Success: {r2_url}")
                                         # Update links metadata after success
                                         current_links = load_patient_links()
@@ -464,7 +474,8 @@ def run_batch_job(input_folder: str, output_folder: str, window_minutes: int, se
                                             current_links[token_val]['csv_path'] = f"r2://{token_val}/csvs/{filename_val}"
                                             save_patient_links(current_links)
                                     else:
-                                        logger.warning(f"⚠️ [BATCH_R2_FIX] R2 Upload failed (Async).")
+                                        logger.warning(f"⚠️ [BATCH_R2_FIX] R2 Upload returned local path (R2 Disabled?). Keeping storage_type='local'.")
+                                        # Nu actualizăm la 'r2', rămâne 'local' cum a fost setat inițial
                                 except Exception as e:
                                     logger.error(f"❌ [BATCH_R2_FIX] Async R2 Error: {e}")
 
