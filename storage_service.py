@@ -30,7 +30,7 @@ from logger_setup import logger
 SCW_ACCESS_KEY = os.getenv('SCW_ACCESS_KEY', '')
 SCW_SECRET_KEY = os.getenv('SCW_SECRET_KEY', '')
 SCW_REGION = os.getenv('SCW_DEFAULT_REGION', os.getenv('SCW_REGION', 'fr-par'))  # Default: Paris
-SCW_BUCKET = os.getenv('SCW_BUCKET_NAME', 'pulsoximetrie')
+SCW_BUCKET = os.getenv('SCW_BUCKET_NAME', 'pulsoximetrie-file')
 
 # Dacă avem variabile SCW, construim endpoint-ul Scaleway automat
 if SCW_ACCESS_KEY and SCW_SECRET_KEY:
