@@ -95,12 +95,73 @@ def initialize_application():
         logger.critical(f"❌ Config Error: {e}")
         raise
 
+    # [DIAGNOSTIC] Log Database Connection Details (Sanitized)
+    try:
+        if database_url:
+            # Mask password for security
+            import re
+            sanitized_url = re.sub(r':([^@]+)@', ':***@', database_url)
+            logger.warning(f"🔍 [DB_DEBUG] Connection String: {sanitized_url}")
+            
+            # Check psycopg2 version
+            import psycopg2
+            logger.warning(f"🔍 [DB_DEBUG] libpq version: {psycopg2.libpq_version()}")
+            logger.warning(f"🔍 [DB_DEBUG] psycopg2 version: {psycopg2.__version__}")
+            
+            # [ITERATION 2] Check SSL-related environment variables
+            ssl_cert = os.getenv('PGSSLCERT', 'Not Set')
+            ssl_mode = os.getenv('PGSSLMODE', 'Not Set')
+            ssl_root = os.getenv('PGSSLROOTCERT', 'Not Set')
+            logger.warning(f"🔍 [DB_DEBUG_SSL] PGSSLMODE: {ssl_mode}")
+            logger.warning(f"🔍 [DB_DEBUG_SSL] PGSSLCERT: {ssl_cert}")
+            logger.warning(f"🔍 [DB_DEBUG_SSL] PGSSLROOTCERT: {ssl_root}")
+            
+            # [ITERATION 2] Parse connection string to check for sslmode parameter
+            if 'sslmode=' in database_url:
+                sslmode_match = re.search(r'sslmode=([^&\s]+)', database_url)
+                if sslmode_match:
+                    logger.warning(f"🔍 [DB_DEBUG_SSL] Connection string sslmode: {sslmode_match.group(1)}")
+            else:
+                logger.warning(f"⚠️ [DB_DEBUG_SSL] NO sslmode parameter in connection string!")
+                
+    except Exception as db_log_err:
+        logger.warning(f"⚠️ [DB_DEBUG] Failed to log DB details: {db_log_err}")
+
     # Init Auth Modules
     from auth.models import init_db, create_admin_user
     from auth.auth_manager import init_auth_manager
     from auth_routes import init_auth_routes
     
     init_db(app) # Intern folosește app.server
+    
+    # [ITERATION 3] Test actual DB connection and log negotiated protocol
+    try:
+        with server.app_context():
+            from auth.models import db
+            # Get raw connection to query SSL info
+            connection = db.engine.raw_connection()
+            cursor = connection.cursor()
+            
+            # Query PostgreSQL for SSL status
+            cursor.execute("SHOW ssl;")
+            ssl_enabled = cursor.fetchone()[0]
+            logger.warning(f"🔍 [DB_CONNECTION_TEST] SSL Enabled: {ssl_enabled}")
+            
+            # Try to get SSL version (may not work on all Postgres versions)
+            try:
+                cursor.execute("SELECT version();")
+                pg_version = cursor.fetchone()[0]
+                logger.warning(f"🔍 [DB_CONNECTION_TEST] PostgreSQL Version: {pg_version[:50]}...")
+            except Exception as ver_err:
+                logger.warning(f"⚠️ [DB_CONNECTION_TEST] Could not get PG version: {ver_err}")
+            
+            cursor.close()
+            connection.close()
+            logger.warning(f"✅ [DB_CONNECTION_TEST] Connection test SUCCESSFUL!")
+            
+    except Exception as conn_test_err:
+        logger.error(f"❌ [DB_CONNECTION_TEST] Connection test FAILED: {conn_test_err}", exc_info=True)
+    
     init_auth_manager(app)
     init_auth_routes(app)
     logger.warning("✅ Auth modules initialized")

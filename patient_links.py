@@ -58,19 +58,39 @@ def save_patient_links(links: Dict) -> bool:
     Salvează toate link-urile de pacienți în fișierul JSON.
     
     Args:
-        links: Dicționar cu link-uri
+        links: dicționar cu link-uri
         
     Returns:
         bool: True dacă salvarea a reușit
     """
-    try:
-        with open(PATIENT_LINKS_FILE, 'w', encoding='utf-8') as f:
-            json.dump(links, f, indent=2, ensure_ascii=False)
-        logger.debug(f"S-au salvat {len(links)} link-uri de pacienți.")
-        return True
-    except Exception as e:
-        logger.error(f"Eroare la salvarea link-urilor: {e}", exc_info=True)
-        return False
+    # [ITERATION 4] Retry mechanism with exponential backoff for file locking
+    import time
+    max_retries = 3
+    
+    for attempt in range(max_retries):
+        try:
+            with open(PATIENT_LINKS_FILE, 'w', encoding='utf-8') as f:
+                json.dump(links, f, indent=2, ensure_ascii=False)
+            logger.debug(f"S-au salvat {len(links)} link-uri de pacienți.")
+            return True
+            
+        except PermissionError as pe:
+            # [ITERATION 4] File is locked by another process/thread
+            wait_time = (2 ** attempt) * 0.1  # 0.1s, 0.2s, 0.4s
+            logger.warning(f"🔒 [FILE_LOCK] patient_links.json is LOCKED (attempt {attempt+1}/{max_retries})")
+            logger.warning(f"🔒 [FILE_LOCK] Retrying in {wait_time:.2f}s...")
+            
+            if attempt < max_retries - 1:
+                time.sleep(wait_time)
+            else:
+                logger.error(f"❌ [FILE_LOCK] FAILED after {max_retries} attempts: {pe}")
+                return False
+                
+        except Exception as e:
+            logger.error(f"Eroare la salvarea link-urilor: {e}", exc_info=True)
+            return False
+    
+    return False
 
 
 def generate_patient_link(device_name: str, notes: str = "", recording_date: str = None, 

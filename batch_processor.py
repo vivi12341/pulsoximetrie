@@ -461,23 +461,56 @@ def run_batch_job(input_folder: str, output_folder: str, window_minutes: int, se
                             
                             # [FIX TEAM] Async R2 Upload (Threaded) to prevent 502 Timeout
                             def upload_r2_background(token_val, content_val, filename_val):
+                                # [ITERATION 2] Thread lifecycle tracking
+                                import threading
+                                thread_id = threading.current_thread().name
+                                logger.warning(f"🧵 [BATCH_THREAD_{thread_id}] Thread STARTED for {token_val[:8]}...")
+                                
                                 try:
-                                    logger.warning(f"🧵 [BATCH_THREAD] Starting Async R2 Upload for {token_val[:8]}...")
+                                    logger.warning(f"🧵 [BATCH_THREAD_{thread_id}] Starting Async R2 Upload for {token_val[:8]}...")
+                                    
+                                    # [ITERATION 2] Log file size
+                                    file_size_mb = len(content_val) / (1024 * 1024)
+                                    logger.warning(f"🧵 [BATCH_THREAD_{thread_id}] Upload size: {file_size_mb:.2f} MB")
+                                    
                                     r2_url = upload_patient_csv(token_val, content_val, filename_val)
+                                    
+                                    # [ITERATION 2] Log return value type
+                                    logger.warning(f"🧵 [BATCH_THREAD_{thread_id}] upload_patient_csv returned: {type(r2_url).__name__}")
+                                    
                                     if r2_url and (r2_url.startswith('http') or 's3' in r2_url):
                                         logger.warning(f"☁️ [BATCH_S3_FIX] Async Upload Success: {r2_url}")
                                         # Update links metadata after success
                                         current_links = load_patient_links()
                                         if token_val in current_links:
+                                            # [ITERATION 2] Log metadata state before update
+                                            old_storage = current_links[token_val].get('storage_type', 'unknown')
+                                            logger.warning(f"🔄 [BATCH_METADATA] Updating storage_type: {old_storage} → s3")
+                                            
                                             current_links[token_val]['r2_url'] = r2_url
                                             current_links[token_val]['storage_type'] = 's3'
                                             current_links[token_val]['csv_path'] = f"s3://{token_val}/csvs/{filename_val}"
                                             save_patient_links(current_links)
+                                            
+                                            logger.warning(f"✅ [BATCH_METADATA] Metadata updated successfully")
                                     else:
-                                        logger.warning(f"⚠️ [BATCH_S3_FIX] S3 Upload returned local path (S3 Disabled?). Keeping storage_type='local'.")
+                                        # [DIAGNOSTIC] Log explicit al valorii returnate
+                                        logger.warning(f"⚠️ [BATCH_S3_FIX] S3 Upload returned fallback path: '{r2_url}'")
+                                        logger.warning(f"   - Reason: URL does not start with 'http' or 's3'")
+                                        logger.warning(f"   - Action: Keeping storage_type='local'")
                                         # Nu actualizăm la 'r2', rămâne 'local' cum a fost setat inițial
+                                        
+                                    # [ITERATION 2] Thread completion log
+                                    logger.warning(f"🧵 [BATCH_THREAD_{thread_id}] Thread COMPLETED for {token_val[:8]}")
+                                    
+                                except FileNotFoundError as fnf:
+                                    logger.error(f"❌ [BATCH_R2_FIX] File Not Found Error: {fnf}")
+                                except KeyError as ke:
+                                    logger.error(f"❌ [BATCH_R2_FIX] Metadata Key Error: {ke}")
                                 except Exception as e:
-                                    logger.error(f"❌ [BATCH_R2_FIX] Async R2 Error: {e}")
+                                    logger.error(f"❌ [BATCH_R2_FIX] Async R2 Error: {e}", exc_info=True)
+                                finally:
+                                    logger.warning(f"🧵 [BATCH_THREAD_{thread_id}] Thread FINISHED (cleanup)")
 
                             # Start the thread
                             r2_filename = f"recording_batch_{token[:8]}_{file_name}"

@@ -80,10 +80,18 @@ class S3StorageClient:
             
             # Test conexiune (verifică dacă bucket-ul există)
             self.client.head_bucket(Bucket=self.bucket_name)
-            logger.warning(f"✅ [S3_TRACE_INIT] S3 Storage conectat cu succes!")
+            logger.warning(f"✅ [S3_TRACE_INIT] S3 Storage conectat cu succes! (Read Access OK)")
             logger.warning(f"   - Endpoint: {S3_ENDPOINT}")
             logger.warning(f"   - Bucket: {self.bucket_name}")
             logger.warning(f"   - Region: {S3_REGION}")
+            
+            # [DIAGNOSTIC] Check Write Permissions explicitly
+            self._check_write_permission()
+            
+            # [ITERATION 2] Log boto3 client configuration details
+            logger.warning(f"🔍 [S3_CONFIG] Signature Version: s3v4")
+            logger.warning(f"🔍 [S3_CONFIG] Using boto3 client with endpoint: {S3_ENDPOINT}")
+            
             self.init_error = None
             
         except ClientError as e:
@@ -136,7 +144,11 @@ class S3StorageClient:
             
             file_size_bytes = len(file_content)
             file_size_mb = file_size_bytes / (1024 * 1024)
-            logger.warning(f"🚀 [S3_TRACE_UPLOAD] START Upload: {key} | Size: {file_size_mb:.2f} MB ({file_size_bytes} bytes)")
+            
+            # [ITERATION 2] Add timestamp for upload tracking
+            import time
+            upload_start = time.time()
+            logger.warning(f"🚀 [S3_TRACE_UPLOAD] START Upload: {key} | Size: {file_size_mb:.2f} MB ({file_size_bytes} bytes) | Time: {upload_start}")
             
             # Upload către S3
             self.client.put_object(
@@ -146,7 +158,9 @@ class S3StorageClient:
                 ContentType=content_type
             )
             
-            logger.warning(f"✅ [S3_TRACE_UPLOAD] SUCCESS Upload: {key} | Size: {file_size_mb:.2f} MB")
+            # [ITERATION 2] Log upload duration
+            upload_duration = time.time() - upload_start
+            logger.warning(f"✅ [S3_TRACE_UPLOAD] SUCCESS Upload: {key} | Size: {file_size_mb:.2f} MB | Duration: {upload_duration:.2f}s")
             
             # Returnăm URL-ul (format: https://bucket.endpoint/key sau endpoint/bucket/key)
             # Adaptare pentru endpoint-uri care nu au bucket-ul în subdomain
@@ -158,7 +172,29 @@ class S3StorageClient:
             return url
             
         except ClientError as e:
-            logger.error(f"❌ [S3_TRACE_UPLOAD] FAIL Upload S3 pentru {key}: {e}", exc_info=True)
+            # [DIAGNOSTIC] Granular Error Logging
+            error_code = e.response.get('Error', {}).get('Code', 'Unknown')
+            request_id = e.response.get('ResponseMetadata', {}).get('RequestId', 'Unknown')
+            http_status = e.response.get('ResponseMetadata', {}).get('HTTPStatusCode', 'Unknown')
+            
+            logger.error(f"❌ [S3_TRACE_UPLOAD] FAIL Upload S3 pentru {key}")
+            logger.error(f"   - Error Code: {error_code}")
+            logger.error(f"   - HTTP Status: {http_status}")
+            logger.error(f"   - Request ID: {request_id}")
+            logger.error(f"   - Full Exception: {e}")
+            
+            # [ITERATION 2] Log the exact moment of fallback
+            logger.warning(f"🔄 [S3_FALLBACK] Switching to LOCAL storage for {key} due to S3 error")
+            logger.warning(f"🔄 [S3_FALLBACK] Reason: {error_code} (HTTP {http_status})")
+            
+            # [ITERATION 4] Detect specific error scenarios
+            if error_code == 'QuotaExceeded' or 'quota' in str(e).lower():
+                logger.critical(f"💾 [S3_QUOTA] BUCKET QUOTA EXCEEDED! Check Cloudflare R2 storage limits.")
+            elif error_code == 'AccessDenied' or error_code == '403':
+                logger.critical(f"🔒 [S3_PERMISSION] Token lacks WRITE permission. Check API Token scopes.")
+            elif 'cors' in str(e).lower():
+                logger.warning(f"🌐 [S3_CORS] Possible CORS policy issue.")
+            
             # Fallback: salvăm local
             return self._save_local_fallback(file_content, key)
     
@@ -368,6 +404,33 @@ class S3StorageClient:
         except Exception as e:
             logger.error(f"❌ Eroare listare locală pentru {prefix}: {e}", exc_info=True)
             return []
+
+    def _check_write_permission(self):
+        """
+        [DIAGNOSTIC] Testează explicit permisiunea de scriere (PUT).
+        Unele token-uri R2 au doar 'Object Read' dar nu 'Object Write'.
+        """
+        try:
+            test_key = "diagnostic_write_check.txt"
+            logger.warning(f"🕵️ [S3_PERM_CHECK] Testing WRITE permission on {test_key}...")
+            
+            self.client.put_object(
+                Bucket=self.bucket_name,
+                Key=test_key,
+                Body=b"write_test",
+                ContentType="text/plain"
+            )
+            logger.warning(f"✅ [S3_PERM_CHECK] WRITE Permission CONFIRMED!")
+            
+            # Cleanup
+            self.client.delete_object(Bucket=self.bucket_name, Key=test_key)
+            
+        except ClientError as e:
+            error_code = e.response.get('Error', {}).get('Code', 'Unknown')
+            logger.critical(f"❌ [S3_PERM_CHECK] WRITE Permission FAILED! Code: {error_code}")
+            logger.critical(f"   - Sfat: Verifică Token Permissions în Cloudflare (trebuie 'Object Read & Write')")
+        except Exception as e:
+            logger.critical(f"❌ [S3_PERM_CHECK] Write Check Failed Unexpectedly: {e}")
 
 
 # ==============================================================================
