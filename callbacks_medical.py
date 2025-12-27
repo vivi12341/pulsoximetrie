@@ -813,6 +813,7 @@ def on_upload_complete(status):
     [T2 Solution + v7 Defensive Error Handling] Streaming Upload Finalizat.
     """
     
+    # [FIX] Wrap everything in try-except to prevent 500 Internal Server Error
     try:
         logger.info("="*100)
         logger.info("🚀 [UPLOAD CALLBACK] START - on_upload_complete trigerat")
@@ -920,6 +921,11 @@ def on_upload_complete(status):
                 logger.info(f"🔍 [LOG 28.{attempt}] === SCAN ATTEMPT #{attempt + 1}/{max_retries} ===")
                 
                 try:
+                    # [Double-Check] Session existence check inside loop
+                    if not os.path.exists(session_folder):
+                        logger.warning(f"⚠️ [LOG 29.{attempt}] Folder încă inexistent: {session_folder}")
+                        continue
+
                     entries = list(os.scandir(session_folder))
                     logger.info(f"📁 [LOG 29.{attempt}] os.scandir găsit: {len(entries)} intrări totale")
                 except Exception as scandir_error:
@@ -1017,15 +1023,15 @@ def on_upload_complete(status):
             
         return all_files_metadata, str(upload_id)
     
-    except Exception as callback_crash:
+    except Exception as e:
         logger.error("="*100)
         logger.error("💥💥💥 CALLBACK CRASH - EROARE CRITICĂ! 💥💥💥")
-        logger.error(f"💥 Exception type: {type(callback_crash).__name__}")
-        logger.error(f"💥 Exception message: {callback_crash}")
+        logger.error(f"💥 Exception type: {type(e).__name__}")
+        logger.error(f"💥 Exception message: {str(e)}")
         logger.error("💥 Full traceback:")
         logger.error("="*100, exc_info=True)
-        # Re-raise pentru ca Dash să știe că a eșuat
-        raise
+        # Prevent 500 error by returning empty update
+        return no_update, no_update
 
 
 @app.callback(
@@ -1157,63 +1163,64 @@ def admin_run_batch_processing(n_clicks, batch_mode, input_folder, session_id, o
     Callback pentru procesare batch + generare automată link-uri + tracking progres.
     Suportă AMBELE moduri: local (folder) și upload (fișiere).
     """
-    if n_clicks == 0:
-        return no_update, no_update, no_update, no_update, no_update, no_update, no_update
-    
-    logger.warning(f"🔍 [BATCH] START PROCESSING - Mode: {batch_mode}, Session: {session_id}")
-    
-    processing_folder = None
-    
-    # === DETERMINARE FOLDER PROCESARE ===
-    if batch_mode == 'local':
-        # Mod local: verificăm folder
-        if not input_folder or input_folder.strip() == '':
-            return html.Div(
-                "⚠️ Specificați folderul de intrare!",
-                style={'padding': '15px', 'backgroundColor': '#fff3cd', 'border': '1px solid #ffc107', 'borderRadius': '5px'}
-            ), no_update, no_update, no_update, no_update, no_update, no_update
-        
-        processing_folder = input_folder
-        logger.warning(f"✅ Procesare LOCALĂ din folder: {input_folder}")
-        
-    else:  # batch_mode == 'upload'
-        # Verificăm session_id (care este upload_id din dash-uploader)
-        if not session_id or not isinstance(session_id, str):
-            logger.error(f"❌ [BATCH] Session ID invalid: {session_id}")
-            return html.Div(
-                "⚠️ Niciun fișier încărcat! Vă rugăm să încărcați fișierele întâi.",
-                style={'padding': '15px', 'backgroundColor': '#fff3cd', 'border': '1px solid #ffc107', 'borderRadius': '5px'}
-            ), no_update, no_update, no_update, no_update, no_update, no_update
-        
-        # Construim calea către folderul de upload dash-uploader
-        # Acesta se află în ./temp_uploads/{session_id}
-        base_upload_dir = os.path.join(os.getcwd(), 'temp_uploads')
-        processing_folder = os.path.join(base_upload_dir, session_id)
-        
-        if not os.path.exists(processing_folder):
-             # [DEBUG] Listare conținut folder părinte pentru a vedea ce există
-             try:
-                 available_folders = os.listdir(base_upload_dir) if os.path.exists(base_upload_dir) else ["DIR_MISSING"]
-             except:
-                 available_folders = ["ERROR_SCANNING"]
-                 
-             logger.error(f"❌ Folder lipsă: {processing_folder}")
-             logger.error(f"📂 Foldere disponibile în {base_upload_dir}: {available_folders}")
-             
-             return html.Div(
-                f"⚠️ Sesiunea de upload nu a fost găsită. Căutat în: {processing_folder}. Disponibil: {available_folders}",
-                style={'padding': '15px', 'backgroundColor': '#ffdddd', 'border': '1px solid red', 'borderRadius': '5px'}
-            ), no_update, no_update, no_update, no_update, no_update, no_update
-
-        logger.warning(f"🚀 [BATCH] Procesare UPLOAD din folder: {processing_folder}")
-    
-    # Folosim folder default pentru output dacă nu e specificat
-    if not output_folder or output_folder.strip() == '':
-        output_folder = config.OUTPUT_DIR
-    
-    logger.info(f"📊 Admin pornește procesare batch: {processing_folder} → {output_folder}")
-    
+    # [FIX] Top-level try-except pentru a prinde ORICE eroare și a preveni 500 Generic
     try:
+        if n_clicks == 0:
+            return no_update, no_update, no_update, no_update, no_update, no_update, no_update
+        
+        logger.warning(f"🔍 [BATCH] START PROCESSING - Mode: {batch_mode}, Session: {session_id}")
+        
+        processing_folder = None
+        
+        # === DETERMINARE FOLDER PROCESARE ===
+        if batch_mode == 'local':
+            # Mod local: verificăm folder
+            if not input_folder or input_folder.strip() == '':
+                return html.Div(
+                    "⚠️ Specificați folderul de intrare!",
+                    style={'padding': '15px', 'backgroundColor': '#fff3cd', 'border': '1px solid #ffc107', 'borderRadius': '5px'}
+                ), no_update, no_update, no_update, no_update, no_update, no_update
+            
+            processing_folder = input_folder
+            logger.warning(f"✅ Procesare LOCALĂ din folder: {input_folder}")
+            
+        else:  # batch_mode == 'upload'
+            # Verificăm session_id (care este upload_id din dash-uploader)
+            if not session_id or not isinstance(session_id, str):
+                logger.error(f"❌ [BATCH] Session ID invalid: {session_id}")
+                return html.Div(
+                    "⚠️ Niciun fișier încărcat! Vă rugăm să încărcați fișierele întâi.",
+                    style={'padding': '15px', 'backgroundColor': '#fff3cd', 'border': '1px solid #ffc107', 'borderRadius': '5px'}
+                ), no_update, no_update, no_update, no_update, no_update, no_update
+            
+            # Construim calea către folderul de upload dash-uploader
+            # Acesta se află în ./temp_uploads/{session_id}
+            base_upload_dir = os.path.join(os.getcwd(), 'temp_uploads')
+            processing_folder = os.path.join(base_upload_dir, session_id)
+            
+            if not os.path.exists(processing_folder):
+                 # [DEBUG] Listare conținut folder părinte pentru a vedea ce există
+                 try:
+                     available_folders = os.listdir(base_upload_dir) if os.path.exists(base_upload_dir) else ["DIR_MISSING"]
+                 except:
+                     available_folders = ["ERROR_SCANNING"]
+                     
+                 logger.error(f"❌ Folder lipsă: {processing_folder}")
+                 logger.error(f"📂 Foldere disponibile în {base_upload_dir}: {available_folders}")
+                 
+                 return html.Div(
+                    f"⚠️ Sesiunea de upload nu a fost găsită. Căutat în: {processing_folder}. Disponibil: {available_folders}",
+                    style={'padding': '15px', 'backgroundColor': '#ffdddd', 'border': '1px solid red', 'borderRadius': '5px'}
+                ), no_update, no_update, no_update, no_update, no_update, no_update
+
+            logger.warning(f"🚀 [BATCH] Procesare UPLOAD din folder: {processing_folder}")
+        
+        # Folosim folder default pentru output dacă nu e specificat
+        if not output_folder or output_folder.strip() == '':
+            output_folder = config.OUTPUT_DIR
+        
+        logger.info(f"📊 Admin pornește procesare batch: {processing_folder} → {output_folder}")
+        
         # Găsim toate fișierele CSV și PDF din folder
         csv_files = [f for f in os.listdir(processing_folder) if f.lower().endswith('.csv')]
         pdf_files = [f for f in os.listdir(processing_folder) if f.lower().endswith('.pdf')]
@@ -1300,7 +1307,7 @@ def admin_run_batch_processing(n_clicks, batch_mode, input_folder, session_id, o
                         ),
                         html.Div([
                             html.Button(
-                                '📋 Copy',
+                                '📋 ',
                                 id={'type': 'copy-link-batch', 'index': link['token']},
                                 n_clicks=0,
                                 style={
@@ -1311,7 +1318,6 @@ def admin_run_batch_processing(n_clicks, batch_mode, input_folder, session_id, o
                                     'border': 'none',
                                     'borderRadius': '3px',
                                     'cursor': 'pointer',
-                                    'fontSize': '12px',
                                     'fontWeight': 'bold'
                                 }
                             ),

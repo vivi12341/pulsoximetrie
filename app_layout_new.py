@@ -53,10 +53,10 @@ def get_layout():
         logger.info(f"👤 [LOG 9] User authenticated status: {is_auth}")
         
         if is_auth:
-            logger.info(f"👨‍⚕️ [LOG 10] ADMIN with token → Medical Layout (TODO: auto-switch to data view tab)")
-            logger.info(f"👨‍⚕️ [LOG 11] Token will be available for callbacks to process")
-            # TODO: Implement tab switching logic
-            return get_medical_layout()
+            logger.info(f"👨‍⚕️ [LOG 10] ADMIN with token → Returning Patient Layout for Verification")
+            logger.info(f"👨‍⚕️ [LOG 11] Admin is viewing specific patient data: {token[:8]}...")
+            # Pentru "Test in browser", adminul trebuie să vadă ce vede pacientul
+            return get_patient_layout()
         else:
             logger.info(f"👤 [LOG 12] PATIENT (unauthenticated) with token")
             if is_valid:

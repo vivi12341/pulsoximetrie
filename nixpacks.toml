@@ -2,15 +2,6 @@
 # nixpacks.toml - Configurare Railway Build pentru Aplicația Pulsoximetrie
 # ==============================================================================
 # SCOP: Adaugă Chromium în container pentru Kaleido (export grafice Plotly)
-#
-# DOCUMENTAȚIE:
-# - Railway folosește Nixpacks pentru build automat
-# - Kaleido v1.2.0+ necesită Chrome/Chromium pentru rendering imagini
-# - Fără Chromium → RuntimeError la fig.write_image()
-#
-# REFERINȚE:
-# - https://nixpacks.com/docs/configuration/file
-# - https://docs.railway.app/reference/nixpacks
 # ==============================================================================
 
 [phases.setup]
@@ -58,23 +49,5 @@ cmds = [
 # Comandă pornire aplicație (PRODUCTION: Gunicorn WSGI server)
 # FIX: --preload forțează workers să împartă același asset registry
 # FIX: wsgi:application (NU run_medical:app.server) pentru consistent init
-# CACHE_BUST_v2: Force Railway rebuild - Dash 3.x import fix
+# CACHE_BUST_v3: Force Railway rebuild - Syntax fix
 cmd = 'gunicorn --workers 4 --threads 2 --timeout 120 --preload --bind 0.0.0.0:$PORT --log-level warning --access-logfile - --error-logfile - wsgi:application'
-
-# ==============================================================================
-# TROUBLESHOOTING:
-# 
-# 1. Dacă Kaleido tot nu găsește Chrome:
-#    - Verifică Deploy Logs: "CHROMIUM_PATH=/nix/store/..."
-#    - Setează manual: CHROMIUM_PATH în Railway Variables
-# 
-# 2. Dacă build-ul este lent:
-#    - Normal: Chromium adaugă ~200MB la imagine
-#    - Prima build: ~3-4 minute
-#    - Build-uri următoare: cached (~60-90s)
-# 
-# 3. Alternative dacă Chromium nu funcționează:
-#    - Dezactivează export imagini: R2_BATCH_EXPORT_ENABLED=False
-#    - Folosește fallback graceful din batch_processor.py
-# ==============================================================================
-
