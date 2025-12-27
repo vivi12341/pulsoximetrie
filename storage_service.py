@@ -1,13 +1,13 @@
 # ==============================================================================
 # storage_service.py
 # ------------------------------------------------------------------------------
-# ROL: Gestionează stocare fișiere în Cloudflare R2 (S3-compatible)
+# ROL: Gestionează stocare fișiere în S3-Compatible Storage (ex: Scaleway, R2, AWS)
 #      Implementează upload/download/delete pentru CSV, PDF, PNG
 #
 # ARHITECTURĂ:
-#   - Cloudflare R2: Storage persistent cloud (alternativă S3)
+#   - S3 Storage: Storage persistent cloud
 #   - boto3: Client Python pentru operații S3-compatible
-#   - Fallback local: Dacă R2 nu e disponibil, salvează local
+#   - Fallback local: Dacă S3 nu e disponibil, salvează local
 #
 # RESPECTĂ: .cursorrules - Privacy by Design (zero date personale!)
 # ==============================================================================
@@ -20,25 +20,26 @@ from botocore.exceptions import ClientError, BotoCoreError
 from typing import Optional, BinaryIO, Union
 from logger_setup import logger
 
-# --- Configurare R2 din Environment Variables ---
-R2_ENABLED = os.getenv('R2_ENABLED', 'False').lower() == 'true'
-R2_ENDPOINT = os.getenv('R2_ENDPOINT', '')
-R2_ACCESS_KEY_ID = os.getenv('R2_ACCESS_KEY_ID', '')
-R2_SECRET_ACCESS_KEY = os.getenv('R2_SECRET_ACCESS_KEY', '')
-R2_BUCKET_NAME = os.getenv('R2_BUCKET_NAME', 'pulsoximetrie-files')
-R2_REGION = os.getenv('R2_REGION', 'auto')
+# --- Configurare S3 din Environment Variables ---
+# NOTĂ: Suportă și vechile variabile R2_ pentru compatibilitate, dar preferă S3_
+S3_ENABLED = os.getenv('S3_ENABLED', os.getenv('R2_ENABLED', 'False')).lower() == 'true'
+S3_ENDPOINT = os.getenv('S3_ENDPOINT', os.getenv('R2_ENDPOINT', ''))
+S3_ACCESS_KEY_ID = os.getenv('S3_ACCESS_KEY_ID', os.getenv('R2_ACCESS_KEY_ID', ''))
+S3_SECRET_ACCESS_KEY = os.getenv('S3_SECRET_ACCESS_KEY', os.getenv('R2_SECRET_ACCESS_KEY', ''))
+S3_BUCKET_NAME = os.getenv('S3_BUCKET_NAME', os.getenv('R2_BUCKET_NAME', 'pulsoximetrie-files'))
+S3_REGION = os.getenv('S3_REGION', os.getenv('R2_REGION', 'auto'))
 
 # Fallback pentru stocare locală
 LOCAL_STORAGE_DIR = "patient_data"
 
 
 # ==============================================================================
-# CLOUDFLARE R2 CLIENT - S3-COMPATIBLE
+# S3 GENERIC CLIENT - S3-COMPATIBLE
 # ==============================================================================
 
-class CloudflareR2Client:
+class S3StorageClient:
     """
-    Client pentru interacțiune cu Cloudflare R2 (S3-compatible storage).
+    Client generic pentru interacțiune cu orice S3-compatible storage (Scaleway, R2, AWS).
     
     Features:
     - Upload fișiere (CSV, PDF, PNG)
@@ -49,40 +50,40 @@ class CloudflareR2Client:
     """
     
     def __init__(self):
-        """Inițializează client-ul R2 cu credențiale din environment."""
-        self.enabled = R2_ENABLED
-        self.bucket_name = R2_BUCKET_NAME
+        """Inițializează client-ul S3 cu credențiale din environment."""
+        self.enabled = S3_ENABLED
+        self.bucket_name = S3_BUCKET_NAME
         self.client = None
         self.init_error = None # [DIAGNOSTIC] Capture exact error
         
         if not self.enabled:
-            self.init_error = "R2_ENABLED env var is False/Missing"
-            logger.warning("⚠️ Cloudflare R2 DEZACTIVAT - folosim stocare LOCALĂ")
+            self.init_error = "S3_ENABLED env var is False/Missing"
+            logger.warning("⚠️ S3 Storage DEZACTIVAT - folosim stocare LOCALĂ")
             return
         
-        if not all([R2_ENDPOINT, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY]):
+        if not all([S3_ENDPOINT, S3_ACCESS_KEY_ID, S3_SECRET_ACCESS_KEY]):
             self.init_error = "Missing Credentials (ENDPOINT/KEY/SECRET)"
-            logger.error("❌ Credențiale R2 incomplete! Setează R2_ENDPOINT, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY")
+            logger.error("❌ Credențiale S3 incomplete! Setează S3_ENDPOINT, S3_ACCESS_KEY_ID, S3_SECRET_ACCESS_KEY")
             self.enabled = False
             return
         
         try:
-            # Inițializare client boto3 pentru R2
+            # Inițializare client boto3 pentru S3
             self.client = boto3.client(
                 's3',
-                endpoint_url=R2_ENDPOINT,
-                aws_access_key_id=R2_ACCESS_KEY_ID,
-                aws_secret_access_key=R2_SECRET_ACCESS_KEY,
-                region_name=R2_REGION,
+                endpoint_url=S3_ENDPOINT,
+                aws_access_key_id=S3_ACCESS_KEY_ID,
+                aws_secret_access_key=S3_SECRET_ACCESS_KEY,
+                region_name=S3_REGION,
                 config=Config(signature_version='s3v4')
             )
             
             # Test conexiune (verifică dacă bucket-ul există)
             self.client.head_bucket(Bucket=self.bucket_name)
-            logger.warning(f"✅ [R2_TRACE_INIT] Cloudflare R2 conectat cu succes!")
-            logger.warning(f"   - Endpoint: {R2_ENDPOINT}")
+            logger.warning(f"✅ [S3_TRACE_INIT] S3 Storage conectat cu succes!")
+            logger.warning(f"   - Endpoint: {S3_ENDPOINT}")
             logger.warning(f"   - Bucket: {self.bucket_name}")
-            logger.warning(f"   - Region: {R2_REGION}")
+            logger.warning(f"   - Region: {S3_REGION}")
             self.init_error = None
             
         except ClientError as e:
@@ -92,7 +93,7 @@ class CloudflareR2Client:
             elif error_code == '403':
                 msg = f"Access DENIED to bucket '{self.bucket_name}' (403) - Check Permissions"
             else:
-                msg = f"R2 ClientError: {e}"
+                msg = f"S3 ClientError: {e}"
             
             logger.error(f"❌ {msg}")
             self.init_error = msg
@@ -113,7 +114,7 @@ class CloudflareR2Client:
     def upload_file(self, file_content: Union[bytes, BinaryIO], key: str, 
                    content_type: str = 'application/octet-stream') -> Optional[str]:
         """
-        Uploadează un fișier în R2.
+        Uploadează un fișier în S3.
         
         Args:
             file_content: Conținutul fișierului (bytes sau file-like object)
@@ -125,7 +126,7 @@ class CloudflareR2Client:
         """
         if not self.enabled:
             reason = self.init_error if self.init_error else "Unknown Reason"
-            logger.warning(f"⚠️ R2 disabled (Reason: {reason}) - file {key} NOT uploaded to cloud")
+            logger.warning(f"⚠️ S3 disabled (Reason: {reason}) - file {key} NOT uploaded to cloud")
             return self._save_local_fallback(file_content, key)
         
         try:
@@ -135,9 +136,9 @@ class CloudflareR2Client:
             
             file_size_bytes = len(file_content)
             file_size_mb = file_size_bytes / (1024 * 1024)
-            logger.warning(f"🚀 [R2_TRACE_UPLOAD] START Upload: {key} | Size: {file_size_mb:.2f} MB ({file_size_bytes} bytes)")
+            logger.warning(f"🚀 [S3_TRACE_UPLOAD] START Upload: {key} | Size: {file_size_mb:.2f} MB ({file_size_bytes} bytes)")
             
-            # Upload către R2
+            # Upload către S3
             self.client.put_object(
                 Bucket=self.bucket_name,
                 Key=key,
@@ -145,21 +146,26 @@ class CloudflareR2Client:
                 ContentType=content_type
             )
             
-            logger.warning(f"✅ [R2_TRACE_UPLOAD] SUCCESS Upload: {key} | Size: {file_size_mb:.2f} MB")
+            logger.warning(f"✅ [S3_TRACE_UPLOAD] SUCCESS Upload: {key} | Size: {file_size_mb:.2f} MB")
             
-            # Returnăm URL-ul (format: https://bucket.endpoint/key)
-            url = f"{R2_ENDPOINT}/{self.bucket_name}/{key}"
+            # Returnăm URL-ul (format: https://bucket.endpoint/key sau endpoint/bucket/key)
+            # Adaptare pentru endpoint-uri care nu au bucket-ul în subdomain
+            if self.bucket_name in S3_ENDPOINT:
+                 url = f"{S3_ENDPOINT}/{key}"
+            else:
+                 url = f"{S3_ENDPOINT}/{self.bucket_name}/{key}"
+
             return url
             
         except ClientError as e:
-            logger.error(f"❌ [R2_TRACE_UPLOAD] FAIL Upload R2 pentru {key}: {e}", exc_info=True)
+            logger.error(f"❌ [S3_TRACE_UPLOAD] FAIL Upload S3 pentru {key}: {e}", exc_info=True)
             # Fallback: salvăm local
             return self._save_local_fallback(file_content, key)
     
     
     def download_file(self, key: str) -> Optional[bytes]:
         """
-        Descarcă un fișier din R2.
+        Descarcă un fișier din S3.
         
         Args:
             key: Calea în bucket (ex: "abc123/csvs/file.csv")
@@ -168,11 +174,11 @@ class CloudflareR2Client:
             bytes: Conținutul fișierului sau None dacă eroare
         """
         if not self.enabled:
-            logger.warning(f"⚠️ R2 dezactivat - încercare download local pentru {key}")
+            logger.warning(f"⚠️ S3 dezactivat - încercare download local pentru {key}")
             return self._read_local_fallback(key)
         
         try:
-            logger.warning(f"🔽 [R2_TRACE_DOWNLOAD] START Download: {key}")
+            logger.warning(f"🔽 [S3_TRACE_DOWNLOAD] START Download: {key}")
             response = self.client.get_object(
                 Bucket=self.bucket_name,
                 Key=key
@@ -180,16 +186,16 @@ class CloudflareR2Client:
             
             file_content = response['Body'].read()
             file_size_mb = len(file_content) / (1024 * 1024)
-            logger.warning(f"✅ [R2_TRACE_DOWNLOAD] SUCCESS Download: {key} | Size: {file_size_mb:.2f} MB")
+            logger.warning(f"✅ [S3_TRACE_DOWNLOAD] SUCCESS Download: {key} | Size: {file_size_mb:.2f} MB")
             
             return file_content
             
         except ClientError as e:
             error_code = e.response.get('Error', {}).get('Code', 'Unknown')
             if error_code == 'NoSuchKey':
-                logger.warning(f"⚠️ [R2_TRACE_DOWNLOAD] NoSuchKey - Fișierul nu există în R2: {key}")
+                logger.warning(f"⚠️ [S3_TRACE_DOWNLOAD] NoSuchKey - Fișierul nu există în S3: {key}")
             else:
-                logger.error(f"❌ [R2_TRACE_DOWNLOAD] FAIL Download R2 pentru {key}: {e}", exc_info=True)
+                logger.error(f"❌ [S3_TRACE_DOWNLOAD] FAIL Download S3 pentru {key}: {e}", exc_info=True)
             
             # Fallback: citim local
             return self._read_local_fallback(key)
@@ -197,7 +203,7 @@ class CloudflareR2Client:
     
     def delete_file(self, key: str) -> bool:
         """
-        Șterge un fișier din R2.
+        Șterge un fișier din S3.
         
         Args:
             key: Calea în bucket (ex: "abc123/csvs/file.csv")
@@ -206,26 +212,26 @@ class CloudflareR2Client:
             bool: True dacă șters cu succes, False altfel
         """
         if not self.enabled:
-            logger.warning(f"⚠️ R2 dezactivat - ștergere locală pentru {key}")
+            logger.warning(f"⚠️ S3 dezactivat - ștergere locală pentru {key}")
             return self._delete_local_fallback(key)
         
         try:
-            logger.warning(f"🗑️ [R2_TRACE_DELETE] Attempt delete: {key}")
+            logger.warning(f"🗑️ [S3_TRACE_DELETE] Attempt delete: {key}")
             self.client.delete_object(
                 Bucket=self.bucket_name,
                 Key=key
             )
-            logger.warning(f"✅ [R2_TRACE_DELETE] SUCCESS Delete: {key}")
+            logger.warning(f"✅ [S3_TRACE_DELETE] SUCCESS Delete: {key}")
             return True
             
         except ClientError as e:
-            logger.error(f"❌ Eroare ștergere R2 pentru {key}: {e}", exc_info=True)
+            logger.error(f"❌ Eroare ștergere S3 pentru {key}: {e}", exc_info=True)
             return False
     
     
     def list_files(self, prefix: str = "") -> list[str]:
         """
-        Listează fișierele dintr-un folder R2.
+        Listează fișierele dintr-un folder S3.
         
         Args:
             prefix: Prefixul căii (ex: "abc123/csvs/")
@@ -234,7 +240,7 @@ class CloudflareR2Client:
             list: Lista de chei (căi) ale fișierelor
         """
         if not self.enabled:
-            logger.warning(f"⚠️ R2 dezactivat - listare locală pentru {prefix}")
+            logger.warning(f"⚠️ S3 dezactivat - listare locală pentru {prefix}")
             return self._list_local_fallback(prefix)
         
         try:
@@ -244,11 +250,11 @@ class CloudflareR2Client:
             )
             
             files = [obj['Key'] for obj in response.get('Contents', [])]
-            logger.info(f"📂 Găsite {len(files)} fișiere în R2 cu prefix '{prefix}'")
+            logger.info(f"📂 Găsite {len(files)} fișiere în S3 cu prefix '{prefix}'")
             return files
             
         except ClientError as e:
-            logger.error(f"❌ Eroare listare R2 pentru {prefix}: {e}", exc_info=True)
+            logger.error(f"❌ Eroare listare S3 pentru {prefix}: {e}", exc_info=True)
             return []
     
     
@@ -264,7 +270,7 @@ class CloudflareR2Client:
             str: URL signed sau None
         """
         if not self.enabled:
-            logger.warning(f"⚠️ R2 dezactivat - nu se poate genera URL signed pentru {key}")
+            logger.warning(f"⚠️ S3 dezactivat - nu se poate genera URL signed pentru {key}")
             return None
         
         try:
@@ -282,7 +288,7 @@ class CloudflareR2Client:
     
     
     # ==============================================================================
-    # FALLBACK - STOCARE LOCALĂ (dacă R2 nu e disponibil)
+    # FALLBACK - STOCARE LOCALĂ (dacă S3 nu e disponibil)
     # ==============================================================================
     
     def _save_local_fallback(self, content: bytes, key: str) -> Optional[str]:
@@ -369,7 +375,10 @@ class CloudflareR2Client:
 # ==============================================================================
 
 # Creăm o instanță globală pentru a fi folosită în toată aplicația
-r2_client = CloudflareR2Client()
+# Variabila păstrată ca r2_client pentru backward compatibility (opțional putem schimba în s3_client)
+# Vom alinia totul la s3_client intern
+s3_client = S3StorageClient()
+r2_client = s3_client # Alias pentru cod vechi
 
 
 # ==============================================================================
@@ -378,7 +387,7 @@ r2_client = CloudflareR2Client()
 
 def upload_patient_csv(token: str, csv_content: bytes, filename: str) -> Optional[str]:
     """
-    Uploadează CSV pacient în R2.
+    Uploadează CSV pacient în S3.
     
     Args:
         token: UUID pacient
@@ -389,12 +398,12 @@ def upload_patient_csv(token: str, csv_content: bytes, filename: str) -> Optiona
         str: URL sau calea fișierului
     """
     key = f"{token}/csvs/{filename}"
-    return r2_client.upload_file(csv_content, key, content_type='text/csv')
+    return s3_client.upload_file(csv_content, key, content_type='text/csv')
 
 
 def upload_patient_pdf(token: str, pdf_content: bytes, filename: str) -> Optional[str]:
     """
-    Uploadează PDF raport pacient în R2.
+    Uploadează PDF raport pacient în S3.
     
     Args:
         token: UUID pacient
@@ -405,12 +414,12 @@ def upload_patient_pdf(token: str, pdf_content: bytes, filename: str) -> Optiona
         str: URL sau calea fișierului
     """
     key = f"{token}/pdfs/{filename}"
-    return r2_client.upload_file(pdf_content, key, content_type='application/pdf')
+    return s3_client.upload_file(pdf_content, key, content_type='application/pdf')
 
 
 def upload_patient_plot(token: str, plot_content: bytes, filename: str) -> Optional[str]:
     """
-    Uploadează grafic PNG pacient în R2.
+    Uploadează grafic PNG pacient în S3.
     
     Args:
         token: UUID pacient
@@ -421,12 +430,12 @@ def upload_patient_plot(token: str, plot_content: bytes, filename: str) -> Optio
         str: URL sau calea fișierului
     """
     key = f"{token}/plots/{filename}"
-    return r2_client.upload_file(plot_content, key, content_type='image/png')
+    return s3_client.upload_file(plot_content, key, content_type='image/png')
 
 
 def download_patient_file(token: str, file_type: str, filename: str) -> Optional[bytes]:
     """
-    Descarcă un fișier pacient din R2.
+    Descarcă un fișier pacient din S3.
     
     Args:
         token: UUID pacient
@@ -437,7 +446,7 @@ def download_patient_file(token: str, file_type: str, filename: str) -> Optional
         bytes: Conținutul fișierului sau None
     """
     key = f"{token}/{file_type}/{filename}"
-    return r2_client.download_file(key)
+    return s3_client.download_file(key)
 
 
 def list_patient_files(token: str, file_type: str = "") -> list[str]:
@@ -452,7 +461,7 @@ def list_patient_files(token: str, file_type: str = "") -> list[str]:
         list: Lista de fișiere
     """
     prefix = f"{token}/{file_type}" if file_type else f"{token}/"
-    return r2_client.list_files(prefix)
+    return s3_client.list_files(prefix)
 
 
 def delete_patient_folder(token: str) -> bool:
@@ -469,7 +478,7 @@ def delete_patient_folder(token: str) -> bool:
         files = list_patient_files(token)
         
         for file_key in files:
-            r2_client.delete_file(file_key)
+            s3_client.delete_file(file_key)
         
         logger.info(f"🗑️ Folder pacient {token[:8]}... șters complet ({len(files)} fișiere)")
         return True
@@ -485,30 +494,29 @@ def delete_patient_folder(token: str) -> bool:
 
 def get_storage_status() -> dict:
     """
-    Returnează statusul storage-ului (R2 sau local).
+    Returnează statusul storage-ului (S3 sau local).
     
     Returns:
         dict: Informații despre storage
     """
     return {
-        "r2_enabled": r2_client.enabled,
-        "r2_endpoint": R2_ENDPOINT if r2_client.enabled else "N/A",
-        "r2_bucket": R2_BUCKET_NAME if r2_client.enabled else "N/A",
+        "s3_enabled": s3_client.enabled,
+        "s3_endpoint": S3_ENDPOINT if s3_client.enabled else "N/A",
+        "s3_bucket": S3_BUCKET_NAME if s3_client.enabled else "N/A",
         "fallback_storage": LOCAL_STORAGE_DIR,
-        "mode": "Cloudflare R2" if r2_client.enabled else "Local Storage (Fallback)"
+        "mode": "S3 Storage Cloud" if s3_client.enabled else "Local Storage (Fallback)"
     }
 
 
 if __name__ == "__main__":
     # Test rapid pentru verificare configurare
-    logger.info("=== TEST CLOUDFLARE R2 STORAGE ===")
+    logger.info("=== TEST S3 STORAGE (Generic) ===")
     status = get_storage_status()
     
     for key, value in status.items():
         logger.info(f"  {key}: {value}")
     
-    if r2_client.enabled:
-        logger.info("✅ Cloudflare R2 este ACTIV și funcțional!")
+    if s3_client.enabled:
+        logger.info("✅ S3 Storage este ACTIV și funcțional!")
     else:
-        logger.warning("⚠️ Cloudflare R2 este DEZACTIVAT - folosim stocare locală")
-
+        logger.warning("⚠️ S3 Storage este DEZACTIVAT - folosim stocare locală")
