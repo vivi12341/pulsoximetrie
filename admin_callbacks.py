@@ -6,7 +6,8 @@
 # RESPECTĂ: .cursorrules - Zero date personale în log-uri, GDPR compliant
 # ==============================================================================
 
-from dash import html, dcc, callback, Input, Output, State, no_update, ALL
+from dash import html, dcc, Input, Output, State, no_update, ALL
+from app_instance import app  # [FIX] Explicit app import for robust callback registration
 from flask_login import current_user
 from logger_setup import logger
 from auth.models import db, Doctor
@@ -29,7 +30,7 @@ import json
 # CALLBACK: Afișare listă utilizatori
 # ==============================================================================
 
-@callback(
+@app.callback(
     Output('admin-users-list-container', 'children'),
     [Input('admin-refresh-users-button', 'n_clicks'),
      Input('url', 'pathname')],
@@ -262,7 +263,7 @@ def display_users_list(n_clicks, pathname):
 # CALLBACK: Afișare formular creare utilizator
 # ==============================================================================
 
-@callback(
+@app.callback(
     Output('admin-user-form-container', 'children'),
     [Input('admin-create-user-button', 'n_clicks'),
      Input({'type': 'admin-edit-user', 'index': ALL}, 'n_clicks')],
@@ -534,7 +535,7 @@ def edit_user_form(user):
 # CALLBACK: Salvare utilizator nou
 # ==============================================================================
 
-@callback(
+@app.callback(
     [Output('admin-user-form-status', 'children'),
      Output('admin-refresh-users-button', 'n_clicks', allow_duplicate=True)],
     Input('admin-save-new-user-button', 'n_clicks'),
@@ -610,7 +611,7 @@ def save_new_user(n_clicks, fullname, email, password, is_admin_list):
 # CALLBACK: Salvare modificări utilizator
 # ==============================================================================
 
-@callback(
+@app.callback(
     [Output('admin-user-form-status', 'children', allow_duplicate=True),
      Output('admin-refresh-users-button', 'n_clicks', allow_duplicate=True)],
     Input('admin-save-edit-user-button', 'n_clicks'),
@@ -699,7 +700,7 @@ def save_edit_user(n_clicks, user_id, fullname, email, password, is_admin_list):
 # CALLBACK: Anulare formular
 # ==============================================================================
 
-@callback(
+@app.callback(
     Output('admin-user-form-container', 'children', allow_duplicate=True),
     Input('admin-cancel-user-form-button', 'n_clicks'),
     prevent_initial_call=True
@@ -715,7 +716,7 @@ def cancel_user_form(n_clicks):
 # CALLBACK: Toggle activare/dezactivare utilizator
 # ==============================================================================
 
-@callback(
+@app.callback(
     Output('admin-refresh-users-button', 'n_clicks', allow_duplicate=True),
     Input({'type': 'admin-toggle-user', 'index': ALL}, 'n_clicks'),
     State({'type': 'admin-toggle-user', 'index': ALL}, 'id'),
@@ -775,7 +776,7 @@ def toggle_user_status(n_clicks_list, button_ids):
 # CALLBACK: Toggle rol admin
 # ==============================================================================
 
-@callback(
+@app.callback(
     Output('admin-refresh-users-button', 'n_clicks', allow_duplicate=True),
     Input({'type': 'admin-toggle-admin-role', 'index': ALL}, 'n_clicks'),
     State({'type': 'admin-toggle-admin-role', 'index': ALL}, 'id'),
