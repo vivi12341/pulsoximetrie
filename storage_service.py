@@ -21,13 +21,31 @@ from typing import Optional, BinaryIO, Union
 from logger_setup import logger
 
 # --- Configurare S3 din Environment Variables ---
-# NOTĂ: Suportă și vechile variabile R2_ pentru compatibilitate retroactivă (Scaleway Object Storage)
-S3_ENABLED = os.getenv('S3_ENABLED', os.getenv('R2_ENABLED', 'False')).lower() == 'true'
-S3_ENDPOINT = os.getenv('S3_ENDPOINT', os.getenv('R2_ENDPOINT', ''))
-S3_ACCESS_KEY_ID = os.getenv('S3_ACCESS_KEY_ID', os.getenv('R2_ACCESS_KEY_ID', ''))
-S3_SECRET_ACCESS_KEY = os.getenv('S3_SECRET_ACCESS_KEY', os.getenv('R2_SECRET_ACCESS_KEY', ''))
-S3_BUCKET_NAME = os.getenv('S3_BUCKET_NAME', os.getenv('R2_BUCKET_NAME', 'pulsoximetrie-files'))
-S3_REGION = os.getenv('S3_REGION', os.getenv('R2_REGION', 'auto'))
+# NOTĂ: Suportă 3 naming conventions:
+#   1. S3_* (generic, prioritate 1)
+#   2. R2_* (Cloudflare R2 legacy, prioritate 2)
+#   3. SCW_* (Scaleway Object Storage, prioritate 3)
+
+# Helper: Detectăm dacă folosim Scaleway
+SCW_ACCESS_KEY = os.getenv('SCW_ACCESS_KEY', '')
+SCW_SECRET_KEY = os.getenv('SCW_SECRET_KEY', '')
+SCW_REGION = os.getenv('SCW_DEFAULT_REGION', os.getenv('SCW_REGION', 'fr-par'))  # Default: Paris
+SCW_BUCKET = os.getenv('SCW_BUCKET_NAME', 'pulsoximetrie')
+
+# Dacă avem variabile SCW, construim endpoint-ul Scaleway automat
+if SCW_ACCESS_KEY and SCW_SECRET_KEY:
+    SCW_ENDPOINT = f"https://s3.{SCW_REGION}.scw.cloud"
+    logger.warning(f"🔍 [SCALEWAY_DETECTED] Auto-constructing endpoint: {SCW_ENDPOINT}")
+else:
+    SCW_ENDPOINT = ''
+
+# Fallback chain: S3_* → R2_* → SCW_*
+S3_ENABLED = os.getenv('S3_ENABLED', os.getenv('R2_ENABLED', 'True' if SCW_ACCESS_KEY else 'False')).lower() == 'true'
+S3_ENDPOINT = os.getenv('S3_ENDPOINT', os.getenv('R2_ENDPOINT', SCW_ENDPOINT))
+S3_ACCESS_KEY_ID = os.getenv('S3_ACCESS_KEY_ID', os.getenv('R2_ACCESS_KEY_ID', SCW_ACCESS_KEY))
+S3_SECRET_ACCESS_KEY = os.getenv('S3_SECRET_ACCESS_KEY', os.getenv('R2_SECRET_ACCESS_KEY', SCW_SECRET_KEY))
+S3_BUCKET_NAME = os.getenv('S3_BUCKET_NAME', os.getenv('R2_BUCKET_NAME', SCW_BUCKET))
+S3_REGION = os.getenv('S3_REGION', os.getenv('R2_REGION', SCW_REGION))
 
 # Fallback pentru stocare locală
 LOCAL_STORAGE_DIR = "patient_data"
