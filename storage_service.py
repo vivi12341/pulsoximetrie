@@ -53,12 +53,15 @@ class CloudflareR2Client:
         self.enabled = R2_ENABLED
         self.bucket_name = R2_BUCKET_NAME
         self.client = None
+        self.init_error = None # [DIAGNOSTIC] Capture exact error
         
         if not self.enabled:
+            self.init_error = "R2_ENABLED env var is False/Missing"
             logger.warning("⚠️ Cloudflare R2 DEZACTIVAT - folosim stocare LOCALĂ")
             return
         
         if not all([R2_ENDPOINT, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY]):
+            self.init_error = "Missing Credentials (ENDPOINT/KEY/SECRET)"
             logger.error("❌ Credențiale R2 incomplete! Setează R2_ENDPOINT, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY")
             self.enabled = False
             return
@@ -80,19 +83,30 @@ class CloudflareR2Client:
             logger.warning(f"   - Endpoint: {R2_ENDPOINT}")
             logger.warning(f"   - Bucket: {self.bucket_name}")
             logger.warning(f"   - Region: {R2_REGION}")
+            self.init_error = None
             
         except ClientError as e:
             error_code = e.response.get('Error', {}).get('Code', 'Unknown')
             if error_code == '404':
-                logger.error(f"❌ Bucket R2 '{self.bucket_name}' nu există! Creează-l în Cloudflare Dashboard.")
+                msg = f"Bucket '{self.bucket_name}' NOT FOUND (404)"
             elif error_code == '403':
-                logger.error(f"❌ Acces refuzat la bucket '{self.bucket_name}'. Verifică permisiunile token-ului R2.")
+                msg = f"Access DENIED to bucket '{self.bucket_name}' (403) - Check Permissions"
             else:
-                logger.error(f"❌ Eroare R2: {e}", exc_info=True)
+                msg = f"R2 ClientError: {e}"
+            
+            logger.error(f"❌ {msg}")
+            self.init_error = msg
             self.enabled = False
             
         except BotoCoreError as e:
-            logger.error(f"❌ Eroare boto3: {e}", exc_info=True)
+            msg = f"BotoCoreError: {e}"
+            logger.error(f"❌ {msg}", exc_info=True)
+            self.init_error = msg
+            self.enabled = False
+        except Exception as e:
+            msg = f"Unexpected Init Error: {e}"
+            logger.error(f"❌ {msg}", exc_info=True)
+            self.init_error = msg
             self.enabled = False
     
     
@@ -110,7 +124,8 @@ class CloudflareR2Client:
             str: URL-ul fișierului uploadat sau None dacă eroare
         """
         if not self.enabled:
-            logger.warning(f"⚠️ R2 dezactivat - fișierul {key} NU va fi uploadat în cloud")
+            reason = self.init_error if self.init_error else "Unknown Reason"
+            logger.warning(f"⚠️ R2 disabled (Reason: {reason}) - file {key} NOT uploaded to cloud")
             return self._save_local_fallback(file_content, key)
         
         try:
