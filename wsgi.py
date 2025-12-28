@@ -198,6 +198,7 @@ def initialize_application():
     logger.warning("✅ Dash Uploader configured")
     
     # Import Callbacks
+    import callbacks_routing  # [NEW] Router callbacks for patient token links
     import admin_callbacks
     import callbacks_medical
     import callbacks  # Original callbacks
