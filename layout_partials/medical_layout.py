@@ -380,6 +380,27 @@ def _get_data_view_tab():
                     html.Div([
                         html.H4("📅 Filtrare Cronologică", style={'color': '#2980b9', 'marginBottom': '15px'}),
                         
+                        # [NEW] MODE SELECTOR - Data procesării vs Data testului
+                        html.Div([
+                            html.Label("📅 Filtrare după:", className="font-bold d-block mb-10", style={'color': '#2c3e50'}),
+                            dcc.RadioItems(
+                                id='date-filter-mode',
+                                options=[
+                                    {'label': ' 📤 Data Procesării (când a fost încărcat)', 'value': 'upload'},
+                                    {'label': ' 🏥 Data Testului (înregistrarea medicală)', 'value': 'recording'}
+                                ],
+                                value='upload',  # Default: upload date
+                                inline=False,
+                                labelStyle={'display': 'block', 'marginBottom': '8px', 'fontSize': '13px', 'color': '#555'},
+                                style={'marginBottom': '20px', 'padding': '15px', 'backgroundColor': '#f8f9fa', 'borderRadius': '8px', 'border': '1px solid #e0e0e0'}
+                            ),
+                            html.Small([
+                                "💡 ",
+                                html.Strong("Sfat: ", style={'color': '#e67e22'}),
+                                "Pentru a găsi upload-uri recente alegeți 'Data Procesării'. Pentru teste medicale vechi alegeți 'Data Testului'."
+                            ], style={'color': '#7f8c8d', 'display': 'block', 'marginTop': '-10px', 'marginBottom': '20px', 'fontSize': '12px'})
+                        ]),
+                        
                         html.Div([
                             html.Label("⚡ Acces Rapid:", className="font-bold d-block mb-10", style={'color': '#555'}),
                             html.Div([

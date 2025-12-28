@@ -1403,13 +1403,14 @@ def admin_run_batch_processing(n_clicks, batch_mode, input_folder, session_id, o
      Input({'type': 'expand-row-btn', 'index': ALL}, 'n_clicks'),
      Input({'type': 'toggle-group-btn', 'index': ALL}, 'n_clicks'),
      Input('active-date-filter', 'data'),
+     Input('date-filter-mode', 'value'),  # [NEW] Filter mode: 'upload' or 'recording'
      Input('date-grouping', 'value')],
     [State('expanded-row-id', 'data'),
      State({'type': 'expand-row-btn', 'index': ALL}, 'id'),
      State({'type': 'toggle-group-btn', 'index': ALL}, 'id'),
      State('collapsed-groups-store', 'data')]
 )
-def load_data_view_with_accordion(n_clicks_refresh, trigger, expand_clicks, toggle_group_clicks, date_filter, grouping, expanded_id, expand_btn_ids, toggle_group_ids, collapsed_groups):
+def load_data_view_with_accordion(n_clicks_refresh, trigger, expand_clicks, toggle_group_clicks, date_filter, filter_mode, grouping, expanded_id, expand_btn_ids, toggle_group_ids, collapsed_groups):
     """
     Încarcă vizualizarea datelor cu funcționalitate accordion (expandare/colapsare).
     """
@@ -1527,22 +1528,38 @@ def load_data_view_with_accordion(n_clicks_refresh, trigger, expand_clicks, togg
             logger.info(f"🔍 [LOG 22] Filter end_date: {end_date}")
             logger.info(f"🔍 [LOG 23] Links BEFORE filtering: {len(all_links)}")
             
-            # Filtrăm link-urile după dată UPLOAD (created_at), NU după dată medicală
+            # [DUAL FILTER MODE] Filtrăm după modul selectat: upload sau medical date
+            logger.warning(f"🔧 [FILTER_MODE] Active mode: {filter_mode}")
+            logger.warning(f"🔧 [FILTER_MODE] Filtering by: {'Upload Date (created_at)' if filter_mode == 'upload' else 'Medical Test Date (recording_date)'}")
+            
             filtered_links = []
             for idx, link in enumerate(all_links):
-                # [CRITICAL FIX] Folosim created_at (când a fost uploadat) în loc de recording_date
-                if link.get('created_at'):
-                    try:
-                        # Parse created_at (ISO format with time)
-                        upload_date = datetime.fromisoformat(link['created_at']).date()
-                        is_in_range = start_date <= upload_date <= end_date
-                        logger.info(f"   [LOG 24.{idx}] Token {link['token'][:8]}... | upload_date: {upload_date} | in_range: {is_in_range}")
-                        if is_in_range:
-                            filtered_links.append(link)
-                    except Exception as parse_err:
-                        logger.warning(f"   ⚠️ [LOG 25.{idx}] Token {link['token'][:8]}... | Date parse FAILED: {parse_err}")
+                if filter_mode == 'upload':
+                    # MODE A: Filter by upload date (created_at)
+                    if link.get('created_at'):
+                        try:
+                            upload_date = datetime.fromisoformat(link['created_at']).date()
+                            is_in_range = start_date <= upload_date <= end_date
+                            logger.info(f"   [LOG 24.{idx}] Token {link['token'][:8]}... | upload_date: {upload_date} | in_range: {is_in_range}")
+                            if is_in_range:
+                                filtered_links.append(link)
+                        except Exception as parse_err:
+                            logger.warning(f"   ⚠️ [LOG 25.{idx}] Token {link['token'][:8]}... | Upload date parse FAILED: {parse_err}")
+                    else:
+                        logger.warning(f"   ⚠️ [LOG 26.{idx}] Token {link['token'][:8]}... | NO created_at field!")
                 else:
-                    logger.warning(f"   ⚠️ [LOG 26.{idx}] Token {link['token'][:8]}... | NO created_at field!")
+                    # MODE B: Filter by medical recording date (recording_date)
+                    if link.get('recording_date'):
+                        try:
+                            rec_date = datetime.strptime(link['recording_date'], '%Y-%m-%d').date()
+                            is_in_range = start_date <= rec_date <= end_date
+                            logger.info(f"   [LOG 24.{idx}] Token {link['token'][:8]}... | recording_date: {rec_date} | in_range: {is_in_range}")
+                            if is_in_range:
+                                filtered_links.append(link)
+                        except Exception as parse_err:
+                            logger.warning(f"   ⚠️ [LOG 25.{idx}] Token {link['token'][:8]}... | Recording date parse FAILED: {parse_err}")
+                    else:
+                        logger.warning(f"   ⚠️ [LOG 26.{idx}] Token {link['token'][:8]}... | NO recording_date field!")
             
             logger.info(f"✅ [LOG 27] Links AFTER filtering: {len(filtered_links)} (removed {len(all_links) - len(filtered_links)})")
             all_links = filtered_links
