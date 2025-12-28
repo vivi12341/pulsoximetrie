@@ -45,43 +45,20 @@ def get_layout():
     user_agent = request.headers.get('User-Agent', 'N/A')
     logger.info(f"📍 [LOG 5] User-Agent: {user_agent[:100]}...")
     
-    # 1. Verifică dacă există token în URL (PACIENT)
-    token = request.args.get('token')
-    logger.critical(f"🔑 [CRITICAL] Token extracted: {token if not token else token[:8] + '...'}")
-    logger.info(f"🔑 [LOG 6] Token extracted from URL: {'YES - ' + token[:8] + '...' if token else 'NO (None)'}")
+    # [CRITICAL FIX] Token extraction from request.args doesn't work for Dash internal requests (/_dash-layout)
+    # SOLUTION: Create a global dcc.Store that captures token client-side from window.location
+    # The store will be populated via clientside callback
     
-    if token:
-        logger.info(f"🔍 [LOG 7] TOKEN DETECTED - Starting validation...")
-        # Validare token pacient
-        is_valid = patient_links.validate_token(token)
-        logger.info(f"✅ [LOG 8] Token validation result: {is_valid}")
-        
-        # Check if user is authenticated (ADMIN viewing patient data)
-        is_auth = current_user.is_authenticated
-        logger.info(f"👤 [LOG 9] User authenticated status: {is_auth}")
-        
-        if is_auth:
-            logger.info(f"👨‍⚕️ [LOG 10] ADMIN with token → Returning Patient Layout for Verification")
-            logger.info(f"👨‍⚕️ [LOG 11] Admin is viewing specific patient data: {token[:8]}...")
-            # Pentru "Test in browser", adminul trebuie să vadă ce vede pacientul
-            return get_patient_layout()
-        else:
-            logger.info(f"👤 [LOG 12] PATIENT (unauthenticated) with token")
-            if is_valid:
-                logger.info(f"✅ [TRACE-DATA] [LOG 13] Valid token → Returning Patient Layout")
-                return get_patient_layout()
-            else:
-                logger.warning(f"❌ [LOG 14] Invalid/Inactive token → Returning Error Layout")
-                return get_error_layout()
+    # Return a unified layout with token-store and conditional rendering
     
-    # 2. Fără token → Verifică autentificare (MEDIC)
-    logger.info(f"[LOG 15] NO TOKEN in URL - checking authentication...")
-    if current_user.is_authenticated:
-        logger.info(f"👨‍⚕️ [LOG 16] Authenticated user (no token) → Medical Layout")
-        return get_medical_layout()
-    else:
-        logger.info(f"🔒 [LOG 17] Unauthenticated user (no token) → Login Prompt")
-        return create_login_prompt()
+    return html.Div([
+        # Global token store - populated client-side
+        dcc.Store(id='global-token-store', storage_type='memory'),
+        dcc.Location(id='url-location', refresh=False),
+        
+        # Conditional content - will be populated by callback based on token presence
+        html.Div(id='app-content-router')
+    ])
 
 # Backward compatibility
 layout = get_layout
