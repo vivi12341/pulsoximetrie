@@ -1531,23 +1531,26 @@ def load_data_view_with_accordion(n_clicks_refresh, trigger, expand_clicks, togg
             
             # [DUAL FILTER MODE] Filtrăm după modul selectat: upload sau medical date
             logger.warning(f"🔧 [FILTER_MODE] Active mode: {filter_mode}")
-            logger.warning(f"🔧 [FILTER_MODE] Filtering by: {'Upload Date (created_at)' if filter_mode == 'upload' else 'Medical Test Date (recording_date)'}")
+            logger.warning(f"🔧 [FILTER_MODE] Filtering by: {'Last Processing Date (last_processed_at)' if filter_mode == 'upload' else 'Medical Test Date (recording_date)'}")
             
             filtered_links = []
             for idx, link in enumerate(all_links):
                 if filter_mode == 'upload':
-                    # MODE A: Filter by upload date (created_at)
-                    if link.get('created_at'):
+                    # MODE A: Filter by LAST PROCESSING date (last_processed_at with fallback to created_at)
+                    # [FIX v5.0] Use last_processed_at to show reprocessed files
+                    processing_date_str = link.get('last_processed_at') or link.get('created_at')
+                    if processing_date_str:
                         try:
-                            upload_date = datetime.fromisoformat(link['created_at']).date()
-                            is_in_range = start_date <= upload_date <= end_date
-                            logger.info(f"   [LOG 24.{idx}] Token {link['token'][:8]}... | upload_date: {upload_date} | in_range: {is_in_range}")
+                            processing_date = datetime.fromisoformat(processing_date_str).date()
+                            is_in_range = start_date <= processing_date <= end_date
+                            field_used = 'last_processed_at' if link.get('last_processed_at') else 'created_at (fallback)'
+                            logger.info(f"   [LOG 24.{idx}] Token {link['token'][:8]}... | {field_used}: {processing_date} | in_range: {is_in_range}")
                             if is_in_range:
                                 filtered_links.append(link)
                         except Exception as parse_err:
-                            logger.warning(f"   ⚠️ [LOG 25.{idx}] Token {link['token'][:8]}... | Upload date parse FAILED: {parse_err}")
+                            logger.warning(f"   ⚠️ [LOG 25.{idx}] Token {link['token'][:8]}... | Processing date parse FAILED: {parse_err}")
                     else:
-                        logger.warning(f"   ⚠️ [LOG 26.{idx}] Token {link['token'][:8]}... | NO created_at field!")
+                        logger.warning(f"   ⚠️ [LOG 26.{idx}] Token {link['token'][:8]}... | NO last_processed_at OR created_at field!")
                 else:
                     # MODE B: Filter by medical recording date (recording_date)
                     if link.get('recording_date'):
