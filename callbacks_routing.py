@@ -13,10 +13,9 @@ from dash import Input, Output, clientside_callback, callback
 from flask_login import current_user
 from logger_setup import logger
 
-# Import layouts
+# Import layouts - [HOTFIX] Corrected import paths
 from layout_partials.patient_layout import get_patient_layout, get_error_layout
-from layout_partials.medical_layout import get_medical_layout
-from layout_partials.login_layout import create_login_prompt
+from layout_partials.medical_layout import get_medical_layout, create_login_prompt
 
 # Import validation
 from patient_links import validate_token
