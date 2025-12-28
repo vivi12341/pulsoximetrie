@@ -1473,6 +1473,7 @@ def load_data_view_with_accordion(n_clicks_refresh, trigger, expand_clicks, togg
         
         # [LOG 1-5] Parametri callback
         logger.info(f"📋 [LOG 1] date_filter param: {date_filter}")
+        logger.info(f"📋 [LOG 1.5] filter_mode param: {filter_mode}")  # [NEW] Log filter mode
         logger.info(f"📋 [LOG 2] grouping param: {grouping}")
         logger.info(f"📋 [LOG 3] n_clicks_refresh: {n_clicks_refresh}")
         logger.info(f"📋 [LOG 4] trigger data: {trigger}")
