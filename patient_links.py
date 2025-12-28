@@ -270,10 +270,22 @@ def get_patient_link(token: str, track_view: bool = True) -> Optional[Dict]:
     Returns:
         Dict: Metadata pacient sau None dacă nu există
     """
+    logger.critical(f"📥 [GET_PATIENT_LINK] *** START for token {token[:8]}... ***")
+    logger.critical(f"📥 [GET_PATIENT_LINK] track_view={track_view}")
+    
+    logger.critical(f"📥 [GET_PATIENT_LINK] Step 1: Loading all patient links from Scaleway...")
     links = load_patient_links()
+    logger.critical(f"📥 [GET_PATIENT_LINK] Step 2: Loaded {len(links)} total links")
+    logger.critical(f"📥 [GET_PATIENT_LINK] Step 3: Searching for token {token[:8]}... in {len(links)} links")
+    
     patient_data = links.get(token)
     
     if patient_data:
+        logger.critical(f"✅ [GET_PATIENT_LINK] Step 4: Token FOUND!")
+        logger.critical(f"📊 [GET_PATIENT_LINK] Device: {patient_data.get('device_name', 'N/A')}")
+        logger.critical(f"📊 [GET_PATIENT_LINK] is_active: {patient_data.get('is_active', 'N/A')}")
+        logger.critical(f"📊 [GET_PATIENT_LINK] created_at: {patient_data.get('created_at', 'N/A')}")
+        
         # Actualizăm last_accessed (backward compatibility)
         patient_data['last_accessed'] = datetime.now().isoformat()
         links[token] = patient_data
@@ -284,7 +296,8 @@ def get_patient_link(token: str, track_view: bool = True) -> Optional[Dict]:
         if track_view:
             track_link_view(token)
     else:
-        logger.warning(f"Link inexistent: {token}")
+        logger.critical(f"❌ [GET_PATIENT_LINK] Step 4: Token {token[:8]}... NOT FOUND!")
+        logger.critical(f"❌ [GET_PATIENT_LINK] Available tokens in DB: {[t[:8] + '...' for t in list(links.keys())[:10]]}")
     
     return patient_data
 
@@ -649,24 +662,43 @@ def validate_token(token: str) -> bool:
     Returns:
         bool: True dacă token-ul este valid
     """
-    logger.warning(f"🔐 [LINK_TRACE_VALIDATE] START Validate Token: {token[:8] if token else 'None'}")
+    logger.critical("=" * 100)
+    logger.critical(f"🔐 [TOKEN_VALIDATION] *** START VALIDATION ***")
+    logger.critical(f"🔐 [TOKEN_VALIDATION] Token to validate: {token[:8] if token else 'None'}...")
+    logger.critical("=" * 100)
     
+    if not token:
+        logger.critical(f"❌ [TOKEN_VALIDATION] Token is None or empty - INVALID")
+        return False
+    
+    logger.critical(f"🔐 [TOKEN_VALIDATION] Step 1: Calling get_patient_link()...")
     patient_data = get_patient_link(token, track_view=False)
+    logger.critical(f"🔐 [TOKEN_VALIDATION] Step 2: get_patient_link() returned: {type(patient_data)}")
     
     if not patient_data:
-        logger.warning(f"❌ [LINK_TRACE_VALIDATE] Token NOT FOUND in database")
+        logger.critical(f"❌ [TOKEN_VALIDATION] Token {token[:8]}... NOT FOUND in database - INVALID")
+        logger.critical(f"❌ [TOKEN_VALIDATION] get_patient_link() returned: {patient_data}")
         return False
     
-    logger.info(f"✅ [TOKEN VALIDATION] Token found | device: {patient_data.get('device_name', 'N/A')[:30]}...")
+    logger.critical(f"✅ [TOKEN_VALIDATION] Step 3: Token FOUND in database!")
+    logger.critical(f"📊 [TOKEN_VALIDATION] Data keys: {list(patient_data.keys())}")
+    
+    device_name = patient_data.get('device_name', 'N/A')
+    logger.critical(f"📊 [TOKEN_VALIDATION] Device: {device_name[:30]}...")
+    logger.critical(f"📊 [TOKEN_VALIDATION] Recording date: {patient_data.get('recording_date', 'N/A')}")
+    logger.critical(f"📊 [TOKEN_VALIDATION] Created at: {patient_data.get('created_at', 'N/A')}")
     
     is_active = patient_data.get('is_active', True)
-    logger.info(f"🔍 [TOKEN VALIDATION] is_active status: {is_active}")
+    logger.critical(f"🔍 [TOKEN_VALIDATION] Step 4: Checking is_active status...")
+    logger.critical(f"🔍 [TOKEN_VALIDATION] is_active value: {is_active} (type: {type(is_active)})")
     
     if not is_active:
-        logger.warning(f"⚠️ [TOKEN VALIDATION] Token is INACTIVE (deactivated)")
+        logger.critical(f"⚠️ [TOKEN_VALIDATION] Token is INACTIVE (deactivated) - INVALID")
         return False
     
-    logger.info(f"✅ [TOKEN VALIDATION] Token VALID - returning True")
+    logger.critical(f"✅ [TOKEN_VALIDATION] *** VALIDATION SUCCESS ***")
+    logger.critical(f"✅ [TOKEN_VALIDATION] Token {token[:8]}... is VALID and ACTIVE")
+    logger.critical("=" * 100)
     return True
 
 
