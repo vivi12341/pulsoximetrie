@@ -10,7 +10,7 @@
 # - [Psychologist] Mesaje de eroare empatice.
 # ==============================================================================
 
-from dash import html
+from dash import html, dcc  # [HOTFIX v3] Added dcc for dcc.Store and dcc.Location
 from flask import request
 from flask_login import current_user
 from logger_setup import logger
