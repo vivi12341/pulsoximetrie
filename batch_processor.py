@@ -429,13 +429,33 @@ def run_batch_job(input_folder: str, output_folder: str, window_minutes: int, se
 
                 logger.info(f"Procesare finalizată pentru '{file_name}'. S-au generat {slice_count-1} imagini.")
                 
-                # [NEW v4.0] Generăm automat link persistent pentru acest CSV
+                # =====================================================================
+                # [CRITICAL FIX] Generăm link + SALVĂM ÎNREGISTRAREA în PostgreSQL
+                # =====================================================================
+                # BUG IDENTIFICAT: generate_patient_link() era apelat, DAR add_recording() NU!
+                # REZULTAT: Link-uri existau, dar PostgreSQL avea 0 recordings
+                # =====================================================================
                 try:
+                    # [DIAGNOSTIC LOG 1] Pre-processing summary
+                    logger.critical(f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+                    logger.critical(f"📋 [BATCH_TRACE] Processing device from CSV: {file_name}")
+                    logger.critical(f"   - Device number extracted: #{device_number}")
+                    logger.critical(f"   - Recording start: {record_start_time}")
+                    logger.critical(f"   - Recording end: {record_end_time}")
+                    logger.critical(f"   - Images generated: {slice_count-1}")
+                    logger.critical(f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+                    
                     # Extragem metadata pentru link
                     recording_date = record_start_time.strftime('%Y-%m-%d')
-                    start_time_str = record_start_time.strftime('%H:%M')
-                    end_time_str = record_end_time.strftime('%H:%M')
+                    start_time_str = record_start_time.strftime('%H:%M:%S')
+                    end_time_str = record_end_time.strftime('%H:%M:%S')
                     device_display_name = f"Checkme O2 #{device_number}"
+                    
+                    # [DIAGNOSTIC LOG 2] Pre-link creation
+                    logger.critical(f"🔗 [BATCH_TRACE] STEP 1: Creating patient link...")
+                    logger.critical(f"   - Device name: {device_display_name}")
+                    logger.critical(f"   - Recording date: {recording_date}")
+                    logger.critical(f"   - Time range: {start_time_str} → {end_time_str}")
                     
                     # Generăm link-ul cu metadata despre folderul de output
                     token = generate_patient_link(
@@ -446,8 +466,76 @@ def run_batch_job(input_folder: str, output_folder: str, window_minutes: int, se
                         end_time=end_time_str
                     )
                     
+                    # [DIAGNOSTIC LOG 3] Post-link creation
                     if token:
-                        # Salvăm și calea folderului de output în metadata link-ului
+                        logger.critical(f"✅ [BATCH_TRACE] STEP 1 COMPLETE: Link created successfully")
+                        logger.critical(f"   - Token: {token}")
+                        logger.critical(f"   - Short token: {token[:8]}...")
+                    else:
+                        logger.critical(f"❌ [BATCH_TRACE] STEP 1 FAILED: Link generation returned None")
+                        raise ValueError(f"Failed to generate patient link for {file_name}")
+                    
+                    if token:
+                        # =====================================================================
+                        # [CRITICAL FIX] STEP 2: Adăugăm înregistrarea în PostgreSQL
+                        # =====================================================================
+                        logger.critical(f"💾 [BATCH_TRACE] STEP 2: Adding recording to PostgreSQL...")
+                        logger.critical(f"   - Token: {token[:8]}...")
+                        logger.critical(f"   - CSV filename: {file_name}")
+                        logger.critical(f"   - CSV size: {len(file_content)} bytes ({len(file_content)/1024:.2f} KB)")
+                        
+                        # Calculăm statistici SpO2 pentru această înregistrare
+                        try:
+                            avg_spo2 = float(df['SpO2 (%)'].mean()) if 'SpO2 (%)' in df.columns else None
+                            min_spo2 = int(df['SpO2 (%)'].min()) if 'SpO2 (%)' in df.columns else None
+                            max_spo2 = int(df['SpO2 (%)'].max()) if 'SpO2 (%)' in df.columns else None
+                            
+                            logger.critical(f"   - SpO2 Stats: avg={avg_spo2:.1f}%, min={min_spo2}%, max={max_spo2}%")
+                        except Exception as stats_error:
+                            logger.warning(f"Nu s-au putut calcula statistici SpO2: {stats_error}")
+                            avg_spo2, min_spo2, max_spo2 = None, None, None
+                        
+                        # [CRITICAL FIX] Apelăm add_recording() pentru a salva în PostgreSQL
+                        recording_added = add_recording(
+                            token=token,
+                            csv_filename=file_name,
+                            csv_content=file_content,
+                            recording_date=recording_date,
+                            start_time=start_time_str,
+                            end_time=end_time_str,
+                            avg_spo2=avg_spo2,
+                            min_spo2=min_spo2,
+                            max_spo2=max_spo2
+                        )
+                        
+                        # [DIAGNOSTIC LOG 4] Post-recording addition
+                        if recording_added:
+                            logger.critical(f"✅ [BATCH_TRACE] STEP 2 COMPLETE: Recording added to PostgreSQL")
+                            
+                            # Verificăm IMEDIAT că înregistrarea există în PostgreSQL
+                            from patient_links import get_patient_recordings
+                            verification_recordings = get_patient_recordings(token)
+                            logger.critical(f"🔍 [BATCH_VERIFY] PostgreSQL verification check:")
+                            logger.critical(f"   - Expected recordings: 1")
+                            logger.critical(f"   - Actual recordings in DB: {len(verification_recordings)}")
+                            logger.critical(f"   - MATCH: {len(verification_recordings) >= 1}")
+                            
+                            if len(verification_recordings) == 0:
+                                logger.critical(f"❌ [BATCH_VERIFY] CRITICAL: Recording add_recording() returned True but PostgreSQL has 0 records!")
+                                logger.critical(f"   - This indicates a database commit issue")
+                            else:
+                                logger.critical(f"✅ [BATCH_VERIFY] Recording successfully persisted in PostgreSQL")
+                                if verification_recordings:
+                                    logger.critical(f"   - Recording ID: {verification_recordings[0].get('recording_id', 'N/A')}")
+                                    logger.critical(f"   - Storage type: {verification_recordings[0].get('storage_type', 'N/A')}")
+                        else:
+                            logger.critical(f"❌ [BATCH_TRACE] STEP 2 FAILED: add_recording() returned False")
+                            logger.critical(f"   - Check PostgreSQL connection and constraints")
+                        
+                        # =====================================================================
+                        # [STEP 3] Salvăm metadata link-ului (output folder, etc.)
+                        # =====================================================================
+                        logger.critical(f"📝 [BATCH_TRACE] STEP 3: Updating link metadata...")
                         from patient_links import load_patient_links, save_patient_links
                         links = load_patient_links()
                         if token in links:
@@ -458,6 +546,10 @@ def run_batch_job(input_folder: str, output_folder: str, window_minutes: int, se
                             links[token]['output_folder_path'] = file_output_path
                             links[token]['images_count'] = slice_count - 1
                             links[token]['original_filename'] = file_name
+                            
+                            logger.critical(f"✅ [BATCH_TRACE] STEP 3 COMPLETE: Metadata updated")
+                            logger.critical(f"   - Output folder: {file_output_folder_name}")
+                            logger.critical(f"   - Images count: {slice_count - 1}")
                             
                             # [FIX TEAM] Async Scaleway Upload (Threaded) to prevent 502 Timeout
                             def upload_r2_background(token_val, content_val, filename_val):
@@ -537,11 +629,21 @@ def run_batch_job(input_folder: str, output_folder: str, window_minutes: int, se
                             "end_time": end_time_str,
                             "original_filename": file_name,
                             "output_folder": file_output_folder_name,
-                            "images_count": slice_count - 1
+                            "images_count": slice_count - 1,
+                            "recording_saved_to_db": recording_added
                         })
-                        logger.warning(f"🔗 [BATCH_TRACE_LINK] Link Generated: {token} | Device: {device_display_name}")
-                        logger.warning(f"   - Output Folder: {file_output_folder_name}")
-                        logger.warning(f"   - PDF Asoc: {pdf_processed}")
+                        
+                        # [DIAGNOSTIC LOG 5] Final summary
+                        logger.critical(f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+                        logger.critical(f"✅ [BATCH_SUMMARY] Processing complete for {file_name}")
+                        logger.critical(f"   - Token: {token}")
+                        logger.critical(f"   - Device: {device_display_name}")
+                        logger.critical(f"   - Output folder: {file_output_folder_name}")
+                        logger.critical(f"   - Images generated: {slice_count - 1}")
+                        logger.critical(f"   - Recording in PostgreSQL: {recording_added}")
+                        logger.critical(f"   - PDF associated: {pdf_processed}")
+                        logger.critical(f"   - Link URL: https://pulsoximetrie.cardiohelpteam.ro/?token={token}")
+                        logger.critical(f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
                         
                         # [NEW v6.0] Actualizăm status la "completed" pentru tracking
                         if session_id:

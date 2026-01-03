@@ -173,64 +173,69 @@ def save_patient_links(links: Dict) -> bool:
 
 
 def generate_patient_link(device_name: str, notes: str = "", recording_date: str = None, 
-                         start_time: str = None, end_time: str = None, pdf_path: str = None) -> Optional[str]:
+                         start_time: str = None, end_time: str = None, pdf_path: str = None) -> str:
     """
     Generează un nou link persistent pentru un pacient SAU updatează unul existent.
     
     ⚠️ IMPORTANT: Link-ul NU conține date personale (GDPR compliant)
     
     [UPDATED v5.0] Duplicate Detection:
-    - Dacă există deja token pentru același device_name + recording_date → REFOLOSEȘTE token
-    - Updatează `last_processed_at` la timp curent
-    - Păstrează `created_at` original (prima procesare)
+    - Verifică dacă există deja un link pentru device_name + recording_date + start_time
+    - Dacă DA: returnează token-ul existent (evitare duplicare)
+    - Dacă NU: creează link nou
     
     Args:
-        device_name: Numele aparatului (ex: "Checkme O2 #3539")
-        notes: Notițe medicale opționale (ex: "Apnee severă")
-        recording_date: Data înregistrării (ex: "2025-05-02")
-        start_time: Ora de început (ex: "23:30")
-        end_time: Ora de sfârșit (ex: "06:37")
-        pdf_path: Calea către fișierul PDF asociat (opțional)
+        device_name: Numele aparatului (ex: "Checkme O2 #1442")
+        notes: Notițe medicale opționale
+        recording_date: Data înregistrării (YYYY-MM-DD)
+        start_time: Ora de început (HH:MM sau HH:MM:SS)
+        end_time: Ora de sfârșit (HH:MM sau HH:MM:SS)
+        pdf_path: Calea către PDF asociat (opțional)
         
     Returns:
         str: Token-ul UUID (existent sau nou) sau None dacă eroare
     """
+    # [DIAGNOSTIC LOG 1] Function entry
+    logger.critical(f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+    logger.critical(f"🔗 [LINK_CREATE] START: generate_patient_link()")
+    logger.critical(f"   - Device: {device_name}")
+    logger.critical(f"   - Recording date: {recording_date}")
+    logger.critical(f"   - Time range: {start_time} → {end_time}")
+    logger.critical(f"   - PDF path: {pdf_path if pdf_path else 'None'}")
+    logger.critical(f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
     try:
-        # [NEW v5.0] DUPLICATE DETECTION - Căutăm token existent
+        # [STEP 1] Verificare duplicate (evitare link-uri duplicate pentru același device + dată)
+        logger.critical(f"🔍 [LINK_CREATE] STEP 1: Checking for existing link (duplicate detection)...")
         links = load_patient_links()
-        existing_token = None
         
-        if device_name and recording_date:
-            logger.warning(f"🔍 [DUPLICATE_CHECK] Searching existing token for device='{device_name}' date={recording_date}")
+        existing_token = None
+        if device_name and recording_date and start_time:
             for token, metadata in links.items():
                 if (metadata.get('device_name') == device_name and 
-                    metadata.get('recording_date') == recording_date):
+                    metadata.get('recording_date') == recording_date and
+                    metadata.get('start_time') == start_time):
                     existing_token = token
-                    logger.warning(f"✅ [DUPLICATE_FOUND] Token {token[:8]}... already exists for this device+date")
-                    logger.warning(f"   created_at: {metadata.get('created_at')}")
-                    logger.warning(f"   Updating last_processed_at to NOW")
-                    break
+                    logger.critical(f"✅ [LINK_CREATE] STEP 1 RESULT: Existing link found (duplicate)")
+                    logger.critical(f"   - Existing token: {existing_token}")
+                    logger.critical(f"   - Device: {device_name}")
+                    logger.critical(f"   - Date: {recording_date} {start_time}")
+                    logger.critical(f"   - Action: Returning existing token (no new link created)")
+                    logger.critical(f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+                    return existing_token
         
-        if existing_token:
-            # [REUSE] Updateăm metadata existentă
-            links[existing_token]['last_processed_at'] = datetime.now().isoformat()
-            links[existing_token]['notes'] = notes  # Update notes
-            links[existing_token]['start_time'] = start_time  # Update times
-            links[existing_token]['end_time'] = end_time
-            if pdf_path:
-                links[existing_token]['pdf_path'] = pdf_path  # Update PDF if provided
-            
-            if save_patient_links(links):
-                logger.info(f"✅ [DUPLICATE_REUSE] Token {existing_token[:8]}... updated (last_processed_at)")
-                logger.info(f"   [TRACE-DATA] Reused for device '{device_name}' | Date: {recording_date}")
-                return existing_token
-            else:
-                logger.error("❌ [DUPLICATE_REUSE] Failed to save updated metadata")
-                return None
+        if not existing_token:
+            logger.critical(f"✅ [LINK_CREATE] STEP 1 RESULT: No existing link found")
+            logger.critical(f"   - Action: Creating new link")
         
-        # [NEW] Generăm UUID v4 (random, criptografic sigur) - DOAR dacă nu există
+        # [STEP 2] Generare token nou
+        # [DIAGNOSTIC LOG 2] Token generation
         token = str(uuid.uuid4())
-        logger.warning(f"🆕 [NEW_TOKEN] Generating NEW token {token[:8]}... for device '{device_name}'")
+        logger.critical(f"🆕 [LINK_CREATE] STEP 2: New token generated")
+        logger.critical(f"   - Token: {token}")
+        logger.critical(f"   - Short token: {token[:8]}...")
+        
+        # [STEP 3] Creare metadata link
+        logger.critical(f"📋 [LINK_CREATE] STEP 3: Creating link metadata...")
         
         # Creăm folderul pentru acest pacient
         patient_folder = os.path.join(PATIENT_DATA_DIR, token)
@@ -259,17 +264,31 @@ def generate_patient_link(device_name: str, notes: str = "", recording_date: str
             "pdf_path": pdf_path               # Cale către PDF asociat (opțional)
         }
         
-        if save_patient_links(links):
-            # [TRACE-DATA] [LOG 08] Link generated
-            logger.info(f"✅ [TRACE-DATA] [LOG 08] Link nou generat pentru aparat '{device_name}': {token}")
-            logger.info(f"   [TRACE-DATA] PDF Path: {pdf_path}")
-            logger.info(f"   [TRACE-DATA] Recording Date: {recording_date}")
-            logger.info(f"   [TRACE-DATA] created_at: {current_time}")
-            logger.info(f"   [TRACE-DATA] last_processed_at: {current_time}")
-            return token
+        # [STEP 4] Salvare în Scaleway (persistent)
+        logger.critical(f"💾 [LINK_CREATE] STEP 4: Saving to Scaleway (persistent storage)...")
+        logger.critical(f"   - Links count: {len(links)}")
+        logger.critical(f"   - New token added: {token[:8]}...")
+        
+        save_success = save_patient_links(links)
+        
+        # [DIAGNOSTIC LOG 3] Save result
+        if save_success:
+            logger.critical(f"✅ [LINK_CREATE] STEP 4 COMPLETE: Link saved to Scaleway successfully")
+            logger.critical(f"   - Token: {token}")
+            logger.critical(f"   - Device: {device_name}")
+            logger.critical(f"   - Scaleway persistence: CONFIRMED")
         else:
-            logger.error("❌ [TRACE-DATA] Eroare la salvarea link-ului nou.")
-            return None
+            logger.critical(f"❌ [LINK_CREATE] STEP 4 FAILED: Scaleway save returned False")
+            logger.critical(f"   - Token: {token}")
+            logger.critical(f"   - WARNING: Link may not persist across Railway restarts!")
+        
+        logger.critical(f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+        logger.info(f"✅ [TRACE-DATA] [LOG 08] Link nou generat pentru aparat '{device_name}': {token}")
+        logger.info(f"   [TRACE-DATA] PDF Path: {pdf_path}")
+        logger.info(f"   [TRACE-DATA] Recording Date: {recording_date}")
+        logger.info(f"   [TRACE-DATA] created_at: {current_time}")
+        logger.info(f"   [TRACE-DATA] last_processed_at: {current_time}")
+        return token
             
     except Exception as e:
         logger.error(f"Eroare la generarea link-ului: {e}", exc_info=True)
