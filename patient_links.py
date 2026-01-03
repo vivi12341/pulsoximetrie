@@ -413,6 +413,9 @@ def get_patient_recordings(token: str) -> List[Dict]:
     
     PostgreSQL ensures recordings PERSIST across Railway restarts ✅
     
+    AUTO-MIGRATION: If PostgreSQL has 0 recordings but patient_links.json has data,
+    automatically migrates old recordings from JSON to PostgreSQL.
+    
     Args:
         token: UUID-ul pacientului
         
@@ -431,6 +434,38 @@ def get_patient_recordings(token: str) -> List[Dict]:
         ).all()
         
         logger.warning(f"✅ [GET_RECORDINGS_PG] Found {len(recordings)} recordings in PostgreSQL for {token[:8]}")
+        
+        # === AUTO-MIGRATION: Check if we need to import from old JSON ===
+        if len(recordings) == 0:
+            logger.warning(f"🔍 [GET_RECORDINGS_PG] PostgreSQL empty - checking for old JSON recordings...")
+            
+            # Load patient_links to see if there are old recordings
+            links = load_patient_links()
+            
+            if token in links and 'recordings' in links[token]:
+                old_recordings = links[token]['recordings']
+                
+                if len(old_recordings) > 0:
+                    logger.warning(f"📦 [MIGRATION] Found {len(old_recordings)} OLD recordings in patient_links.json")
+                    logger.warning(f"📦 [MIGRATION] Auto-migrating to PostgreSQL...")
+                    
+                    # Migrate each recording to PostgreSQL
+                    migrated_count = 0
+                    for rec_dict in old_recordings:
+                        try:
+                            PatientRecording.create_from_dict(token, rec_dict)
+                            migrated_count += 1
+                        except Exception as e:
+                            logger.error(f"❌ [MIGRATION] Failed to migrate recording {rec_dict.get('id', 'unknown')}: {e}")
+                    
+                    logger.warning(f"✅ [MIGRATION] Successfully migrated {migrated_count}/{len(old_recordings)} recordings to PostgreSQL")
+                    
+                    # Re-query to get migrated recordings
+                    recordings = PatientRecording.query.filter_by(token=token).order_by(
+                        PatientRecording.recording_date.desc()
+                    ).all()
+                    
+                    logger.warning(f"✅ [MIGRATION] After migration: {len(recordings)} recordings now in PostgreSQL")
         
         # Convert to dict format (backward compatible)
         recordings_list = [rec.to_dict() for rec in recordings]
