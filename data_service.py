@@ -75,11 +75,18 @@ def get_patient_dataframe(token: str) -> Tuple[Optional[pd.DataFrame], str, str]
         
         # STRATEGIA A: Cloudflare R2
         if storage_type == 'r2' and recording.get('r2_url'):
-            # [DIAGNOSTIC LOG 7] Tentativă R2
-            # [DIAGNOSTIC LOG 7] Tentativă R2
-            logger.warning("☁️ [DS_TRACE_STRATEGY] STRATEGY A: Attempting Scaleway Download...")
+            # [ENHANCED SCALEWAY DIAGNOSTICS v2]
+            logger.critical("☁️ [DS_TRACE_STRATEGY] === STRATEGY A: SCALEWAY R2 DOWNLOAD ===")
+            logger.critical(f"☁️ [DS_R2] R2 URL: {recording.get('r2_url')}")
+            logger.critical(f"☁️ [DS_R2] CSV Path Info: {csv_path_info}")
+            
             try:
-                from storage_service import download_patient_file
+                import time
+                from storage_service import download_patient_file, r2_client
+                
+                logger.critical(f"☁️ [DS_R2] R2 Client Status:")
+                logger.critical(f"   - Enabled: {r2_client.enabled}")
+                logger.critical(f"   - Bucket: {getattr(r2_client, 'bucket_name', 'N/A')}")
                 
                 # Extragem filename din path
                 if 'csvs/' in csv_path_info:
@@ -87,46 +94,71 @@ def get_patient_dataframe(token: str) -> Tuple[Optional[pd.DataFrame], str, str]
                 else:
                     r2_filename = recording.get('original_filename', 'unknown.csv')
                 
-                # [DIAGNOSTIC LOG 8] Parametri download R2
-                logger.warning(f"📥 [DS_TRACE_R2] Triggering download_patient_file: bucket='csvs', file='{r2_filename}'")
+                logger.critical(f"☁️ [DS_R2] Download Parameters:")
+                logger.critical(f"   - Token: {token[:8]}...")
+                logger.critical(f"   - Folder: csvs")
+                logger.critical(f"   - Filename: {r2_filename}")
                 
+                # Timing measurement
+                start_time = time.time()
                 csv_content = download_patient_file(token, 'csvs', r2_filename)
+                elapsed = time.time() - start_time
                 
                 if csv_content:
-                    # [DIAGNOSTIC LOG 9] Scaleway Succes
-                    logger.info(f"✅ [DATA_SERVICE] Download Scaleway reușit: {len(csv_content)} bytes")
+                    logger.critical(f"✅ [DS_R2] Download SUCCESS!")
+                    logger.critical(f"   - Size: {len(csv_content)} bytes ({len(csv_content)/1024:.2f} KB)")
+                    logger.critical(f"   - Time: {elapsed:.3f}s")
+                    logger.critical(f"   - Speed: {(len(csv_content)/1024)/elapsed:.2f} KB/s")
                 else:
-                    # [DIAGNOSTIC LOG 10] Scaleway Fail Empty
-                    logger.warning("⚠️ [DATA_SERVICE] Download Scaleway a returnat empty content. Trecem la Fallback.")
+                    logger.critical(f"❌ [DS_R2] Download returned EMPTY content!")
+                    logger.critical(f"   - Time elapsed: {elapsed:.3f}s")
+                    logger.critical(f"   - Fallback to LOCAL storage...")
                     storage_type = 'local' # Force fallback
-            except ImportError:
-                logger.warning("⚠️ [DATA_SERVICE] storage_service module lipsă. Trecem la fallback Local.")
+            except ImportError as imp_err:
+                logger.critical(f"⚠️ [DS_R2] ImportError: {imp_err}")
+                logger.critical(f"⚠️ [DS_R2] storage_service module unavailable → LOCAL fallback")
                 storage_type = 'local'
             except Exception as e:
-                logger.error(f"❌ [DATA_SERVICE] Eroare R2: {e}. Trecem la fallback Local.")
+                logger.critical(f"❌ [DS_R2] Exception during download: {e}", exc_info=True)
+                logger.critical(f"❌ [DS_R2] Fallback to LOCAL storage...")
                 storage_type = 'local'
 
         # STRATEGIA B: Local Storage (sau Fallback din R2)
         if storage_type == 'local' and not csv_content:
-            # [DIAGNOSTIC LOG 11] Tentativă Locală
-            # [DIAGNOSTIC LOG 11] Tentativă Locală
-            logger.warning("💾 [DS_TRACE_STRATEGY] STRATEGY B: Attempting Local Read...")
-            logger.warning(f"   - Target Path: '{csv_path_info}'")
+            logger.critical("💾 [DS_TRACE_STRATEGY] === STRATEGY B: LOCAL FILE SYSTEM ===")
+            logger.critical(f"💾 [DS_LOCAL] Target Path: '{csv_path_info}'")
+            logger.critical(f"💾 [DS_LOCAL] Current Working Dir: {os.getcwd()}")
+            
+            # Path validation
+            if csv_path_info:
+                logger.critical(f"💾 [DS_LOCAL] Path Analysis:")
+                logger.critical(f"   - Is Absolute: {os.path.isabs(csv_path_info)}")
+                logger.critical(f"   - Exists: {os.path.exists(csv_path_info)}")
+                
+                if os.path.exists(csv_path_info):
+                    logger.critical(f"   - Is File: {os.path.isfile(csv_path_info)}")
+                    logger.critical(f"   - Is Dir: {os.path.isdir(csv_path_info)}")
+                    logger.critical(f"   - Readable: {os.access(csv_path_info, os.R_OK)}")
+                    
+                    try:
+                        file_size = os.path.getsize(csv_path_info)
+                        logger.critical(f"   - File Size: {file_size} bytes ({file_size/1024:.2f} KB)")
+                    except Exception as size_err:
+                        logger.critical(f"   - File Size Error: {size_err}")
+                else:
+                    logger.critical(f"   - ❌ FILE NOT FOUND!")
+                    logger.critical(f"   - Parent Dir: {os.path.dirname(csv_path_info)}")
+                    logger.critical(f"   - Parent Exists: {os.path.exists(os.path.dirname(csv_path_info))}")
             
             if csv_path_info and os.path.exists(csv_path_info):
                 try:
                     with open(csv_path_info, 'rb') as f:
                         csv_content = f.read()
-                    # [DIAGNOSTIC LOG 12] Local Succes
-                    logger.info(f"✅ [DATA_SERVICE] Citire Locală reușită: {len(csv_content)} bytes")
+                    logger.critical(f"✅ [DS_LOCAL] Read SUCCESS: {len(csv_content)} bytes")
                 except Exception as e:
-                    # [DIAGNOSTIC LOG 13] Local Error
-                    logger.error(f"❌ [DATA_SERVICE] Eroare citire locală: {e}")
+                    logger.critical(f"❌ [DS_LOCAL] Read EXCEPTION: {e}", exc_info=True)
             else:
-                 # [DIAGNOSTIC LOG 14] Local Missing
-                 logger.warning(f"⚠️ [DATA_SERVICE] Fișierul local NU EXISTĂ la calea: {csv_path_info}")
-                 # Verifichăm permisiuni sau cwd
-                 logger.debug(f"   - CWD curent: {os.getcwd()}")
+                logger.critical(f"❌ [DS_LOCAL] Cannot read: path invalid or missing")
 
         # STRATEGIA C: Legacy Folder Structure (Ultimul resort)
         if not csv_content:

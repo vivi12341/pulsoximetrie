@@ -475,10 +475,21 @@ def load_patient_data_from_token(n_intervals):
     Trigger: dcc.Interval(id='force-routing-trigger') - se declanșează o singură dată la încărcarea paginii
     """
     from flask import request
-    token = request.args.get('token')
+    from datetime import datetime
     
-    # [TRACE-DATA] [LOG 18] Pentru debugging patient view
-    logger.warning(f"🔄 [UI_TRACE_LOAD] Callback Triggered | Token: {token[:8] if token else 'NONE'} | Intervals: {n_intervals}")
+    # [ENHANCED DIAGNOSTIC v2] Full request context logging
+    logger.critical("="*100)
+    logger.critical(f"🔍 [PATIENT_LOAD] *** CALLBACK START ***")
+    logger.critical(f"🔍 [PATIENT_LOAD] Timestamp: {datetime.now().isoformat()}")
+    logger.critical(f"🔍 [PATIENT_LOAD] Request URL: {request.url}")
+    logger.critical(f"🔍 [PATIENT_LOAD] Request Path: {request.path}")
+    logger.critical(f"🔍 [PATIENT_LOAD] Request Args: {dict(request.args)}")
+    logger.critical(f"🔍 [PATIENT_LOAD] Request Method: {request.method}")
+    
+    token = request.args.get('token')
+    logger.critical(f"🔍 [PATIENT_LOAD] Extracted Token: {token[:8] if token else 'NONE'}...")
+    logger.critical(f"🔍 [PATIENT_LOAD] N_intervals: {n_intervals}")
+    logger.critical("="*100)
     
     if not token:
         logger.warning("⚠️ [UI_TRACE_LOAD] MISSING TOKEN in URL. Returning no_update.")
@@ -515,42 +526,165 @@ def load_patient_data_from_token(n_intervals):
         # Folosim logica centralizată din data_service.py
         df, csv_filename, status_msg = data_service.get_patient_dataframe(token)
         
+        # [ENHANCED ERROR HANDLING v2] Detailed data service result checking
         if df is not None:
-             # [TRACE-DATA] [LOG 24] DataService returnat DF ok
-             logger.warning(f"✅ [UI_TRACE_LOAD] DataService SUCCESS | Rows: {len(df)} | Start Graph Generation")
+            logger.critical(f"✅ [PATIENT_LOAD] DataService SUCCESS")  
+            logger.critical(f"✅ [PATIENT_LOAD] DataFrame shape: {df.shape}")
+            logger.critical(f"✅ [PATIENT_LOAD] DataFrame columns: {list(df.columns)}")
+            logger.critical(f"✅ [PATIENT_LOAD] First timestamp: {df.index[0] if len(df) > 0 else 'N/A'}")
+            logger.critical(f"✅ [PATIENT_LOAD] Last timestamp: {df.index[-1] if len(df) > 0 else 'N/A'}")
         else:
-             # [TRACE-DATA] [LOG 25] DataService fail
-             logger.error(f"❌ [UI_TRACE_LOAD] DataService FAILED | Msg: {status_msg}")
+            logger.critical(f"❌ [PATIENT_LOAD] DataService FAILED")
+            logger.critical(f"❌ [PATIENT_LOAD] Status message: {status_msg}")
+            logger.critical(f"❌ [PATIENT_LOAD] Returning user-friendly error UI")
+            
+            # Return empathetic error message with actionable guidance
+            error_content = html.Div([
+                html.Div([
+                    html.H2("📭 Date Indisponibile", style={
+                        'color': '#e67e22', 
+                        'textAlign': 'center',
+                        'marginBottom': '20px',
+                        'fontSize': '32px'
+                    }),
+                    html.P([
+                        "Nu s-au putut încărca datele pentru acest link. ",
+                        html.Br(),
+                        html.Br(),
+                        "Acest lucru poate însemna că fișierele nu au fost încă procesate complet ",
+                        "sau că există o problemă temporară cu sistemul de stocare."
+                    ], style={
+                        'textAlign': 'center', 
+                        'color': '#7f8c8d', 
+                        'marginBottom': '30px',
+                        'fontSize': '16px',
+                        'lineHeight': '1.8'
+                    }),
+                    html.Div([
+                        html.Strong("📋 Detalii tehnice: ", style={'color': '#95a5a6'}),
+                        html.Br(),
+                        html.Code(status_msg, style={
+                            'backgroundColor': '#ecf0f1', 
+                            'padding': '10px',
+                            'borderRadius': '5px',
+                            'display': 'inline-block',
+                            'marginTop': '10px',
+                            'fontSize': '13px',
+                            'color': '#555'
+                        })
+                    ], style={
+                        'textAlign': 'center', 
+                        'fontSize': '14px', 
+                        'color': '#95a5a6',
+                        'marginBottom': '30px'
+                    }),
+                    html.P([
+                        "🩺 Vă rugăm să contactați medicul dumneavoastră pentru un link actualizat ",
+                        "sau pentru mai multe informații."
+                    ], style={
+                        'textAlign': 'center', 
+                        'marginTop': '40px', 
+                        'fontStyle': 'italic',
+                        'color': '#3498db',
+                        'fontSize': '15px'
+                    })
+                ], style={
+                    'maxWidth': '700px',
+                    'margin': '80px auto',
+                    'padding': '50px',
+                    'backgroundColor': 'white',
+                    'borderRadius': '15px',
+                    'boxShadow': '0 4px 20px rgba(0,0,0,0.1)',
+                    'border': '3px solid #e67e22'
+                })
+            ], style={'backgroundColor': '#f5f7fa', 'minHeight': '80vh', 'padding': '20px'})
+            
+            # Return empty figure with annotation
+            empty_fig = go.Figure()
+            empty_fig.add_annotation(
+                text="Graficul nu este disponibil",
+                xref="paper", yref="paper",
+                x=0.5, y=0.5, 
+                showarrow=False,
+                font=dict(size=18, color="#95a5a6")
+            )
+            empty_fig.update_layout(
+                xaxis=dict(showgrid=False, showticklabels=False, zeroline=False),
+                yaxis=dict(showgrid=False, showticklabels=False, zeroline=False),
+                plot_bgcolor='white',
+                height=400
+            )
+            
+            return error_content, empty_fig
         
-        # Generăm figura
+        # Generăm figura cu error boundaries defensive
         if df is not None and not df.empty:
             try:
-                # [DIAGNOSTIC LOG 26] Start create_plot
-                logger.info(f"📈 [PATIENT_VIEW] Apel plot_generator.create_plot...")
+                logger.critical(f"📈 [PATIENT_LOAD] START plot generation")
+                logger.critical(f"📈 [PATIENT_LOAD] DataFrame ready: rows={len(df)}, empty={df.empty}")
+                logger.critical(f"📈 [PATIENT_LOAD] Calling create_plot() with filename: {csv_filename}")
+                
                 fig = create_plot(df, file_name=csv_filename)
                 
-                # [DIAGNOSTIC LOG 27] Verificare obiect figura
-                if fig:
-                    logger.info("✅ [PATIENT_VIEW] Figura creată cu succes (Not None).")
-                    # Check if data exists in fig
-                    if hasattr(fig, 'data') and len(fig.data) > 0:
-                         logger.info(f"   - Fig Data Traces: {len(fig.data)}")
-                    else:
-                         logger.warning("⚠️ [PATIENT_VIEW] Figura există dar nu are trace-uri de date!")
+                # [DEFENSIVE VALIDATION] Check figure integrity
+                if fig is None:
+                    logger.critical("❌ [PATIENT_LOAD] create_plot returned None!")
+                    fig = go.Figure()
+                    fig.add_annotation(
+                        text="⚠️ Graficul nu a putut fi generat",
+                        xref="paper", yref="paper",
+                        x=0.5, y=0.5, 
+                        showarrow=False,
+                        font=dict(size=20, color="red")
+                    )
+                    fig.update_layout(
+                        xaxis=dict(showgrid=False, showticklabels=False),
+                        yaxis=dict(showgrid=False, showticklabels=False),
+                        height=500
+                    )
+                elif not hasattr(fig, 'data') or len(fig.data) == 0:
+                    logger.critical("⚠️ [PATIENT_LOAD] Figure exists but has NO data traces!")
+                    fig.add_annotation(
+                        text="⚠️ Graficul nu conține date",
+                        xref="paper", yref="paper",
+                        x=0.5, y=0.5, 
+                        showarrow=False,
+                        font=dict(size=16, color="orange")
+                    )
                 else:
-                    logger.error("❌ [PATIENT_VIEW] create_plot a returnat None!")
-
-                # Aplicăm logo-ul pe figura interactivă (dacă este configurat)
+                    logger.critical(f"✅ [PATIENT_LOAD] Plot generated successfully!")
+                    logger.critical(f"✅ [PATIENT_LOAD] Figure traces count: {len(fig.data)}")
+                    logger.critical(f"✅ [PATIENT_LOAD] Figure layout keys: {list(fig.layout.keys())[:10]}")
+                
+                # Apply logo (non-critical, failures logged but ignored)
                 try:
                     from plot_generator import apply_logo_to_figure
                     fig = apply_logo_to_figure(fig)
+                    logger.debug("✅ [PATIENT_LOAD] Logo applied to figure")
                 except Exception as logo_err:
-                     logger.warning(f"⚠️ [PATIENT_VIEW] Eroare aplicare logo (ignorat): {logo_err}")
+                    logger.warning(f"⚠️ [PATIENT_LOAD] Logo application failed (non-critical): {logo_err}")
 
             except Exception as plot_err:
-                 logger.error(f"❌ [PATIENT_VIEW] Eroare critică la generarea graficului: {plot_err}", exc_info=True)
-                 # If plot generation fails, return an empty figure and an error message
-                 return html.Div(f"Eroare generare grafic: {plot_err}", style={'color': 'red', 'padding': '20px'}), go.Figure()
+                logger.critical(f"💥 [PATIENT_LOAD] CRITICAL plot generation exception: {plot_err}", exc_info=True)
+                
+                # Create annotated error figure
+                fig = go.Figure()
+                error_text = str(plot_err)[:100] + "..." if len(str(plot_err)) > 100 else str(plot_err)
+                fig.add_annotation(
+                    text=f"❌ Eroare: {error_text}",
+                    xref="paper", yref="paper",
+                    x=0.5, y=0.5, 
+                    showarrow=False,
+                    font=dict(size=14, color="red"),
+                    align="center"
+                )
+                fig.update_layout(
+                    xaxis=dict(showgrid=False, showticklabels=False, zeroline=False),
+                    yaxis=dict(showgrid=False, showticklabels=False, zeroline=False),
+                    plot_bgcolor='#fff5f5',
+                    height=500,
+                    margin=dict(l=40, r=40, t=40, b=40)
+                )
         
         else:
             # [DIAGNOSTIC LOG 29] Fallback UI pentru lipsă date

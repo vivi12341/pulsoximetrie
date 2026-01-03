@@ -48,28 +48,45 @@ def load_patient_links() -> Dict:
     try:
         from storage_service import r2_client
         if r2_client.enabled:
-            logger.warning(f"☁️ [LINKS_LOAD] Attempting Scaleway load for {LINKS_METADATA_S3_KEY}...")
+            logger.critical(f"☁️ [LINKS_SCALEWAY] === ATTEMPTING SCALEWAY LOAD ===")
+            logger.critical(f"☁️ [LINKS_SCALEWAY] Object key: {LINKS_METADATA_S3_KEY}")
+            logger.critical(f"☁️ [LINKS_SCALEWAY] R2 Client enabled: {r2_client.enabled}")
+            logger.critical(f"☁️ [LINKS_SCALEWAY] Bucket: {getattr(r2_client, 'bucket_name', 'N/A')}")
+            
+            import time
+            start_time = time.time()
             content = r2_client.download_file(LINKS_METADATA_S3_KEY)
+            elapsed = time.time() - start_time
             
             if content:
                 links = json.loads(content.decode('utf-8'))
-                logger.warning(f"✅ [LINKS_LOAD] Loaded {len(links)} links from SCALEWAY (persistent)")
+                logger.critical(f"✅ [LINKS_SCALEWAY] SUCCESS!")
+                logger.critical(f"   - Links Count: {len(links)}")
+                logger.critical(f"   - Download Time: {elapsed:.3f}s")
+                logger.critical(f"   - Size: {len(content)} bytes ({len(content)/1024:.2f} KB)")
+                
+                # Show sample of loaded tokens
+                if links:
+                    sample_tokens = list(links.keys())[:5]
+                    logger.critical(f"   - Sample Tokens: {[t[:8] + '...' for t in sample_tokens]}")
                 
                 # Save local cache for faster subsequent reads
                 try:
                     with open(PATIENT_LINKS_FILE, 'w', encoding='utf-8') as f:
                         json.dump(links, f, indent=2, ensure_ascii=False)
                     logger.debug(f"💾 [LINKS_CACHE] Cached {len(links)} links locally")
-                except:
-                    pass  # Cache failure is non-critical
+                except Exception as cache_err:
+                    logger.warning(f"⚠️ [LINKS_CACHE] Cache write failed: {cache_err}")
                     
                 return links
             else:
-                logger.warning(f"⚠️ [LINKS_LOAD] Scaleway returned empty content")
-    except ImportError:
-        logger.warning(f"⚠️ [LINKS_LOAD] storage_service not available")
+                logger.critical(f"⚠️ [LINKS_SCALEWAY] Returned EMPTY content (file may not exist)")
+                logger.critical(f"   - Download Time: {elapsed:.3f}s")
+    except ImportError as imp_err:
+        logger.critical(f"⚠️ [LINKS_SCALEWAY] ImportError: {imp_err}")
+        logger.critical(f"⚠️ [LINKS_SCALEWAY] storage_service not available")
     except Exception as e:
-        logger.warning(f"⚠️ [LINKS_LOAD] Scaleway load failed: {e}")
+        logger.critical(f"❌ [LINKS_SCALEWAY] Exception: {e}", exc_info=True)
     
     # FALLBACK: Try local file (ephemeral cache)
     if os.path.exists(PATIENT_LINKS_FILE):
