@@ -405,7 +405,13 @@ def delete_patient_link(token: str) -> bool:
 
 def get_patient_recordings(token: str) -> List[Dict]:
     """
-    Preia toate înregistrările pentru un pacient.
+    Preia toate înregistrările pentru un pacient din PostgreSQL.
+    
+    CRITICAL FIX v2: Read from PostgreSQL (PatientRecording model) instead of:
+    - Local recordings.json (ephemeral on Railway) ❌
+    - patient_links.json metadata (too large with recordings) ❌
+    
+    PostgreSQL ensures recordings PERSIST across Railway restarts ✅
     
     Args:
         token: UUID-ul pacientului
@@ -413,26 +419,40 @@ def get_patient_recordings(token: str) -> List[Dict]:
     Returns:
         List[Dict]: Listă cu metadata fiecărei înregistrări
     """
-    patient_folder = os.path.join(PATIENT_DATA_DIR, token)
-    recordings_file = os.path.join(patient_folder, "recordings.json")
-    
-    if not os.path.exists(recordings_file):
-        logger.debug(f"Pacientul {token[:8]}... nu are încă înregistrări.")
-        return []
+    logger.warning(f"📥 [GET_RECORDINGS_PG] START for token {token[:8]}...")
     
     try:
-        with open(recordings_file, 'r', encoding='utf-8') as f:
-            recordings = json.load(f)
-            logger.debug(f"Pacientul {token[:8]}... are {len(recordings)} înregistrări.")
-            return recordings
+        # Import PostgreSQL model
+        from auth.models import PatientRecording
+        
+        # Query PostgreSQL - sortate descrescător după dată
+        recordings = PatientRecording.query.filter_by(token=token).order_by(
+            PatientRecording.recording_date.desc()
+        ).all()
+        
+        logger.warning(f"✅ [GET_RECORDINGS_PG] Found {len(recordings)} recordings in PostgreSQL for {token[:8]}")
+        
+        # Convert to dict format (backward compatible)
+        recordings_list = [rec.to_dict() for rec in recordings]
+        
+        # Log sample for debugging
+        if recordings_list:
+            logger.warning(f"📊 [GET_RECORDINGS_PG] Sample IDs: {[r['id'] for r in recordings_list[:3]]}")
+        
+        return recordings_list
+        
     except Exception as e:
-        logger.error(f"Eroare la citirea înregistrărilor pentru {token}: {e}", exc_info=True)
+        logger.error(f"❌ [GET_RECORDINGS_PG] Error reading from PostgreSQL: {e}", exc_info=True)
+        # Fallback: return empty list (don't crash)
         return []
 
 
 def save_patient_recordings(token: str, recordings: List[Dict]) -> bool:
     """
-    Salvează lista de înregistrări pentru un pacient.
+    DEPRECATED: Use add_recording() instead for new recordings.
+    
+    This function is kept for backward compatibility during migration.
+    It now saves to PostgreSQL instead of local files.
     
     Args:
         token: UUID-ul pacientului
@@ -441,24 +461,30 @@ def save_patient_recordings(token: str, recordings: List[Dict]) -> bool:
     Returns:
         bool: True dacă salvarea a reușit
     """
-    patient_folder = os.path.join(PATIENT_DATA_DIR, token)
-    recordings_file = os.path.join(patient_folder, "recordings.json")
+    logger.warning(f"⚠️ [SAVE_RECORDINGS_DEPRECATED] Called with {len(recordings)} recordings for {token[:8]}")
+    logger.warning("⚠️ [SAVE_RECORDINGS_DEPRECATED] This function is deprecated - use add_recording() for new data")
     
     try:
-        with open(recordings_file, 'w', encoding='utf-8') as f:
-            json.dump(recordings, f, indent=2, ensure_ascii=False)
+        from auth.models import PatientRecording, db
         
-        # Actualizăm contorul în link
-        links = load_patient_links()
-        if token in links:
-            links[token]['recordings_count'] = len(recordings)
-            save_patient_links(links)
+        # For each recording in the list, ensure it exists in PostgreSQL
+        for rec_dict in recordings:
+            # Check if already exists
+            rec_id = rec_dict.get('id', str(uuid.uuid4())[:8])
+            existing = PatientRecording.query.filter_by(
+                token=token, 
+                recording_id=rec_id
+            ).first()
+            
+            if not existing:
+                # Create new entry
+                PatientRecording.create_from_dict(token, rec_dict)
+                logger.info(f"✅ Migrated recording {rec_id} to PostgreSQL")
         
-        logger.debug(f"Salvate {len(recordings)} înregistrări pentru pacientul {token[:8]}...")
         return True
         
     except Exception as e:
-        logger.error(f"Eroare la salvarea înregistrărilor pentru {token}: {e}", exc_info=True)
+        logger.error(f"❌ [SAVE_RECORDINGS_DEPRECATED] Error: {e}", exc_info=True)
         return False
 
 
@@ -524,33 +550,51 @@ def add_recording(token: str, csv_filename: str, csv_content: bytes,
                 f.write(csv_content)
             logger.info(f"⚠️ CSV salvat LOCAL: {csv_path} (TEMPORARY!)")
         
-        # Creăm metadata înregistrării
-        recording_metadata = {
-            "id": recording_id,
-            "original_filename": csv_filename,
-            "csv_path": csv_path,
-            "r2_url": r2_url,  # URL R2 dacă disponibil
-            "storage_type": "r2" if r2_available and r2_url else "local",
-            "recording_date": recording_date,
-            "start_time": start_time,
-            "end_time": end_time,
-            "uploaded_at": datetime.now().isoformat(),
-            "stats": {
-                "avg_spo2": avg_spo2,
-                "min_spo2": min_spo2,
-                "max_spo2": max_spo2
-            }
-        }
+        # CRITICAL FIX v2: Save to PostgreSQL (PERSISTENT) instead of JSON
+        logger.warning(f"💾 [ADD_RECORDING_PG] Saving to PostgreSQL for {token[:8]}...")
         
-        # Adăugăm la lista de înregistrări
-        recordings = get_patient_recordings(token)
-        recordings.append(recording_metadata)
-        
-        if save_patient_recordings(token, recordings):
-            storage_info = "☁️ R2 (PERSISTENT)" if r2_available and r2_url else "💾 LOCAL (EPHEMERAL!)"
-            logger.warning(f"✅ [LINK_TRACE_SAVE] Recording Added | Token: {token[:8]} | Storage: {storage_info} | File: {csv_filename}")
+        try:
+            from auth.models import PatientRecording, db
+            from dateutil.parser import parse as parse_date
+            
+            # Parse dates if strings
+            if isinstance(recording_date, str):
+                recording_date = parse_date(recording_date).date()
+            if isinstance(start_time, str):
+                start_time = parse_date(start_time).time()
+            if isinstance(end_time, str):
+                end_time = parse_date(end_time).time()
+            
+            # Create PostgreSQL record
+            recording = PatientRecording(
+                token=token,
+                recording_id=recording_id,
+                original_filename=csv_filename,
+                csv_path=csv_path,
+                r2_url=r2_url,
+                storage_type='r2' if (r2_available and r2_url) else 'local',
+                recording_date=recording_date,
+                start_time=start_time,
+                end_time=end_time,
+                avg_spo2=avg_spo2,
+                min_spo2=min_spo2,
+                max_spo2=max_spo2
+            )
+            
+            db.session.add(recording)
+            db.session.commit()
+            
+            storage_info = "☁️ R2 (PERSISTENT)" if (r2_available and r2_url) else "💾 LOCAL (EPHEMERAL!)"
+            logger.warning(f"✅ [ADD_RECORDING_PG] Saved to PostgreSQL | Token: {token[:8]} | Storage: {storage_info} | ID: {recording_id}")
+            
             return True
-        else:
+            
+        except Exception as e:
+            logger.error(f"❌ [ADD_RECORDING_PG] PostgreSQL save failed: {e}", exc_info=True)
+            try:
+                db.session.rollback()
+            except:
+                pass
             return False
             
     except Exception as e:

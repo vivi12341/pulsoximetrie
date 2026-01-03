@@ -246,6 +246,112 @@ class LoginSession(db.Model):
 
 
 # ==============================================================================
+# MODEL: PatientRecording (Înregistrări Pacienți - PERSISTENT STORAGE)
+# ==============================================================================
+
+class PatientRecording(db.Model):
+    """
+    Înregistrări pulsoximetrie pentru pacienți.
+    
+    CRITICAL: Stored in PostgreSQL (PERSISTENT) instead of local JSON (EPHEMERAL).
+    This ensures recordings survive Railway container restarts.
+    
+    RELAȚIE: One token (patient_link) → Many recordings
+    """
+    __tablename__ = 'patient_recordings'
+    
+    # Identificare
+    id = db.Column(db.Integer, primary_key=True)
+    token = db.Column(db.String(36), nullable=False, index=True)  # Patient link token
+    recording_id = db.Column(db.String(8), nullable=False)  # Short ID for UI (e.g., "a3f1c2d4")
+    
+    # Fișier
+    original_filename = db.Column(db.String(255), nullable=False)
+    csv_path = db.Column(db.Text, nullable=False)  # Full path: local or "r2://bucket/key"
+    r2_url = db.Column(db.Text)  # HTTP URL if stored in Scaleway R2
+    storage_type = db.Column(db.String(10), default='local')  # 'local' or 'r2'
+    
+    # Metadata înregistrare
+    recording_date = db.Column(db.Date, nullable=False, index=True)
+    start_time = db.Column(db.Time, nullable=False)
+    end_time = db.Column(db.Time, nullable=False)
+    
+    # Statistici SpO2
+    avg_spo2 = db.Column(db.Numeric(5, 2))  # Ex: 97.50%
+    min_spo2 = db.Column(db.Integer)  # Ex: 85
+    max_spo2 = db.Column(db.Integer)  # Ex: 100
+    
+    # Tracking
+    uploaded_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    created_by = db.Column(db.Integer, db.ForeignKey('doctors.id'))  # Optional: which doctor uploaded
+    
+    # Constraints
+    __table_args__ = (
+        db.UniqueConstraint('token', 'recording_id', name='unique_token_recording'),
+        db.Index('idx_recordings_token_date', 'token', 'recording_date'),
+    )
+    
+    def __repr__(self):
+        return f"<PatientRecording {self.recording_id} for token {self.token[:8]}>"
+    
+    def to_dict(self) -> dict:
+        """Convert to dictionary (compatible with existing JSON format)."""
+        return {
+            'id': self.recording_id,  # Keep 'id' for backward compatibility
+            'original_filename': self.original_filename,
+            'csv_path': self.csv_path,
+            'r2_url': self.r2_url,
+            'storage_type': self.storage_type,
+            'recording_date': self.recording_date.isoformat() if self.recording_date else None,
+            'start_time': self.start_time.strftime('%H:%M:%S') if self.start_time else None,
+            'end_time': self.end_time.strftime('%H:%M:%S') if self.end_time else None,
+            'uploaded_at': self.uploaded_at.isoformat() if self.uploaded_at else None,
+            'stats': {
+                'avg_spo2': float(self.avg_spo2) if self.avg_spo2 else None,
+                'min_spo2': self.min_spo2,
+                'max_spo2': self.max_spo2
+            }
+        }
+    
+    @staticmethod
+    def create_from_dict(token: str, recording_dict: dict, created_by: int = None):
+        """
+        Create PatientRecording from dictionary (for migration from JSON).
+        
+        Args:
+            token: Patient link token
+            recording_dict: Recording metadata dictionary
+            created_by: Optional doctor ID
+            
+        Returns:
+            PatientRecording: Created instance
+        """
+        from dateutil.parser import parse as parse_date
+        
+        recording = PatientRecording(
+            token=token,
+            recording_id=recording_dict.get('id', str(uuid.uuid4())[:8]),
+            original_filename=recording_dict.get('original_filename', 'unknown.csv'),
+            csv_path=recording_dict.get('csv_path', ''),
+            r2_url=recording_dict.get('r2_url'),
+            storage_type=recording_dict.get('storage_type', 'local'),
+            recording_date=parse_date(recording_dict['recording_date']).date() if 'recording_date' in recording_dict else None,
+            start_time=parse_date(recording_dict['start_time']).time() if 'start_time' in recording_dict else None,
+            end_time=parse_date(recording_dict['end_time']).time() if 'end_time' in recording_dict else None,
+            avg_spo2=recording_dict.get('stats', {}).get('avg_spo2'),
+            min_spo2=recording_dict.get('stats', {}).get('min_spo2'),
+            max_spo2=recording_dict.get('stats', {}).get('max_spo2'),
+            uploaded_at=parse_date(recording_dict['uploaded_at']) if 'uploaded_at' in recording_dict else datetime.utcnow(),
+            created_by=created_by
+        )
+        
+        db.session.add(recording)
+        db.session.commit()
+        
+        return recording
+
+
+# ==============================================================================
 # FUNCȚII UTILITARE
 # ==============================================================================
 
