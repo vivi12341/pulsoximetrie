@@ -465,31 +465,32 @@ def render_pdf_section(pdf_data, token):
 @app.callback(
     [Output('patient-data-view', 'children'),
      Output('patient-main-graph', 'figure')],
-    [Input('force-routing-trigger', 'n_intervals')]
+    [Input('force-routing-trigger', 'n_intervals'),
+     Input('global-token-store', 'data')]  # CRITICAL FIX: Read token from dcc.Store, not request.args
 )
-def load_patient_data_from_token(n_intervals):
+def load_patient_data_from_token(n_intervals, token_from_store):
     """
-    [SOLUȚIA A] Încarcă automat datele pacientului când token-ul este detectat în URL.
-    Token-ul se citește DIRECT din Flask request.args (nu mai depinde de callback routing).
+    [SOLUȚIA CORECTATĂ] Încarcă automat datele pacientului când token-ul este detectat în URL.
+    
+    CRITICAL FIX: Token-ul se citește din global-token-store (populat client-side),
+    NU din Flask re
+
+quest.args (care e gol în contextul callback-urilor Dash triggerate de Interval).
     
     Trigger: dcc.Interval(id='force-routing-trigger') - se declanșează o singură dată la încărcarea paginii
+    Input: global-token-store.data - token-ul extras client-side din window.location
     """
-    from flask import request
     from datetime import datetime
     
-    # [ENHANCED DIAGNOSTIC v2] Full request context logging
+    # [ENHANCED DIAGNOSTIC v3] Full request context + token store logging
     logger.critical("="*100)
-    logger.critical(f"🔍 [PATIENT_LOAD] *** CALLBACK START ***")
+    logger.critical(f"🔍 [PATIENT_LOAD] *** CALLBACK START (v3 - Token from Store) ***")
     logger.critical(f"🔍 [PATIENT_LOAD] Timestamp: {datetime.now().isoformat()}")
-    logger.critical(f"🔍 [PATIENT_LOAD] Request URL: {request.url}")
-    logger.critical(f"🔍 [PATIENT_LOAD] Request Path: {request.path}")
-    logger.critical(f"🔍 [PATIENT_LOAD] Request Args: {dict(request.args)}")
-    logger.critical(f"🔍 [PATIENT_LOAD] Request Method: {request.method}")
-    
-    token = request.args.get('token')
-    logger.critical(f"🔍 [PATIENT_LOAD] Extracted Token: {token[:8] if token else 'NONE'}...")
     logger.critical(f"🔍 [PATIENT_LOAD] N_intervals: {n_intervals}")
+    logger.critical(f"🔍 [PATIENT_LOAD] Token from Store: {token_from_store[:8] if token_from_store else 'NONE'}...")
     logger.critical("="*100)
+    
+    token = token_from_store
     
     if not token:
         logger.warning("⚠️ [UI_TRACE_LOAD] MISSING TOKEN in URL. Returning no_update.")
