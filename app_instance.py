@@ -84,17 +84,26 @@ try:
     logger.warning("[APP_INSTANCE 5.1/10] Creating dummy components...")
     dummy_html = html.Div("Force registration")
     dummy_dcc = dcc.Store(id='dummy-registration-store')
-    # REMOVED: dummy_table - cauzează 500 error pentru dash_table bundle
+    
+    # CRITICAL FIX: Add dcc.Graph to force Plotly registration!
+    # WITHOUT this, plotly.min.js is NOT registered → 500 error
+    import plotly.graph_objects as go
+    dummy_graph = dcc.Graph(
+        id='dummy-graph-force-plotly',
+        figure=go.Figure()  # Empty figure to trigger registration
+    )
+    logger.warning("[APP_INSTANCE 5.2/10] ✅ Created dcc.Graph to force Plotly registration")
     
     # Pasul 2: Setăm layout DUMMY cu componentele esențiale
     dummy_layout = html.Div([
         dummy_html,
-        dummy_dcc
+        dummy_dcc,
+        dummy_graph  # FORCE PLOTLY REGISTRATION
     ])
     
     # CRITICAL: Setăm layout IMEDIAT pentru a triggera înregistrarea
     app.layout = dummy_layout
-    logger.warning("[APP_INSTANCE 6/10] ✅ Dummy layout set to force library registration")
+    logger.warning("[APP_INSTANCE 6/10] ✅ Dummy layout set (including Graph for Plotly)")
     
     # Pasul 3: FORȚĂM warmup-ul registrului Dash
     # Accesăm app._registered_paths pentru a declanșa lazy initialization
