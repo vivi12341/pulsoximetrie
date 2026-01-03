@@ -296,6 +296,10 @@ def format_recording_date_ro(recording_date, start_time, end_time):
     Formatează data înregistrării în format citibil românesc:
     "Marți 14/10/2025 de la ora 20:32 până în Miercuri 15/10/2025 la ora 04:45"
     Format dată: DD/MM/YYYY
+    
+    [UPDATED v2.0] Suportă AMBELE formate de timp:
+    - HH:MM:SS (nou, din batch_processor.py fix)
+    - HH:MM (vechi, date istorice)
     """
     from datetime import datetime
     
@@ -306,8 +310,12 @@ def format_recording_date_ro(recording_date, start_time, end_time):
     }
     
     try:
-        # Parsăm data și ora de început
-        start_datetime = datetime.strptime(f"{recording_date} {start_time}", "%Y-%m-%d %H:%M")
+        # [FIX v2.0] Încercăm ÎNTÂI formatul nou HH:MM:SS, apoi fallback la HH:MM
+        try:
+            start_datetime = datetime.strptime(f"{recording_date} {start_time}", "%Y-%m-%d %H:%M:%S")
+        except ValueError:
+            # Fallback la formatul vechi HH:MM
+            start_datetime = datetime.strptime(f"{recording_date} {start_time}", "%Y-%m-%d %H:%M")
         
         # Pentru ora de sfârșit, trebuie să determinăm data corectă
         # Dacă ora de sfârșit < ora de început, înseamnă că a trecut la ziua următoare
@@ -318,10 +326,18 @@ def format_recording_date_ro(recording_date, start_time, end_time):
             # A trecut la ziua următoare
             from datetime import timedelta
             end_date = start_datetime.date() + timedelta(days=1)
-            end_datetime = datetime.strptime(f"{end_date} {end_time}", "%Y-%m-%d %H:%M")
+            # [FIX v2.0] Try both formats for end_time too
+            try:
+                end_datetime = datetime.strptime(f"{end_date} {end_time}", "%Y-%m-%d %H:%M:%S")
+            except ValueError:
+                end_datetime = datetime.strptime(f"{end_date} {end_time}", "%Y-%m-%d %H:%M")
         else:
             # Aceeași zi
-            end_datetime = datetime.strptime(f"{recording_date} {end_time}", "%Y-%m-%d %H:%M")
+            # [FIX v2.0] Try both formats
+            try:
+                end_datetime = datetime.strptime(f"{recording_date} {end_time}", "%Y-%m-%d %H:%M:%S")
+            except ValueError:
+                end_datetime = datetime.strptime(f"{recording_date} {end_time}", "%Y-%m-%d %H:%M")
         
         # Formatăm datele în DD/MM/YYYY
         start_day_name = days_ro[start_datetime.weekday()]
