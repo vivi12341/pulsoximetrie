@@ -359,18 +359,71 @@ def init_db(app):
     """
     Inițializează database-ul cu aplicația Flask.
     
+    CRITICAL: Includes self-healing logic to fix orphaned PostgreSQL objects
+    from failed table creation attempts (e.g., sequence exists but table doesn't).
+    
     Args:
         app: Instanța Flask/Dash
     """
+    from logger_setup import logger
+    
     # Folosim app.server pentru că Dash wraps Flask
     flask_app = app.server if hasattr(app, 'server') else app
     db.init_app(flask_app)
     
     with flask_app.app_context():
-        # Creăm toate tabelele
+        # === SELF-HEALING: Auto-fix orphaned PostgreSQL objects ===
+        try:
+            logger.warning("🔧 [DB_INIT] Starting self-healing database check...")
+            
+            # Import psycopg2 for raw SQL execution
+            import psycopg2
+            from sqlalchemy import text
+            
+            # Check if patient_recordings table exists
+            result = db.session.execute(text("""
+                SELECT EXISTS (
+                    SELECT FROM information_schema.tables 
+                    WHERE table_schema = 'public' 
+                    AND table_name = 'patient_recordings'
+                );
+            """)).scalar()
+            
+            table_exists = result
+            
+            if not table_exists:
+                logger.warning("⚠️ [DB_INIT] patient_recordings table MISSING - checking for orphaned objects...")
+                
+                # Check for orphaned sequence
+                seq_result = db.session.execute(text("""
+                    SELECT EXISTS (
+                        SELECT FROM pg_sequences 
+                        WHERE schemaname = 'public' 
+                        AND sequencename = 'patient_recordings_id_seq'
+                    );
+                """)).scalar()
+                
+                if seq_result:
+                    logger.warning("🧹 [DB_INIT] Found orphaned sequence 'patient_recordings_id_seq' - cleaning up...")
+                    
+                    # Drop orphaned sequence
+                    db.session.execute(text("DROP SEQUENCE IF EXISTS patient_recordings_id_seq CASCADE;"))
+                    db.session.commit()
+                    
+                    logger.warning("✅ [DB_INIT] Orphaned sequence removed successfully")
+                else:
+                    logger.info("✅ [DB_INIT] No orphaned objects found")
+            else:
+                logger.info("✅ [DB_INIT] patient_recordings table already exists")
+                
+        except Exception as e:
+            logger.warning(f"⚠️ [DB_INIT] Self-healing check failed (non-critical): {e}")
+            # Non-critical - continue with normal initialization
+        
+        # === Create all tables ===
+        logger.info("📊 [DB_INIT] Creating database tables...")
         db.create_all()
         
-        from logger_setup import logger
         logger.info("✅ Database inițializat: tabele create/verificate.")
 
 
