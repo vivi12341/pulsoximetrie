@@ -671,7 +671,7 @@ quest.args (care e gol în contextul callback-urilor Dash triggerate de Interval
                 else:
                     logger.critical(f"✅ [PATIENT_LOAD] Plot generated successfully!")
                     logger.critical(f"✅ [PATIENT_LOAD] Figure traces count: {len(fig.data)}")
-                    logger.critical(f"✅ [PATIENT_LOAD] Figure layout keys: {list(fig.layout.keys())[:10]}")
+                    # Removed buggy line: fig.layout.keys() causes AttributeError
                 
                 # Apply logo (non-critical, failures logged but ignored)
                 try:
