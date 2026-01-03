@@ -56,14 +56,17 @@ logger.warning("[APP_INSTANCE 4/10] ✅ Dash app instance created")
 # Setăm un titlu pentru fereastra browser-ului
 app.title = "Analizator Pulsoximetrie"
 
-# === FIX v2: SERVE SCRIPTS LOCALLY (Plotly 500 Error Resolution) ===
-# PROBLEMA ANTERIOARĂ: CDN serving cauza 500 errors pentru plotly.min.js
-# CAUZĂ ROOT: CDN-uri externe pot eșua sau ruta incorect în producție
-# SOLUȚIE FINALĂ: Servim bibliotecile LOCAL din site-packages (guaranteed availability)
-# TRADE-OFF: +3MB deploy size, dar STABILITATE 100% (no external dependencies)
-app.scripts.config.serve_locally = True  # ✅ Local bundle serving
-app.css.config.serve_locally = True      # ✅ CSS serving local
-logger.warning("[APP_INSTANCE 4.1/10] 🔒 LOCAL Serving ENABLED (scripts + css) - Plotly Fix Applied")
+# === CRITICAL: CDN SERVING (Dash 3.x Compatibility) ===
+# PROBLEMA LOCAL SERVING: Dash 3.x path incompatibility
+# - Local serving folosește paths diferite pentru componente
+# - dash_html_components.min.js NU este în registered paths când serve_locally=True
+# - DependencyException: "html/dash_html_components.min.js" not found
+#
+# SOLUȚIE TEMPORARĂ: Revenim la CDN (problemă originală poate fi alta)
+# TODO: Investigare Plotly 500 errors fără a schimba serving strategy
+app.scripts.config.serve_locally = False  # CDN serving (stable pentru Dash 3.x)
+app.css.config.serve_locally = False
+logger.warning("[APP_INSTANCE 4.1/10] 🌐 CDN Serving RE-ENABLED (Dash 3.x paths compatibility)")
 
 # === FORCE DASH LIBRARY REGISTRATION (DEFENSIVE) ===
 # CRITICAL: Dash 3.x înregistrează biblioteci DOAR când găsește componente în layout!
