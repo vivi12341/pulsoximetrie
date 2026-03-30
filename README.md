@@ -208,8 +208,6 @@ uv pip install --force-reinstall -r requirements.txt
 
 ## 🔄 Migrare pe alt calculator
 
-Citește: **[SETUP_CALCULATOR_NOU.md](SETUP_CALCULATOR_NOU.md)**
-
 Pași rapizi:
 1. Copiază proiectul (FĂRĂ `.venv/`)
 2. `uv venv`
@@ -218,12 +216,14 @@ Pași rapizi:
 
 ---
 
-## 📚 Documentație Extinsă
+## 📚 Documentație suplimentară
 
-- **[MIGRARE_COMPLETATA.md](MIGRARE_COMPLETATA.md)** - Istoric migrare și teste
-- **[SETUP_CALCULATOR_NOU.md](SETUP_CALCULATOR_NOU.md)** - Ghid setup complet
-- **[GHID_CULORI.md](GHID_CULORI.md)** - Configurare avansată culori
-- **[ZOOM_FEATURE_GUIDE.md](ZOOM_FEATURE_GUIDE.md)** - Funcționalitate zoom dinamic
+- **[GHID_CULORI.md](GHID_CULORI.md)** / **[EXEMPLE_CULORI.md](EXEMPLE_CULORI.md)** — profile și culori
+- **[GHID_TESTARE_PDF.md](GHID_TESTARE_PDF.md)** — testare flux PDF
+- **[README_MEDICAL.md](README_MEDICAL.md)** / **[DASHBOARD_MEDICAL_README.md](DASHBOARD_MEDICAL_README.md)** — modul medical
+- **[ARHITECTURA_ACTUALA.md](ARHITECTURA_ACTUALA.md)** / **[INTERFATA_VIZUALA.md](INTERFATA_VIZUALA.md)** — arhitectură și UI
+- **[README_AUTH.md](README_AUTH.md)** — autentificare
+- **Deploy (Railway / R2):** [RAILWAY_SETUP.md](RAILWAY_SETUP.md), [RAILWAY_DATABASE_SETUP.md](RAILWAY_DATABASE_SETUP.md), [README_CLOUDFLARE_R2.md](README_CLOUDFLARE_R2.md), [CLOUDFLARE_R2_QUICK_START.md](CLOUDFLARE_R2_QUICK_START.md)
 
 ---
 

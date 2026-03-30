@@ -22,7 +22,7 @@ alwaysApply: true
 
 ## 🎯 Excepții (doar la cerere explicită):
 - **README.md** - Dacă utilizatorul cere explicit
-- **Documente existente** - Actualizare succintă (CITESTE_MAI_INTAI.md, CORECTII_WORKFLOW_REAL.md, etc.)
+- **Documente existente** - Actualizare succintă (ex.: README.md, ghiduri din rădăcina proiectului)
 - **Configurare** - Fișiere necesare (`colors_config.json`, `requirements.txt`, etc.)
 - **Log-uri** - `output/LOGS/app_activity.log` (generat automat)
 
