@@ -13,6 +13,7 @@ from flask_sqlalchemy import SQLAlchemy
 from flask_login import UserMixin
 from datetime import datetime, timedelta
 from typing import Optional
+import uuid
 
 db = SQLAlchemy()
 
@@ -243,6 +244,26 @@ class LoginSession(db.Model):
         
         db.session.commit()
         return len(sessions)
+
+
+# ==============================================================================
+# MODEL: PatientLinkRow (Metadata link pacient - PostgreSQL)
+# ==============================================================================
+
+
+class PatientLinkRow(db.Model):
+    """
+    O înregistrare per token UUID; payload-ul oglindește structura din patient_links.json.
+    Folosit ca sursă de adevăr când USE_POSTGRES_PATIENT_LINKS=1 sau după migrare automată.
+    """
+    __tablename__ = 'patient_link_rows'
+
+    token = db.Column(db.String(36), primary_key=True)
+    payload = db.Column(db.JSON, nullable=False)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+    def __repr__(self):
+        return f"<PatientLinkRow {self.token[:8]}...>"
 
 
 # ==============================================================================

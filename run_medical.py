@@ -24,6 +24,16 @@ from flask import request
 # Încărcăm variabilele de mediu din .env
 load_dotenv()
 
+from shared.runtime_mode import (
+    apply_default_patient_links_storage_mode,
+    is_cloud_runtime,
+    resolve_database_url,
+    sqlalchemy_engine_options,
+)
+
+# Local: link-uri pacient implicit din JSON; Cloud: implicit PostgreSQL pentru metadata
+apply_default_patient_links_storage_mode()
+
 # === INIȚIALIZARE KALEIDO (DEFENSIVE) ===
 # Verificăm și configurăm Kaleido pentru export imagini Plotly
 try:
@@ -76,104 +86,59 @@ if not os.path.exists(patient_links_path):
         json.dump({}, f, indent=2)
     print(f"✅ patient_links.json creat")
 
-# === VERIFICARE CRITICĂ DATABASE_URL ÎNAINTE DE ORICE IMPORT ===
+# === VERIFICARE DATABASE / MOD LOCAL VS CLOUD ===
 print("=" * 80)
 print("🔍 VERIFICARE INIȚIALĂ ENVIRONMENT")
 print("=" * 80)
 
-# Detectăm environment-ul
 flask_env = os.getenv('FLASK_ENV', 'development')
-railway_env = os.getenv('RAILWAY_ENVIRONMENT')  # Railway setează asta automat
-database_url = os.getenv('DATABASE_URL')
+is_cloud = is_cloud_runtime()
+database_url = resolve_database_url()
 
 print(f"FLASK_ENV: {flask_env}")
-print(f"RAILWAY_ENVIRONMENT: {railway_env or 'nu este setat'}")
-print(f"DATABASE_URL: {'SETAT' if database_url else 'NU ESTE SETAT'}")
+print(f"Mod runtime: {'CLOUD (PaaS)' if is_cloud else 'LOCAL (dezvoltare)'}")
+print(f"RAILWAY_ENVIRONMENT: {os.getenv('RAILWAY_ENVIRONMENT') or 'nu este setat'}")
+print(f"DATABASE_URL efectiv: {'SETAT' if database_url else 'LIPSEȘTE'}")
 
-# Detectăm dacă suntem pe Railway (production)
-is_railway = railway_env is not None or flask_env == 'production'
-
-if is_railway:
+if is_cloud:
     print("")
-    print("🚨 DETECTAT: Aplicația rulează pe RAILWAY (PRODUCTION)")
+    print("☁️  DETECTAT: aplicația rulează pe platformă cloud (production)")
     print("=" * 80)
-    
-    # [FIX] SQLAlchemy 1.4+ requires postgresql://, not postgres://
-    if database_url and database_url.startswith("postgres://"):
-        database_url = database_url.replace("postgres://", "postgresql://", 1)
-        print("🔧 Fixed DATABASE_URL scheme (postgres:// -> postgresql://)")
 
-    # [FIX] Enforce SSL for Railway/Production
-    if database_url and "sslmode" not in database_url:
-        separator = "&" if "?" in database_url else "?"
-        database_url += f"{separator}sslmode=require"
-        print("🔒 SSL Mode enforced (sslmode=require)")
-    
-    if not database_url:
+    if not database_url or not database_url.strip():
         print("")
         print("❌❌❌ EROARE CRITICĂ ❌❌❌")
         print("")
-        print("DATABASE_URL NU este setat!")
+        print("DATABASE_URL nu este setat în mediul cloud.")
+        print("Adaugă o bază PostgreSQL în dashboard (ex. Railway: + New → Database)")
+        print("și lasă platforma să injecteze DATABASE_URL.")
         print("")
-        print("╔════════════════════════════════════════════════════════════╗")
-        print("║  SOLUȚIE URGENTĂ (30 secunde):                            ║")
-        print("╠════════════════════════════════════════════════════════════╣")
-        print("║  1. Mergi la Railway Dashboard                            ║")
-        print("║  2. Click pe proiectul 'pulsoximetrie'                    ║")
-        print("║  3. Click butonul '+ New' (sus dreapta)                   ║")
-        print("║  4. Selectează 'Database' → 'Add PostgreSQL'              ║")
-        print("║  5. Railway va seta automat DATABASE_URL                  ║")
-        print("║  6. Aplicația va reporni AUTOMAT și va funcționa!         ║")
-        print("╚════════════════════════════════════════════════════════════╝")
-        print("")
-        print("=" * 80)
         sys.exit(1)
-    
-    # Verificăm dacă e localhost (greșit în Railway)
+
     try:
         parsed = urlparse(database_url)
         hostname = parsed.hostname
-        
-        if hostname in ['localhost', '127.0.0.1', '::1']:
+        if hostname in ('localhost', '127.0.0.1', '::1', None):
             print("")
-            print("❌❌❌ EROARE CONFIGURARE ❌❌❌")
+            print("❌ EROARE CONFIGURARE: DATABASE_URL indică localhost pe server cloud.")
+            print("Folosește baza de date oferită de platformă, nu PostgreSQL de pe mașina ta.")
             print("")
-            print(f"DATABASE_URL folosește localhost: {hostname}")
-            print("")
-            print("CAUZĂ: PostgreSQL NU este adăugat în Railway!")
-            print("       (DATABASE_URL ar trebui să fie railway.internal)")
-            print("")
-            print("╔════════════════════════════════════════════════════════════╗")
-            print("║  SOLUȚIE:                                                 ║")
-            print("╠════════════════════════════════════════════════════════════╣")
-            print("║  1. Șterge variabila DATABASE_URL din Railway Variables   ║")
-            print("║  2. Adaugă PostgreSQL: + New → Database → PostgreSQL     ║")
-            print("║  3. Railway va genera DATABASE_URL corect (automat)       ║")
-            print("╚════════════════════════════════════════════════════════════╝")
-            print("")
-            print("=" * 80)
             sys.exit(1)
-            
-        print(f"✅ DATABASE_URL valid: postgresql://{hostname}")
-        
+        print(f"✅ DATABASE_URL valid (host: {hostname})")
     except Exception as e:
-        print(f"⚠️ WARNING: Eroare la parsarea DATABASE_URL: {e}")
-        print("   Încerc să continui oricum...")
-    
+        print(f"⚠️ WARNING: parsare DATABASE_URL: {e}")
+
     print("=" * 80)
-    
+
 else:
-    # Development local
     print("")
-    print("ℹ️  DEVELOPMENT MODE (local)")
+    print("💻 MOD LOCAL — pornești fără PostgreSQL obligatoriu")
     print("=" * 80)
-    
-    if not database_url:
-        database_url = 'postgresql://postgres:postgres@localhost:5432/pulsoximetrie'
-        print(f"📍 Folosesc PostgreSQL local: localhost:5432")
+    if (os.getenv("DATABASE_URL") or "").strip():
+        print(f"📍 DATABASE_URL din .env: {urlparse(database_url).scheme} …")
     else:
-        print(f"📍 DATABASE_URL custom: {urlparse(database_url).hostname}")
-    
+        print("📍 DATABASE_URL nesetat → SQLite implicit: pulsox_local_dev.db (în folderul proiectului)")
+        print("   Pentru Postgres local, setează DATABASE_URL în .env.")
     print("=" * 80)
 
 # Importăm componentele esențiale DUPĂ verificare
@@ -197,13 +162,13 @@ except Exception:
     pass
 
 logger.info("="*80)
-logger.info("🔧 [CRITICAL FIX] Importing callbacks_medical IMEDIAT după du.configure_upload")
+logger.info("🔧 [CRITICAL FIX] Importing callbacks.medical_callbacks IMEDIAT după du.configure_upload")
 logger.info("🔧 Aceasta asigură că @du.callback decorators sunt înregistrați CORECT")
 logger.info("="*80)
 
-# CRITICAL: Import callbacks_medical AICI pentru ca @du.callback să funcționeze!
-import callbacks_medical
-logger.info(f"✅ callbacks_medical imported: @du.callback decorators înregistrați")
+# CRITICAL: Import medical_callbacks AICI pentru ca @du.callback să funcționeze!
+import callbacks.medical_callbacks
+logger.info("✅ callbacks.medical_callbacks importat: @du.callback înregistrați")
 
 
 # === INIȚIALIZARE DATABASE & AUTHENTICATION ===
@@ -216,19 +181,7 @@ app.server.config['SQLALCHEMY_DATABASE_URI'] = database_url
 app.server.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.server.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'dev-secret-key-change-in-production')
 
-# === CONFIGURARE CONNECTION POOLING (DEFENSIVE) ===
-# Previne "Connection reset by peer" + memory leaks
-app.server.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
-    'pool_size': 10,              # Max 10 conexiuni persistente
-    'max_overflow': 20,           # Max 20 conexiuni overflow (total 30)
-    'pool_timeout': 30,           # Timeout 30s pentru conexiune nouă
-    'pool_recycle': 1800,         # Recycle conexiuni după 30 min
-    'pool_pre_ping': True,        # Health check înainte de fiecare query
-    'connect_args': {
-        'connect_timeout': 10,    # Timeout conexiune PostgreSQL: 10s
-        'options': '-c statement_timeout=60000'  # Query timeout: 60s
-    }
-}
+app.server.config['SQLALCHEMY_ENGINE_OPTIONS'] = sqlalchemy_engine_options(database_url)
 
 # Configurăm sesiuni
 app.server.config['SESSION_COOKIE_SECURE'] = os.getenv('SESSION_COOKIE_SECURE', 'False') == 'True'
@@ -238,7 +191,23 @@ app.server.config['PERMANENT_SESSION_LIFETIME'] = int(os.getenv('PERMANENT_SESSI
 
 # Inițializăm database-ul
 logger.info(f"📊 Inițializare database: {urlparse(database_url).scheme}://{urlparse(database_url).hostname or 'local'}")
-init_db(app)
+try:
+    init_db(app)
+except Exception as db_init_err:
+    logger.error(f"❌ Database init eșuat cu URL-ul configurat: {db_init_err}")
+    # Fallback la SQLite local dacă nu suntem în cloud
+    if not is_cloud:
+        sqlite_url = f"sqlite:///{os.path.join(os.getcwd(), 'pulsox_local_dev.db')}"
+        logger.warning(f"⚠️  Fallback la SQLite local: {sqlite_url}")
+        app.server.config['SQLALCHEMY_DATABASE_URI'] = sqlite_url
+        try:
+            init_db(app)
+            logger.info("✅ SQLite local inițializat cu succes (fallback).")
+        except Exception as sqlite_err:
+            logger.critical(f"❌❌ Fallback SQLite a eșuat: {sqlite_err}", exc_info=True)
+            raise
+    else:
+        raise
 
 # Inițializăm Flask-Login
 init_auth_manager(app)
@@ -250,7 +219,7 @@ init_auth_routes(app)
 # ELIMINAT: Werkzeug loggează deja toate cererile HTTP
 # Logging custom genereaza duplicate (3 linii per request!)
 # Păstrat doar pentru erori critice (4xx/5xx)
-if is_railway:
+if is_cloud:
     @app.server.after_request
     def log_errors_only(response):
         """Log doar erori HTTP în production (4xx/5xx)."""
@@ -294,7 +263,8 @@ schedule_cleanup_task()
 logger.info("📋 Înregistrare callbacks (originale + admin)...")
 # import callbacks  # [DISABLED BY TEAM] Ghost Code Elimination - Callbacks originale (vizualizare + batch) conflictuale
 # import callbacks_medical  # MOVED ABOVE (după du.configure_upload) - NU MAI IMPORTĂM AICI!
-import admin_callbacks  # Callbacks pentru administrare utilizatori (doar admin)
+import callbacks.admin_callbacks  # Callbacks pentru administrare utilizatori (doar admin)
+import callbacks.routing_callbacks  # Router token pacient / layout
 logger.info(f"✅ Callbacks înregistrate: {len(app.callback_map)} total")
 
 # [NEW] Register Debug System Callbacks
@@ -349,8 +319,8 @@ if __name__ == '__main__':
     logger.info("")
     
     # === CONFIGURARE DEFENSIVĂ PORT & HOST ===
-    # Detectăm environment-ul CORECT (Railway = production ÎNTOTDEAUNA)
-    is_production = railway_env is not None or os.getenv('PORT') is not None
+    # Cloud PaaS: host 0.0.0.0, fără debug. Local: 127.0.0.1 + debug.
+    is_production = is_cloud_runtime()
     
     # Port: Railway setează $PORT automat, altfel 8050 (local)
     port = int(os.getenv('PORT', 8050))

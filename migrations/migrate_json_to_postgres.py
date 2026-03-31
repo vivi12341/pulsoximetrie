@@ -90,15 +90,14 @@ def main():
             else:
                 logger.info("ℹ️  Utilizatori existenți găsiți - skip creare admin")
             
-            # STEP 4: NOTE despre patient_links.json
+            # STEP 4: patient_links → PostgreSQL (opțional, la runtime)
             logger.info("")
             logger.info("=" * 70)
-            logger.info("📋 NOTE DESPRE PATIENT_LINKS.JSON:")
+            logger.info("📋 METADATA LINK-URI PACIENT (patient_links):")
             logger.info("=" * 70)
-            logger.info("• Datele pacienților (patient_links.json) RĂMÂN în format JSON")
-            logger.info("• Token-urile UUID pentru pacienți continuă să funcționeze")
-            logger.info("• NU este nevoie de migrare - sistemul actual e optim!")
-            logger.info("• PostgreSQL este folosit DOAR pentru autentificare medici")
+            logger.info("• Cu USE_POSTGRES_PATIENT_LINKS=1, datele se persistă în tabelul patient_link_rows")
+            logger.info("• La primul load din R2/local, migrarea automată umple PostgreSQL dacă e gol")
+            logger.info("• patient_links.json rămâne cache / backup lângă R2")
             logger.info("=" * 70)
             
             logger.info("")

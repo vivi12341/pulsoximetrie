@@ -95,8 +95,8 @@ except Exception as e:
 # Test 4: Verificare callbacks în cod
 print("\n4️⃣ TEST: Verificare callbacks Dash")
 try:
-    import callbacks_medical
-    print("   ✅ Modulul callbacks_medical.py importat corect")
+    import callbacks.medical_callbacks as callbacks_medical
+    print("   ✅ Modulul callbacks.medical_callbacks importat corect")
     
     # Verificăm dacă toggle_images_view există
     if hasattr(callbacks_medical, 'toggle_images_view'):

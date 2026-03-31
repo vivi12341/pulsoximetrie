@@ -59,7 +59,7 @@ echo ================================================================
 echo.
 
 REM Pornim aplicatia Python cu calea completa
-"%PYTHON_EXE%" run.py
+"%PYTHON_EXE%" run_medical.py
 
 REM Daca ajungem aici, serverul s-a oprit
 echo.

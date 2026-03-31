@@ -1,4 +1,4 @@
-# ==============================================================================
+﻿# ==============================================================================
 # patient_links.py
 # ------------------------------------------------------------------------------
 # ROL: Gestionează link-urile persistente pentru pacienți (stocare locală JSON)
@@ -44,14 +44,25 @@ def load_patient_links() -> Dict:
     Returns:
         Dict: Dicționar cu token-uri ca chei și metadata ca valori
     """
+    _migrate = None
+    try:
+        from repositories.patient_repository import load_all_from_postgres, migrate_legacy_if_empty
+        _migrate = migrate_legacy_if_empty
+        _pg = load_all_from_postgres()
+        if _pg is not None:
+            logger.warning(f"📗 [LINKS_PG] Încărcate {len(_pg)} link-uri din PostgreSQL")
+            return _pg
+    except Exception as pg_err:
+        logger.debug(f"[LINKS_PG] ocolit: {pg_err}")
+
     # PRIORITY 1: Try loading from Scaleway (PERSISTENT)
     try:
         from storage_service import r2_client
         if r2_client.enabled:
-            logger.critical(f"☁️ [LINKS_SCALEWAY] === ATTEMPTING SCALEWAY LOAD ===")
-            logger.critical(f"☁️ [LINKS_SCALEWAY] Object key: {LINKS_METADATA_S3_KEY}")
-            logger.critical(f"☁️ [LINKS_SCALEWAY] R2 Client enabled: {r2_client.enabled}")
-            logger.critical(f"☁️ [LINKS_SCALEWAY] Bucket: {getattr(r2_client, 'bucket_name', 'N/A')}")
+            logger.debug(f"☁️ [LINKS_SCALEWAY] === ATTEMPTING SCALEWAY LOAD ===")
+            logger.debug(f"☁️ [LINKS_SCALEWAY] Object key: {LINKS_METADATA_S3_KEY}")
+            logger.debug(f"☁️ [LINKS_SCALEWAY] R2 Client enabled: {r2_client.enabled}")
+            logger.debug(f"☁️ [LINKS_SCALEWAY] Bucket: {getattr(r2_client, 'bucket_name', 'N/A')}")
             
             import time
             start_time = time.time()
@@ -60,15 +71,15 @@ def load_patient_links() -> Dict:
             
             if content:
                 links = json.loads(content.decode('utf-8'))
-                logger.critical(f"✅ [LINKS_SCALEWAY] SUCCESS!")
-                logger.critical(f"   - Links Count: {len(links)}")
-                logger.critical(f"   - Download Time: {elapsed:.3f}s")
-                logger.critical(f"   - Size: {len(content)} bytes ({len(content)/1024:.2f} KB)")
+                logger.debug(f"✅ [LINKS_SCALEWAY] SUCCESS!")
+                logger.debug(f"   - Links Count: {len(links)}")
+                logger.debug(f"   - Download Time: {elapsed:.3f}s")
+                logger.debug(f"   - Size: {len(content)} bytes ({len(content)/1024:.2f} KB)")
                 
                 # Show sample of loaded tokens
                 if links:
                     sample_tokens = list(links.keys())[:5]
-                    logger.critical(f"   - Sample Tokens: {[t[:8] + '...' for t in sample_tokens]}")
+                    logger.debug(f"   - Sample Tokens: {[t[:8] + '...' for t in sample_tokens]}")
                 
                 # Save local cache for faster subsequent reads
                 try:
@@ -77,16 +88,18 @@ def load_patient_links() -> Dict:
                     logger.debug(f"💾 [LINKS_CACHE] Cached {len(links)} links locally")
                 except Exception as cache_err:
                     logger.warning(f"⚠️ [LINKS_CACHE] Cache write failed: {cache_err}")
-                    
+
+                if _migrate:
+                    _migrate(links)
                 return links
             else:
-                logger.critical(f"⚠️ [LINKS_SCALEWAY] Returned EMPTY content (file may not exist)")
-                logger.critical(f"   - Download Time: {elapsed:.3f}s")
+                logger.debug(f"⚠️ [LINKS_SCALEWAY] Returned EMPTY content (file may not exist)")
+                logger.debug(f"   - Download Time: {elapsed:.3f}s")
     except ImportError as imp_err:
-        logger.critical(f"⚠️ [LINKS_SCALEWAY] ImportError: {imp_err}")
-        logger.critical(f"⚠️ [LINKS_SCALEWAY] storage_service not available")
+        logger.debug(f"⚠️ [LINKS_SCALEWAY] ImportError: {imp_err}")
+        logger.debug(f"⚠️ [LINKS_SCALEWAY] storage_service not available")
     except Exception as e:
-        logger.critical(f"❌ [LINKS_SCALEWAY] Exception: {e}", exc_info=True)
+        logger.debug(f"❌ [LINKS_SCALEWAY] Exception: {e}", exc_info=True)
     
     # FALLBACK: Try local file (ephemeral cache)
     if os.path.exists(PATIENT_LINKS_FILE):
@@ -94,6 +107,8 @@ def load_patient_links() -> Dict:
             with open(PATIENT_LINKS_FILE, 'r', encoding='utf-8') as f:
                 links = json.load(f)
                 logger.warning(f"💾 [LINKS_LOAD] Loaded {len(links)} links from LOCAL (ephemeral cache)")
+                if _migrate:
+                    _migrate(links)
                 return links
         except Exception as e:
             logger.error(f"❌ [LINKS_LOAD] Local load failed: {e}", exc_info=True)
@@ -119,7 +134,13 @@ def save_patient_links(links: Dict) -> bool:
     import time
     scaleway_success = False
     local_success = False
-    
+
+    try:
+        from repositories.patient_repository import replace_all_in_postgres
+        replace_all_in_postgres(links)
+    except Exception as pg_save_err:
+        logger.debug(f"[LINKS_PG] save ocolit: {pg_save_err}")
+
     # PRIORITY 1: Save to Scaleway (PERSISTENT)
     try:
         from storage_service import r2_client
@@ -196,16 +217,16 @@ def generate_patient_link(device_name: str, notes: str = "", recording_date: str
         str: Token-ul UUID (existent sau nou) sau None dacă eroare
     """
     # [DIAGNOSTIC LOG 1] Function entry
-    logger.critical(f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-    logger.critical(f"🔗 [LINK_CREATE] START: generate_patient_link()")
-    logger.critical(f"   - Device: {device_name}")
-    logger.critical(f"   - Recording date: {recording_date}")
-    logger.critical(f"   - Time range: {start_time} → {end_time}")
-    logger.critical(f"   - PDF path: {pdf_path if pdf_path else 'None'}")
-    logger.critical(f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+    logger.debug(f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+    logger.debug(f"🔗 [LINK_CREATE] START: generate_patient_link()")
+    logger.debug(f"   - Device: {device_name}")
+    logger.debug(f"   - Recording date: {recording_date}")
+    logger.debug(f"   - Time range: {start_time} → {end_time}")
+    logger.debug(f"   - PDF path: {pdf_path if pdf_path else 'None'}")
+    logger.debug(f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
     try:
         # [STEP 1] Verificare duplicate (evitare link-uri duplicate pentru același device + dată)
-        logger.critical(f"🔍 [LINK_CREATE] STEP 1: Checking for existing link (duplicate detection)...")
+        logger.debug(f"🔍 [LINK_CREATE] STEP 1: Checking for existing link (duplicate detection)...")
         links = load_patient_links()
         
         existing_token = None
@@ -215,27 +236,27 @@ def generate_patient_link(device_name: str, notes: str = "", recording_date: str
                     metadata.get('recording_date') == recording_date and
                     metadata.get('start_time') == start_time):
                     existing_token = token
-                    logger.critical(f"✅ [LINK_CREATE] STEP 1 RESULT: Existing link found (duplicate)")
-                    logger.critical(f"   - Existing token: {existing_token}")
-                    logger.critical(f"   - Device: {device_name}")
-                    logger.critical(f"   - Date: {recording_date} {start_time}")
-                    logger.critical(f"   - Action: Returning existing token (no new link created)")
-                    logger.critical(f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+                    logger.debug(f"✅ [LINK_CREATE] STEP 1 RESULT: Existing link found (duplicate)")
+                    logger.debug(f"   - Existing token: {existing_token}")
+                    logger.debug(f"   - Device: {device_name}")
+                    logger.debug(f"   - Date: {recording_date} {start_time}")
+                    logger.debug(f"   - Action: Returning existing token (no new link created)")
+                    logger.debug(f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
                     return existing_token
         
         if not existing_token:
-            logger.critical(f"✅ [LINK_CREATE] STEP 1 RESULT: No existing link found")
-            logger.critical(f"   - Action: Creating new link")
+            logger.debug(f"✅ [LINK_CREATE] STEP 1 RESULT: No existing link found")
+            logger.debug(f"   - Action: Creating new link")
         
         # [STEP 2] Generare token nou
         # [DIAGNOSTIC LOG 2] Token generation
         token = str(uuid.uuid4())
-        logger.critical(f"🆕 [LINK_CREATE] STEP 2: New token generated")
-        logger.critical(f"   - Token: {token}")
-        logger.critical(f"   - Short token: {token[:8]}...")
+        logger.debug(f"🆕 [LINK_CREATE] STEP 2: New token generated")
+        logger.debug(f"   - Token: {token}")
+        logger.debug(f"   - Short token: {token[:8]}...")
         
         # [STEP 3] Creare metadata link
-        logger.critical(f"📋 [LINK_CREATE] STEP 3: Creating link metadata...")
+        logger.debug(f"📋 [LINK_CREATE] STEP 3: Creating link metadata...")
         
         # Creăm folderul pentru acest pacient
         patient_folder = os.path.join(PATIENT_DATA_DIR, token)
@@ -265,24 +286,24 @@ def generate_patient_link(device_name: str, notes: str = "", recording_date: str
         }
         
         # [STEP 4] Salvare în Scaleway (persistent)
-        logger.critical(f"💾 [LINK_CREATE] STEP 4: Saving to Scaleway (persistent storage)...")
-        logger.critical(f"   - Links count: {len(links)}")
-        logger.critical(f"   - New token added: {token[:8]}...")
+        logger.debug(f"💾 [LINK_CREATE] STEP 4: Saving to Scaleway (persistent storage)...")
+        logger.debug(f"   - Links count: {len(links)}")
+        logger.debug(f"   - New token added: {token[:8]}...")
         
         save_success = save_patient_links(links)
         
         # [DIAGNOSTIC LOG 3] Save result
         if save_success:
-            logger.critical(f"✅ [LINK_CREATE] STEP 4 COMPLETE: Link saved to Scaleway successfully")
-            logger.critical(f"   - Token: {token}")
-            logger.critical(f"   - Device: {device_name}")
-            logger.critical(f"   - Scaleway persistence: CONFIRMED")
+            logger.debug(f"✅ [LINK_CREATE] STEP 4 COMPLETE: Link saved to Scaleway successfully")
+            logger.debug(f"   - Token: {token}")
+            logger.debug(f"   - Device: {device_name}")
+            logger.debug(f"   - Scaleway persistence: CONFIRMED")
         else:
-            logger.critical(f"❌ [LINK_CREATE] STEP 4 FAILED: Scaleway save returned False")
-            logger.critical(f"   - Token: {token}")
-            logger.critical(f"   - WARNING: Link may not persist across Railway restarts!")
+            logger.debug(f"❌ [LINK_CREATE] STEP 4 FAILED: Scaleway save returned False")
+            logger.debug(f"   - Token: {token}")
+            logger.warning(f"   - WARNING: Link may not persist across Railway restarts!")
         
-        logger.critical(f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+        logger.debug(f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
         logger.info(f"✅ [TRACE-DATA] [LOG 08] Link nou generat pentru aparat '{device_name}': {token}")
         logger.info(f"   [TRACE-DATA] PDF Path: {pdf_path}")
         logger.info(f"   [TRACE-DATA] Recording Date: {recording_date}")
@@ -306,21 +327,21 @@ def get_patient_link(token: str, track_view: bool = True) -> Optional[Dict]:
     Returns:
         Dict: Metadata pacient sau None dacă nu există
     """
-    logger.critical(f"📥 [GET_PATIENT_LINK] *** START for token {token[:8]}... ***")
-    logger.critical(f"📥 [GET_PATIENT_LINK] track_view={track_view}")
+    logger.debug(f"📥 [GET_PATIENT_LINK] *** START for token {token[:8]}... ***")
+    logger.debug(f"📥 [GET_PATIENT_LINK] track_view={track_view}")
     
-    logger.critical(f"📥 [GET_PATIENT_LINK] Step 1: Loading all patient links from Scaleway...")
+    logger.debug(f"📥 [GET_PATIENT_LINK] Step 1: Loading all patient links from Scaleway...")
     links = load_patient_links()
-    logger.critical(f"📥 [GET_PATIENT_LINK] Step 2: Loaded {len(links)} total links")
-    logger.critical(f"📥 [GET_PATIENT_LINK] Step 3: Searching for token {token[:8]}... in {len(links)} links")
+    logger.debug(f"📥 [GET_PATIENT_LINK] Step 2: Loaded {len(links)} total links")
+    logger.debug(f"📥 [GET_PATIENT_LINK] Step 3: Searching for token {token[:8]}... in {len(links)} links")
     
     patient_data = links.get(token)
     
     if patient_data:
-        logger.critical(f"✅ [GET_PATIENT_LINK] Step 4: Token FOUND!")
-        logger.critical(f"📊 [GET_PATIENT_LINK] Device: {patient_data.get('device_name', 'N/A')}")
-        logger.critical(f"📊 [GET_PATIENT_LINK] is_active: {patient_data.get('is_active', 'N/A')}")
-        logger.critical(f"📊 [GET_PATIENT_LINK] created_at: {patient_data.get('created_at', 'N/A')}")
+        logger.debug(f"✅ [GET_PATIENT_LINK] Step 4: Token FOUND!")
+        logger.debug(f"📊 [GET_PATIENT_LINK] Device: {patient_data.get('device_name', 'N/A')}")
+        logger.debug(f"📊 [GET_PATIENT_LINK] is_active: {patient_data.get('is_active', 'N/A')}")
+        logger.debug(f"📊 [GET_PATIENT_LINK] created_at: {patient_data.get('created_at', 'N/A')}")
         
         # Actualizăm last_accessed (backward compatibility)
         patient_data['last_accessed'] = datetime.now().isoformat()
@@ -332,8 +353,8 @@ def get_patient_link(token: str, track_view: bool = True) -> Optional[Dict]:
         if track_view:
             track_link_view(token)
     else:
-        logger.critical(f"❌ [GET_PATIENT_LINK] Step 4: Token {token[:8]}... NOT FOUND!")
-        logger.critical(f"❌ [GET_PATIENT_LINK] Available tokens in DB: {[t[:8] + '...' for t in list(links.keys())[:10]]}")
+        logger.debug(f"❌ [GET_PATIENT_LINK] Step 4: Token {token[:8]}... NOT FOUND!")
+        logger.debug(f"❌ [GET_PATIENT_LINK] Available tokens in DB: {[t[:8] + '...' for t in list(links.keys())[:10]]}")
     
     return patient_data
 
@@ -777,43 +798,43 @@ def validate_token(token: str) -> bool:
     Returns:
         bool: True dacă token-ul este valid
     """
-    logger.critical("=" * 100)
-    logger.critical(f"🔐 [TOKEN_VALIDATION] *** START VALIDATION ***")
-    logger.critical(f"🔐 [TOKEN_VALIDATION] Token to validate: {token[:8] if token else 'None'}...")
-    logger.critical("=" * 100)
+    logger.debug("=" * 100)
+    logger.debug(f"🔐 [TOKEN_VALIDATION] *** START VALIDATION ***")
+    logger.debug(f"🔐 [TOKEN_VALIDATION] Token to validate: {token[:8] if token else 'None'}...")
+    logger.debug("=" * 100)
     
     if not token:
-        logger.critical(f"❌ [TOKEN_VALIDATION] Token is None or empty - INVALID")
+        logger.debug(f"❌ [TOKEN_VALIDATION] Token is None or empty - INVALID")
         return False
     
-    logger.critical(f"🔐 [TOKEN_VALIDATION] Step 1: Calling get_patient_link()...")
+    logger.debug(f"🔐 [TOKEN_VALIDATION] Step 1: Calling get_patient_link()...")
     patient_data = get_patient_link(token, track_view=False)
-    logger.critical(f"🔐 [TOKEN_VALIDATION] Step 2: get_patient_link() returned: {type(patient_data)}")
+    logger.debug(f"🔐 [TOKEN_VALIDATION] Step 2: get_patient_link() returned: {type(patient_data)}")
     
     if not patient_data:
-        logger.critical(f"❌ [TOKEN_VALIDATION] Token {token[:8]}... NOT FOUND in database - INVALID")
-        logger.critical(f"❌ [TOKEN_VALIDATION] get_patient_link() returned: {patient_data}")
+        logger.debug(f"❌ [TOKEN_VALIDATION] Token {token[:8]}... NOT FOUND in database - INVALID")
+        logger.debug(f"❌ [TOKEN_VALIDATION] get_patient_link() returned: {patient_data}")
         return False
     
-    logger.critical(f"✅ [TOKEN_VALIDATION] Step 3: Token FOUND in database!")
-    logger.critical(f"📊 [TOKEN_VALIDATION] Data keys: {list(patient_data.keys())}")
+    logger.debug(f"✅ [TOKEN_VALIDATION] Step 3: Token FOUND in database!")
+    logger.debug(f"📊 [TOKEN_VALIDATION] Data keys: {list(patient_data.keys())}")
     
     device_name = patient_data.get('device_name', 'N/A')
-    logger.critical(f"📊 [TOKEN_VALIDATION] Device: {device_name[:30]}...")
-    logger.critical(f"📊 [TOKEN_VALIDATION] Recording date: {patient_data.get('recording_date', 'N/A')}")
-    logger.critical(f"📊 [TOKEN_VALIDATION] Created at: {patient_data.get('created_at', 'N/A')}")
+    logger.debug(f"📊 [TOKEN_VALIDATION] Device: {device_name[:30]}...")
+    logger.debug(f"📊 [TOKEN_VALIDATION] Recording date: {patient_data.get('recording_date', 'N/A')}")
+    logger.debug(f"📊 [TOKEN_VALIDATION] Created at: {patient_data.get('created_at', 'N/A')}")
     
     is_active = patient_data.get('is_active', True)
-    logger.critical(f"🔍 [TOKEN_VALIDATION] Step 4: Checking is_active status...")
-    logger.critical(f"🔍 [TOKEN_VALIDATION] is_active value: {is_active} (type: {type(is_active)})")
+    logger.debug(f"🔍 [TOKEN_VALIDATION] Step 4: Checking is_active status...")
+    logger.debug(f"🔍 [TOKEN_VALIDATION] is_active value: {is_active} (type: {type(is_active)})")
     
     if not is_active:
-        logger.critical(f"⚠️ [TOKEN_VALIDATION] Token is INACTIVE (deactivated) - INVALID")
+        logger.debug(f"⚠️ [TOKEN_VALIDATION] Token is INACTIVE (deactivated) - INVALID")
         return False
     
-    logger.critical(f"✅ [TOKEN_VALIDATION] *** VALIDATION SUCCESS ***")
-    logger.critical(f"✅ [TOKEN_VALIDATION] Token {token[:8]}... is VALID and ACTIVE")
-    logger.critical("=" * 100)
+    logger.debug(f"✅ [TOKEN_VALIDATION] *** VALIDATION SUCCESS ***")
+    logger.debug(f"✅ [TOKEN_VALIDATION] Token {token[:8]}... is VALID and ACTIVE")
+    logger.debug("=" * 100)
     return True
 
 

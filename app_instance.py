@@ -3,7 +3,7 @@
 # ------------------------------------------------------------------------------
 # ROL: Definește și exportă instanța centrală a aplicației Dash.
 #      Acest fișier există pentru a preveni importurile circulare. Modulele
-#      care au nevoie de obiectul 'app' (cum ar fi callbacks.py sau run.py)
+#      care au nevoie de obiectul 'app' (ex.: callbacks.*, run_medical.py)
 #      îl vor importa direct de aici.
 #
 # MOD DE UTILIZARE:
@@ -14,7 +14,7 @@ import dash
 import os
 import io
 import zipfile
-from flask import send_from_directory, send_file
+from flask import send_from_directory, send_file, abort
 from datetime import datetime
 
 # Importăm instanța de logger pentru a înregistra pornirea aplicației
@@ -144,18 +144,33 @@ logger.warning("=" * 80)
 
 # === CONFIGURARE SERVIRE IMAGINI ȘI PDF-URI PACIENȚI ===
 # Route personalizat pentru servirea resurselor din patient_data
+ALLOWED_RESOURCE_TYPES = {'images', 'pdfs', 'csvs'}
+
 @app.server.route('/patient_assets/<token>/<resource_type>/<filename>')
 def serve_patient_resource(token, resource_type, filename):
     """
-    Servește resurse (imagini, PDF-uri) din folderul pacientului.
+    Servește resurse (imagini, PDF-uri, CSV-uri) din folderul pacientului.
     
     Args:
         token: UUID-ul pacientului
-        resource_type: 'images' sau 'pdfs'
+        resource_type: 'images', 'pdfs' sau 'csvs'
         filename: Numele fișierului
     """
+    if resource_type not in ALLOWED_RESOURCE_TYPES:
+        logger.warning(f"Tip resursă invalid solicitat: '{resource_type}' pentru token {token[:8]}...")
+        abort(404)
+    
     patient_folder = os.path.join('patient_data', token, resource_type)
-    return send_from_directory(patient_folder, filename)
+    
+    if not os.path.isdir(patient_folder):
+        logger.warning(f"Folder pacient inexistent: {token[:8]}.../{resource_type}")
+        abort(404)
+    
+    try:
+        return send_from_directory(patient_folder, filename)
+    except Exception:
+        logger.warning(f"Resursă inexistentă: {token[:8]}.../{resource_type}/{filename}")
+        abort(404)
 
 
 @app.server.route('/download_all/<token>')

@@ -33,18 +33,25 @@ def parse_csv_data(file_content: bytes, file_name: str) -> pd.DataFrame:
         logger.info(f"Fișierul '{file_name}' a fost încărcat. S-au găsit {len(df)} rânduri.")
 
         # --- Etapa de Validare și Redenumire a Coloanelor ---
-        expected_romanian_columns = ['Timp', 'Nivel de oxigen', 'Puls cardiac', 'Mişcare']
-        if not all(col in df.columns for col in expected_romanian_columns):
-            missing = set(expected_romanian_columns) - set(df.columns)
-            logger.error(f"Coloane obligatorii lipsă în '{file_name}': {missing}")
-            raise ValueError(f"Structura CSV este invalidă. Coloane lipsă: {', '.join(missing)}")
+        required_columns = ['Timp', 'Nivel de oxigen', 'Puls cardiac']
+        optional_columns = ['Mişcare']  # opțional conform specificației dispozitivului
+        
+        missing_required = set(required_columns) - set(df.columns)
+        if missing_required:
+            logger.error(f"Coloane obligatorii lipsă în '{file_name}': {missing_required}")
+            raise ValueError(f"Structura CSV este invalidă. Coloane obligatorii lipsă: {', '.join(missing_required)}")
         
         rename_map = {
             'Timp': 'Time',
             'Nivel de oxigen': 'SpO2',
             'Puls cardiac': 'Pulse Rate',
-            'Mişcare': 'Motion'
         }
+        for opt_col in optional_columns:
+            if opt_col in df.columns:
+                rename_map[opt_col] = 'Motion'
+            else:
+                logger.debug(f"Coloana opțională '{opt_col}' lipsă în '{file_name}' — va fi ignorată.")
+        
         df.rename(columns=rename_map, inplace=True)
         logger.info("Coloanele au fost redenumite la standardul intern.")
         

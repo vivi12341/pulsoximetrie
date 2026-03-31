@@ -9,7 +9,15 @@
 
 SECRET_KEY=your-very-secret-random-key-here-replace-this-64-chars-long
 FLASK_ENV=development
-DATABASE_URL=postgresql://postgres:postgres@localhost:5432/pulsoximetrie
+# Local: poți lăsa DATABASE_URL gol → aplicația folosește SQLite (pulsox_local_dev.db).
+# Sau Postgres local:
+# DATABASE_URL=postgresql://postgres:postgres@localhost:5432/pulsoximetrie
+DATABASE_URL=
+# Cloud (Railway/Render/…): platforma setează DATABASE_URL automat; USE_POSTGRES_PATIENT_LINKS=1 implicit.
+# Local: implicit 0 (metadata din patient_links.json / R2). Opțional 1 dacă vrei PG și local.
+USE_POSTGRES_PATIENT_LINKS=
+# Opțional: rădăcina exploratorului de foldere (mod batch local). Implicit = directorul curent al aplicației.
+# PULSOX_BATCH_BROWSE_ROOT=C:\Date\Pulsox
 BREVO_API_KEY=xkeysib-your-brevo-api-key-here
 SENDER_EMAIL=noreply@pulsoximetrie.ro
 SENDER_NAME=Platformă Pulsoximetrie

@@ -1,5 +1,5 @@
 """
-callbacks_routing.py - Application Router Logic
+callbacks/routing_callbacks.py - Application Router Logic
 
 [CRITICAL FIX] Patient token links
 Root cause: request.args doesn't work for Dash internal requests (/_dash-layout)
@@ -13,10 +13,10 @@ from dash import Input, Output, clientside_callback, callback
 from flask_login import current_user
 from logger_setup import logger
 
-# Import layouts - [HOTFIX v2] create_login_prompt is in callbacks_medical!
+# Import layouts - create_login_prompt: callbacks.medical_callbacks
 from layout_partials.patient_layout import get_patient_layout, get_error_layout
 from layout_partials.medical_layout import get_medical_layout
-from callbacks_medical import create_login_prompt
+from callbacks.medical_callbacks import create_login_prompt
 
 # Import validation
 from patient_links import validate_token
@@ -140,6 +140,6 @@ def route_application(token):
 # ============================================================================
 # Module Initialization Log
 # ============================================================================
-logger.info("✅ callbacks_routing.py initialized - Router callbacks registered")
+logger.info("✅ callbacks.routing_callbacks inițializat - Router înregistrat")
 logger.info("   - Clientside callback: URL token extraction")
 logger.info("   - Server callback: Application routing logic")

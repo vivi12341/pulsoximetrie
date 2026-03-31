@@ -90,26 +90,28 @@ def initialize_application():
     
     load_dotenv()
     from logger_setup import logger
-    
+    from shared.runtime_mode import (
+        apply_default_patient_links_storage_mode,
+        is_cloud_runtime,
+        resolve_database_url,
+        sqlalchemy_engine_options,
+    )
+
+    apply_default_patient_links_storage_mode()
+
     logger.warning("=" * 70)
     logger.warning("[INIT] 🏥 REPARARE CRASH - UPDATE CONFIG PE FLASK SERVER")
     logger.warning("=" * 70)
-    
-    database_url = os.getenv('DATABASE_URL')
-    if not database_url:
-        raise RuntimeError("DATABASE_URL unavailable")
+
+    database_url = resolve_database_url()
+    if is_cloud_runtime() and not (database_url or "").strip():
+        raise RuntimeError("DATABASE_URL unavailable în mediul cloud")
 
     try:
-        # CRITICAL FIX: Folosim 'server' (Flask), nu 'application' (WhiteNoise)
         server.config['SQLALCHEMY_DATABASE_URI'] = database_url
         server.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
         server.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'dev-')
-        
-        server.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
-            'pool_size': 10,
-            'pool_pre_ping': True,
-            'connect_args': {'connect_timeout': 10}
-        }
+        server.config['SQLALCHEMY_ENGINE_OPTIONS'] = sqlalchemy_engine_options(database_url)
         logger.warning("✅ Flask/DB Config applied to server object")
     except Exception as e:
         logger.critical(f"❌ Config Error: {e}")
@@ -160,31 +162,27 @@ def initialize_application():
     
     init_db(app) # Intern folosește app.server
     
-    # [ITERATION 3] Test actual DB connection and log negotiated protocol
+    # Test conexiune (doar PostgreSQL; SQLite nu suportă SHOW ssl)
     try:
-        with server.app_context():
-            from auth.models import db
-            # Get raw connection to query SSL info
-            connection = db.engine.raw_connection()
-            cursor = connection.cursor()
-            
-            # Query PostgreSQL for SSL status
-            cursor.execute("SHOW ssl;")
-            ssl_enabled = cursor.fetchone()[0]
-            logger.warning(f"🔍 [DB_CONNECTION_TEST] SSL Enabled: {ssl_enabled}")
-            
-            # Try to get SSL version (may not work on all Postgres versions)
-            try:
-                cursor.execute("SELECT version();")
-                pg_version = cursor.fetchone()[0]
-                logger.warning(f"🔍 [DB_CONNECTION_TEST] PostgreSQL Version: {pg_version[:50]}...")
-            except Exception as ver_err:
-                logger.warning(f"⚠️ [DB_CONNECTION_TEST] Could not get PG version: {ver_err}")
-            
-            cursor.close()
-            connection.close()
-            logger.warning(f"✅ [DB_CONNECTION_TEST] Connection test SUCCESSFUL!")
-            
+        from urllib.parse import urlparse as _urlparse
+        _scheme = (_urlparse(database_url).scheme or "").lower()
+        if not _scheme.startswith("sqlite"):
+            with server.app_context():
+                from auth.models import db
+                connection = db.engine.raw_connection()
+                cursor = connection.cursor()
+                cursor.execute("SHOW ssl;")
+                ssl_enabled = cursor.fetchone()[0]
+                logger.warning(f"🔍 [DB_CONNECTION_TEST] SSL Enabled: {ssl_enabled}")
+                try:
+                    cursor.execute("SELECT version();")
+                    pg_version = cursor.fetchone()[0]
+                    logger.warning(f"🔍 [DB_CONNECTION_TEST] PostgreSQL Version: {pg_version[:50]}...")
+                except Exception as ver_err:
+                    logger.warning(f"⚠️ [DB_CONNECTION_TEST] Could not get PG version: {ver_err}")
+                cursor.close()
+                connection.close()
+                logger.warning("✅ [DB_CONNECTION_TEST] Connection test SUCCESSFUL!")
     except Exception as conn_test_err:
         logger.error(f"❌ [DB_CONNECTION_TEST] Connection test FAILED: {conn_test_err}", exc_info=True)
     
@@ -198,13 +196,12 @@ def initialize_application():
     logger.warning("✅ Dash Uploader configured")
     
     # Import Callbacks
-    import callbacks_routing  # [NEW] Router callbacks for patient token links
-    import admin_callbacks
-    import callbacks_medical
-    import callbacks  # Original callbacks
+    import callbacks.routing_callbacks
+    import callbacks.admin_callbacks
+    import callbacks.medical_callbacks
     
     # [NEW] Register Debug System Callbacks
-    from debug_system import register_debug_callbacks
+    from ui.debug_system import register_debug_callbacks
     register_debug_callbacks(app)
     
     logger.warning("✅ Callbacks imported (including Debug System)")

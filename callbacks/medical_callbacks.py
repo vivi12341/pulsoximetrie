@@ -1,22 +1,24 @@
 # ==============================================================================
-# callbacks_medical.py (WORKFLOW MEDICAL)
+# callbacks/medical_callbacks.py (WORKFLOW MEDICAL — admin + batch principal)
 # ------------------------------------------------------------------------------
 # ROL: Callbacks pentru funcționalitatea medical workflow:
 #      - Admin: Creare link-uri, upload CSV pentru pacienți
-#      - Pacient: Acces înregistrări, explorare CSV temporară
+#      - Modul pacient / PDF / branding: patient_view_callbacks, medical_branding_callbacks
 #
 # RESPECTĂ: .cursorrules - Privacy by Design, Logging comprehensiv
 # ==============================================================================
 
 import base64
+import json
 import pandas as pd
 import os
 import pathlib
+import re
 import time
 import dash_uploader as du
 import plotly.graph_objects as go
 from dash.dependencies import Input, Output, State, ALL
-from dash import html, no_update, dcc
+from dash import html, no_update, dcc, callback_context
 from datetime import datetime
 from typing import List, Dict
 
@@ -25,12 +27,267 @@ from logger_setup import logger
 import patient_links
 from data_parser import parse_csv_data
 from plot_generator import create_plot
-from batch_processor import run_batch_job
+from services.batch_service import run_batch_job
 import batch_session_manager
 import config
 from auth_ui_components import create_auth_header
 import data_service  # [NEW] Serviciu centralizat de date
-import os
+from shared.runtime_mode import is_cloud_runtime
+
+
+# ==============================================================================
+# HELPER FUNCTIONS
+# ==============================================================================
+
+def _parse_trigger_component_id(prop_id: str) -> dict:
+    """Extrage id-ul componentei din prop_id Dash (înainte de .property)."""
+    left = prop_id.rsplit(".", 1)[0]
+    try:
+        return json.loads(left)
+    except json.JSONDecodeError:
+        import ast
+        return ast.literal_eval(left)
+
+
+def _safe_under_batch_root(path_str: str) -> str | None:
+    """Returnează calea rezolvată dacă este sub BATCH_BROWSE_ROOT, altfel None."""
+    if not path_str or not str(path_str).strip():
+        return None
+    try:
+        root = pathlib.Path(config.get_batch_browse_root()).resolve()
+        p = pathlib.Path(path_str).expanduser().resolve()
+        p.relative_to(root)
+        return str(p)
+    except (ValueError, OSError, RuntimeError):
+        return None
+
+
+def _parent_clamped(current: pathlib.Path, root: pathlib.Path) -> pathlib.Path:
+    """Folder părinte, fără a ieși din root."""
+    try:
+        current = current.resolve()
+        root = root.resolve()
+        current.relative_to(root)
+    except (ValueError, OSError):
+        return root
+    parent = current.parent
+    try:
+        parent.relative_to(root)
+        return parent
+    except ValueError:
+        return root
+
+
+def _list_subdir_names(abs_dir: str) -> list[str]:
+    """Numele subdirectoarelor (fără ascunse .), sortate."""
+    names: list[str] = []
+    try:
+        with os.scandir(abs_dir) as it:
+            for e in it:
+                if e.is_dir() and not e.name.startswith("."):
+                    names.append(e.name)
+    except OSError:
+        return []
+    return sorted(names, key=lambda s: s.lower())
+
+
+# ==============================================================================
+# Explorator foldere — mod batch local (căi pe server)
+# ==============================================================================
+
+
+@app.callback(
+    [
+        Output("admin-batch-browse-input-list", "children"),
+        Output("admin-batch-browse-input-entries", "data"),
+        Output("admin-batch-browse-input-path-display", "children"),
+    ],
+    Input("admin-batch-browse-input-current", "data"),
+    prevent_initial_call=False,
+)
+def render_batch_browse_input_list(current_path):
+    if is_cloud_runtime():
+        return [], [], html.Span("")
+    root = pathlib.Path(config.get_batch_browse_root()).resolve()
+    cur = _safe_under_batch_root(str(current_path)) if current_path else None
+    if not cur:
+        cur = str(root)
+    names = _list_subdir_names(cur)
+    buttons = [
+        html.Button(
+            f"📁 {n}",
+            id={"type": "admin-batch-browse-input-dir", "i": i},
+            n_clicks=0,
+            className="btn-secondary",
+            style={"textAlign": "left", "padding": "8px 12px"},
+        )
+        for i, n in enumerate(names)
+    ]
+    if not buttons:
+        buttons = [html.P("Niciun subfolder.", style={"color": "#7f8c8d", "fontSize": "13px"})]
+    return buttons, names, html.Code(cur)
+
+
+@app.callback(
+    [
+        Output("admin-batch-browse-output-list", "children"),
+        Output("admin-batch-browse-output-entries", "data"),
+        Output("admin-batch-browse-output-path-display", "children"),
+    ],
+    Input("admin-batch-browse-output-current", "data"),
+    prevent_initial_call=False,
+)
+def render_batch_browse_output_list(current_path):
+    if is_cloud_runtime():
+        return [], [], html.Span("")
+    root = pathlib.Path(config.get_batch_browse_root()).resolve()
+    cur = _safe_under_batch_root(str(current_path)) if current_path else None
+    if not cur:
+        cur = str(root)
+    names = _list_subdir_names(cur)
+    buttons = [
+        html.Button(
+            f"📁 {n}",
+            id={"type": "admin-batch-browse-output-dir", "i": i},
+            n_clicks=0,
+            className="btn-secondary",
+            style={"textAlign": "left", "padding": "8px 12px"},
+        )
+        for i, n in enumerate(names)
+    ]
+    if not buttons:
+        buttons = [html.P("Niciun subfolder.", style={"color": "#7f8c8d", "fontSize": "13px"})]
+    return buttons, names, html.Code(cur)
+
+
+@app.callback(
+    Output("admin-batch-browse-input-current", "data"),
+    [
+        Input("admin-batch-mode-selector", "value"),
+        Input("admin-batch-browse-input-up", "n_clicks"),
+        Input({"type": "admin-batch-browse-input-dir", "i": ALL}, "n_clicks"),
+    ],
+    [
+        State("admin-batch-browse-input-current", "data"),
+        State("admin-batch-browse-input-entries", "data"),
+    ],
+    prevent_initial_call=False,
+)
+def sync_batch_browse_input_current(mode, n_up, n_dir_clicks, cur, entries):
+    if is_cloud_runtime():
+        return no_update
+    root = pathlib.Path(config.get_batch_browse_root()).resolve()
+    cur_safe = _safe_under_batch_root(str(cur)) if cur else None
+    if not cur_safe:
+        cur_safe = str(root)
+
+    if not callback_context.triggered:
+        return cur_safe
+
+    trig = callback_context.triggered[0]
+    prop_id = trig["prop_id"]
+    val = trig.get("value")
+
+    if prop_id.startswith("admin-batch-mode-selector"):
+        if mode == "local":
+            return str(root)
+        return no_update
+
+    if prop_id.startswith("admin-batch-browse-input-up"):
+        if not n_up:
+            return no_update
+        return str(_parent_clamped(pathlib.Path(cur_safe), root))
+
+    if "admin-batch-browse-input-dir" in prop_id:
+        if not val:
+            return no_update
+        btn = _parse_prop_id_component(prop_id)
+        idx = btn.get("i")
+        if entries is None or idx is None or idx >= len(entries):
+            return no_update
+        sub = entries[idx]
+        new_p = pathlib.Path(cur_safe) / sub
+        ok = _safe_under_batch_root(str(new_p))
+        return ok if ok else cur_safe
+
+    return no_update
+
+
+@app.callback(
+    Output("admin-batch-browse-output-current", "data"),
+    [
+        Input("admin-batch-browse-output-up", "n_clicks"),
+        Input({"type": "admin-batch-browse-output-dir", "i": ALL}, "n_clicks"),
+    ],
+    [
+        State("admin-batch-browse-output-current", "data"),
+        State("admin-batch-browse-output-entries", "data"),
+    ],
+    prevent_initial_call=False,
+)
+def sync_batch_browse_output_current(n_up, n_dir_clicks, cur, entries):
+    if is_cloud_runtime():
+        return no_update
+    root = pathlib.Path(config.get_batch_browse_root()).resolve()
+    cur_safe = _safe_under_batch_root(str(cur)) if cur else None
+    if not cur_safe:
+        cur_safe = str(root)
+
+    if not callback_context.triggered:
+        return cur_safe
+
+    trig = callback_context.triggered[0]
+    prop_id = trig["prop_id"]
+    val = trig.get("value")
+
+    if prop_id.startswith("admin-batch-browse-output-up"):
+        if not n_up:
+            return no_update
+        return str(_parent_clamped(pathlib.Path(cur_safe), root))
+
+    if "admin-batch-browse-output-dir" in prop_id:
+        if not val:
+            return no_update
+        btn = _parse_prop_id_component(prop_id)
+        idx = btn.get("i")
+        if entries is None or idx is None or idx >= len(entries):
+            return no_update
+        sub = entries[idx]
+        new_p = pathlib.Path(cur_safe) / sub
+        ok = _safe_under_batch_root(str(new_p))
+        return ok if ok else cur_safe
+
+    return no_update
+
+
+@app.callback(
+    Output("admin-batch-input-folder", "value"),
+    Input("admin-batch-browse-input-use", "n_clicks"),
+    State("admin-batch-browse-input-current", "data"),
+    prevent_initial_call=True,
+)
+def apply_batch_browse_input_folder(n_clicks, current_path):
+    if is_cloud_runtime() or not n_clicks:
+        return no_update
+    ok = _safe_under_batch_root(str(current_path)) if current_path else None
+    if not ok:
+        return no_update
+    return ok
+
+
+@app.callback(
+    Output("admin-batch-output-folder", "value"),
+    Input("admin-batch-browse-output-use", "n_clicks"),
+    State("admin-batch-browse-output-current", "data"),
+    prevent_initial_call=True,
+)
+def apply_batch_browse_output_folder(n_clicks, current_path):
+    if is_cloud_runtime() or not n_clicks:
+        return no_update
+    ok = _safe_under_batch_root(str(current_path)) if current_path else None
+    if not ok:
+        return no_update
+    return ok
 
 
 # ==============================================================================
@@ -1795,9 +2052,58 @@ def load_data_view_with_accordion(n_clicks_refresh, trigger, expand_clicks, togg
         
         # Construim lista de rânduri cu funcționalitate accordion
         rows = []
-        
+
+        def _group_chrono_key(gname: str):
+            """Cheie sortare: cele mai recente primele; 'Dată necunoscută' la final."""
+            if grouping == 'day':
+                if gname == 'Dată necunoscută':
+                    return datetime.min.date()
+                try:
+                    return datetime.strptime(gname, '%d/%m/%Y').date()
+                except Exception:
+                    return datetime.min.date()
+            if grouping == 'week':
+                if gname == 'Dată necunoscută':
+                    return (0, 0)
+                m = re.match(r'Săptămâna\s+(\d+),\s*(\d+)', gname)
+                if m:
+                    return (int(m.group(2)), int(m.group(1)))
+                return (0, 0)
+            if grouping == 'month':
+                if gname == 'Dată necunoscută':
+                    return (0, 0)
+                month_names_ro = [
+                    'Ianuarie', 'Februarie', 'Martie', 'Aprilie', 'Mai', 'Iunie',
+                    'Iulie', 'August', 'Septembrie', 'Octombrie', 'Noiembrie', 'Decembrie',
+                ]
+                parts = gname.rsplit(' ', 1)
+                if len(parts) == 2:
+                    month_name, year_s = parts[0], parts[1]
+                    try:
+                        y = int(year_s)
+                        if month_name in month_names_ro:
+                            return (y, month_names_ro.index(month_name) + 1)
+                    except ValueError:
+                        pass
+                return (0, 0)
+            return gname
+
+        def _link_rec_sort_key(link: dict):
+            rd = link.get('recording_date') or ''
+            st = link.get('start_time') or ''
+            try:
+                d = datetime.strptime(rd, '%Y-%m-%d').date() if rd else datetime.min.date()
+            except Exception:
+                d = datetime.min.date()
+            return (d, st)
+
+        sorted_groups = sorted(
+            grouped_links.items(), key=lambda it: _group_chrono_key(it[0]), reverse=True
+        )
+
         # Parcurgem fiecare grupă
-        for group_name, group_links in sorted(grouped_links.items(), reverse=True):
+        for group_name, group_links in sorted_groups:
+            group_links = sorted(group_links, key=_link_rec_sort_key, reverse=True)
             is_group_collapsed = group_name in collapsed_groups
             
             # Header pentru grupă (CLICABIL cu toggle)
@@ -2056,288 +2362,288 @@ def load_data_view_with_accordion(n_clicks_refresh, trigger, expand_clicks, togg
                             style={'color': '#e74c3c', 'fontStyle': 'italic'}
                         )]
                     
-                        # Secțiune grafic interactiv - IMPLEMENTAT v2.0
-                        graph_content = []
-                        try:
-                            # [DIAGNOSTIC LOG A1] Start Admin Graph
-                            logger.info(f"📊 [ADMIN_VIEW] Start generare grafic pentru token: {token[:8]}...")
+                    # Secțiune grafic interactiv - IMPLEMENTAT v2.0
+                    graph_content = []
+                    try:
+                        # [DIAGNOSTIC LOG A1] Start Admin Graph
+                        logger.info(f"📊 [ADMIN_VIEW] Start generare grafic pentru token: {token[:8]}...")
+                        
+                        # 1. Recuperăm datele folosind serviciul centralizat
+                        # [DIAGNOSTIC LOG A2] Apel DataService
+                        graph_df, graph_filename, graph_status = data_service.get_patient_dataframe(token)
+                        
+                        if graph_df is not None and not graph_df.empty:
+                            # [DIAGNOSTIC LOG A3] Data Found
+                            logger.info(f"✅ [ADMIN_VIEW] Date găsite: {len(graph_df)} rânduri. Generare figură...")
                             
-                            # 1. Recuperăm datele folosind serviciul centralizat
-                            # [DIAGNOSTIC LOG A2] Apel DataService
-                            graph_df, graph_filename, graph_status = data_service.get_patient_dataframe(token)
+                            # 2. Generăm graficul
+                            admin_fig = create_plot(graph_df, file_name=graph_filename)
                             
-                            if graph_df is not None and not graph_df.empty:
-                                # [DIAGNOSTIC LOG A3] Data Found
-                                logger.info(f"✅ [ADMIN_VIEW] Date găsite: {len(graph_df)} rânduri. Generare figură...")
-                                
-                                # 2. Generăm graficul
-                                admin_fig = create_plot(graph_df, file_name=graph_filename)
-                                
-                                # [DIAGNOSTIC LOG A4] Plot Created
-                                if admin_fig:
-                                     logger.info(f"✅ [ADMIN_VIEW] Figura creată. Traces: {len(admin_fig.data) if hasattr(admin_fig, 'data') else 'N/A'}")
-                                else:
-                                     logger.error("❌ [ADMIN_VIEW] create_plot a returnat None!")
-
-                                # Adăugăm logo dacă e configurat (opțional)
-                                try:
-                                    from plot_generator import apply_logo_to_figure
-                                    admin_fig = apply_logo_to_figure(admin_fig)
-                                except Exception as logo_e:
-                                    logger.warning(f"⚠️ [ADMIN_VIEW] Eroare logo: {logo_e}")
-                                
-                                # 3. Randăm componenta Graph
-                                # [DIAGNOSTIC LOG A5] Rendering Graph
-                                graph_content = html.Div([
-                                    html.H4("📈 Grafic Interactiv Detaliat", style={'color': '#2980b9', 'marginBottom': '10px'}),
-                                    dcc.Graph(
-                                        figure=admin_fig,
-                                        config={'displayModeBar': True, 'scrollZoom': True},
-                                        style={'height': '500px'},
-                                        id={"type": "admin-graph", "index": token} # ID unic pentru debug
-                                    )
-                                ], style={'marginBottom': '25px', 'padding': '15px', 'backgroundColor': 'white', 'borderRadius': '8px', 'border': '1px solid #ddd'})
-                                logger.info(f"🚀 [ADMIN_VIEW] Componenta Graph adăugată în layout pentru {token[:8]}")
+                            # [DIAGNOSTIC LOG A4] Plot Created
+                            if admin_fig:
+                                 logger.info(f"✅ [ADMIN_VIEW] Figura creată. Traces: {len(admin_fig.data) if hasattr(admin_fig, 'data') else 'N/A'}")
                             else:
-                                 # Fallback: Mesaj că nu există date
-                                 # [DIAGNOSTIC LOG A6] No Data
-                                 logger.warning(f"⚠️ [ADMIN_VIEW] Nu există date (df is None). Status: {graph_status}")
-                                 graph_content = html.Div([
-                                    html.H4("📉 Date Grafic Indisponibile", style={'color': '#7f8c8d', 'marginBottom': '10px'}),
-                                    html.P(f"Motiv: {graph_status}", style={'fontStyle': 'italic', 'color': '#e74c3c'})
-                                ], style={'marginBottom': '25px', 'padding': '20px', 'backgroundColor': '#f8f9fa', 'borderRadius': '8px'})
-                        except Exception as graph_err:
-                            # [DIAGNOSTIC LOG A7] Exception
-                            logger.error(f"❌ [ADMIN_VIEW] Eroare critică generare grafic: {graph_err}", exc_info=True)
-                            graph_content = html.Div(f"Eroare generare grafic: {str(graph_err)}", style={'color': 'red'})
+                                 logger.error("❌ [ADMIN_VIEW] create_plot a returnat None!")
+
+                            # Adăugăm logo dacă e configurat (opțional)
+                            try:
+                                from plot_generator import apply_logo_to_figure
+                                admin_fig = apply_logo_to_figure(admin_fig)
+                            except Exception as logo_e:
+                                logger.warning(f"⚠️ [ADMIN_VIEW] Eroare logo: {logo_e}")
+                            
+                            # 3. Randăm componenta Graph
+                            # [DIAGNOSTIC LOG A5] Rendering Graph
+                            graph_content = html.Div([
+                                html.H4("📈 Grafic Interactiv Detaliat", style={'color': '#2980b9', 'marginBottom': '10px'}),
+                                dcc.Graph(
+                                    figure=admin_fig,
+                                    config={'displayModeBar': True, 'scrollZoom': True},
+                                    style={'height': '500px'},
+                                    id={"type": "admin-graph", "index": token} # ID unic pentru debug
+                                )
+                            ], style={'marginBottom': '25px', 'padding': '15px', 'backgroundColor': 'white', 'borderRadius': '8px', 'border': '1px solid #ddd'})
+                            logger.info(f"🚀 [ADMIN_VIEW] Componenta Graph adăugată în layout pentru {token[:8]}")
+                        else:
+                             # Fallback: Mesaj că nu există date
+                             # [DIAGNOSTIC LOG A6] No Data
+                             logger.warning(f"⚠️ [ADMIN_VIEW] Nu există date (df is None). Status: {graph_status}")
+                             graph_content = html.Div([
+                                html.H4("📉 Date Grafic Indisponibile", style={'color': '#7f8c8d', 'marginBottom': '10px'}),
+                                html.P(f"Motiv: {graph_status}", style={'fontStyle': 'italic', 'color': '#e74c3c'})
+                            ], style={'marginBottom': '25px', 'padding': '20px', 'backgroundColor': '#f8f9fa', 'borderRadius': '8px'})
+                    except Exception as graph_err:
+                        # [DIAGNOSTIC LOG A7] Exception
+                        logger.error(f"❌ [ADMIN_VIEW] Eroare critică generare grafic: {graph_err}", exc_info=True)
+                        graph_content = html.Div(f"Eroare generare grafic: {str(graph_err)}", style={'color': 'red'})
 
 
-                        expanded_content = html.Div([
-                            html.Hr(style={'margin': '15px 0', 'border': 'none', 'borderTop': '2px solid #bdc3c7'}),
-                            
-                            # AICI INSERĂM GRAFICUL GENERAT
-                            html.Div(graph_content),
-                            
-                            # Secțiune imagini generate cu toggle view
+                    expanded_content = html.Div([
+                        html.Hr(style={'margin': '15px 0', 'border': 'none', 'borderTop': '2px solid #bdc3c7'}),
+                        
+                        # AICI INSERĂM GRAFICUL GENERAT
+                        html.Div(graph_content),
+                        
+                        # Secțiune imagini generate cu toggle view
+                        html.Div([
+                            # Header cu butoane toggle
                             html.Div([
-                                # Header cu butoane toggle
-                                html.Div([
-                                    html.H4("🖼️ Imagini Generate", style={'color': '#2980b9', 'marginBottom': '0', 'display': 'inline-block', 'marginRight': '20px'}),
-                                    html.Div([
-                                        html.Button(
-                                            '📊 Ansamblu',
-                                            id={'type': 'view-grid-btn', 'index': token},
-                                            n_clicks=0,
-                                            style={
-                                                'padding': '8px 20px',
-                                                'marginRight': '10px',
-                                                'backgroundColor': '#95a5a6',
-                                                'color': 'white',
-                                                'border': 'none',
-                                                'borderRadius': '5px',
-                                                'cursor': 'pointer',
-                                                'fontSize': '13px',
-                                                'fontWeight': 'bold',
-                                                'transition': 'all 0.2s'
-                                            }
-                                        ),
-                                        html.Button(
-                                            '📄 Desfășurat',
-                                            id={'type': 'view-list-btn', 'index': token},
-                                            n_clicks=0,
-                                            style={
-                                                'padding': '8px 20px',
-                                                'backgroundColor': '#27ae60',
-                                                'color': 'white',
-                                                'border': 'none',
-                                                'borderRadius': '5px',
-                                                'cursor': 'pointer',
-                                                'fontSize': '13px',
-                                                'fontWeight': 'bold',
-                                                'transition': 'all 0.2s',
-                                                'boxShadow': '0 2px 4px rgba(0,0,0,0.2)'
-                                            }
-                                        )
-                                    ], style={'display': 'inline-block', 'verticalAlign': 'middle'})
-                                ], style={'marginBottom': '15px', 'display': 'flex', 'alignItems': 'center', 'justifyContent': 'space-between'}),
-                                
-                                # Container pentru imagini (va fi populat dinamic)
-                                html.Div(
-                                    id={'type': 'images-display-container', 'index': token},
-                                    children=images_content
-                                )
-                            ], style={'marginBottom': '25px'}),
-                            
-                            # Secțiune raport PDF
-                            html.Div([
-                                html.H4("📄 Raport PDF", style={'color': '#2980b9', 'marginBottom': '10px'}),
-                                
-                                # Upload nou PDF
-                                html.Div([
-                                    dcc.Upload(
-                                        id={'type': 'pdf-upload', 'index': token},
-                                        children=html.Div([
-                                            '📁 Click pentru a încărca raport PDF (Checkme O2)'
-                                        ]),
-                                        style={
-                                            'width': '100%',
-                                            'height': '60px',
-                                            'lineHeight': '60px',
-                                            'borderWidth': '2px',
-                                            'borderStyle': 'dashed',
-                                            'borderRadius': '8px',
-                                            'textAlign': 'center',
-                                            'backgroundColor': '#e8f5e9',
-                                            'color': '#27ae60',
-                                            'cursor': 'pointer',
-                                            'fontWeight': 'bold'
-                                        },
-                                        multiple=False
-                                    ),
-                                    html.Div(
-                                        id={'type': 'pdf-upload-feedback', 'index': token},
-                                        style={'marginTop': '10px'}
-                                    )
-                                ], style={'marginBottom': '20px'}),
-                                
-                                # Afișare PDF-uri existente (încărcat dinamic la expandare)
-                                html.Div(
-                                    id={'type': 'pdf-display-container', 'index': token},
-                                    children=render_pdfs_display(token, patient_links.get_all_pdfs_for_link(token))
-                                )
-                            ], style={'marginBottom': '25px', 'padding': '20px', 'backgroundColor': '#f8f9fa', 'borderRadius': '8px'}),
-                            
-                            # Secțiune interpretare
-                            html.Div([
-                                html.H4("📝 Interpretare", style={'color': '#2980b9', 'marginBottom': '10px'}),
-                                dcc.Textarea(
-                                    id={'type': 'medical-interpretation', 'index': token},
-                                    value=link_data.get('medical_notes', ''),
-                                    placeholder='Scrieți interpretarea aici (ex: Episoade de desaturare nocturnă, apnee obstructivă severă, recomand CPAP)...',
-                                    style={
-                                        'width': '100%',
-                                        'minHeight': '120px',
-                                        'padding': '15px',
-                                        'border': '2px solid #3498db',
-                                        'borderRadius': '8px',
-                                        'fontSize': '14px',
-                                        'fontFamily': 'Arial, sans-serif'
-                                    }
-                                ),
-                                html.Button(
-                                    '💾 Salvează Interpretare',
-                                    id={'type': 'save-interpretation-btn', 'index': token},
-                                    n_clicks=0,
-                                    style={
-                                        'marginTop': '10px',
-                                        'padding': '10px 25px',
-                                        'backgroundColor': '#27ae60',
-                                        'color': 'white',
-                                        'border': 'none',
-                                        'borderRadius': '5px',
-                                        'cursor': 'pointer',
-                                        'fontWeight': 'bold'
-                                    }
-                                ),
-                                html.Span(
-                                    id={'type': 'save-interpretation-feedback', 'index': token},
-                                    style={'marginLeft': '15px', 'color': 'green', 'fontWeight': 'bold'}
-                                )
-                            ], style={'marginBottom': '25px'}),
-                            
-                            # Link către pacient
-                            html.Div([
-                                html.Hr(style={'margin': '20px 0'}),
-                                html.Strong("🔗 Link Pacient: ", style={'marginRight': '10px', 'display': 'block', 'marginBottom': '10px'}),
-                                dcc.Input(
-                                    id={'type': 'link-input-view', 'index': token},
-                                    value=f"{os.getenv('APP_URL', 'http://127.0.0.1:8050')}/?token={token}",
-                                    readOnly=True,
-                                    style={
-                                        'width': '100%',
-                                        'padding': '10px',
-                                        'backgroundColor': '#ecf0f1',
-                                        'border': '2px solid #bdc3c7',
-                                        'borderRadius': '5px',
-                                        'fontSize': '12px',
-                                        'fontFamily': 'monospace',
-                                        'marginBottom': '10px'
-                                    }
-                                ),
+                                html.H4("🖼️ Imagini Generate", style={'color': '#2980b9', 'marginBottom': '0', 'display': 'inline-block', 'marginRight': '20px'}),
                                 html.Div([
                                     html.Button(
-                                        '📋 Copy Link',
-                                        id={'type': 'copy-link-view', 'index': token},
+                                        '📊 Ansamblu',
+                                        id={'type': 'view-grid-btn', 'index': token},
                                         n_clicks=0,
                                         style={
                                             'padding': '8px 20px',
                                             'marginRight': '10px',
-                                            'backgroundColor': '#3498db',
+                                            'backgroundColor': '#95a5a6',
                                             'color': 'white',
                                             'border': 'none',
                                             'borderRadius': '5px',
                                             'cursor': 'pointer',
                                             'fontSize': '13px',
-                                            'fontWeight': 'bold'
+                                            'fontWeight': 'bold',
+                                            'transition': 'all 0.2s'
                                         }
                                     ),
-                                    html.A(
-                                        '🌐 Testează în browser',
-                                        href=f"{os.getenv('APP_URL', 'http://127.0.0.1:8050')}/?token={token}",
-                                        target='_blank',
+                                    html.Button(
+                                        '📄 Desfășurat',
+                                        id={'type': 'view-list-btn', 'index': token},
+                                        n_clicks=0,
                                         style={
                                             'padding': '8px 20px',
                                             'backgroundColor': '#27ae60',
                                             'color': 'white',
-                                            'textDecoration': 'none',
-                                            'borderRadius': '5px',
-                                            'fontSize': '13px',
-                                            'fontWeight': 'bold',
-                                            'display': 'inline-block'
-                                        }
-                                    )
-                                ], style={'display': 'flex', 'gap': '10px'})
-                            ], style={'marginTop': '20px'}),
-                            
-                            # Secțiune ștergere înregistrare
-                            html.Div([
-                                html.Hr(style={'margin': '20px 0', 'borderTop': '2px solid #e74c3c'}),
-                                html.Div([
-                                    html.Strong("⚠️ Zonă Periculoasă", style={'color': '#e74c3c', 'fontSize': '16px', 'marginBottom': '10px', 'display': 'block'}),
-                                    html.P(
-                                        "Ștergerea acestei înregistrări va șterge permanent toate datele asociate (CSV, imagini, PDF-uri). Această acțiune este IREVERSIBILĂ!",
-                                        style={'fontSize': '13px', 'color': '#555', 'marginBottom': '15px', 'lineHeight': '1.6'}
-                                    ),
-                                    html.Button(
-                                        '🗑️ Șterge această înregistrare',
-                                        id={'type': 'delete-link-btn', 'index': token},
-                                        n_clicks=0,
-                                        style={
-                                            'padding': '10px 30px',
-                                            'backgroundColor': '#e74c3c',
-                                            'color': 'white',
                                             'border': 'none',
                                             'borderRadius': '5px',
                                             'cursor': 'pointer',
-                                            'fontSize': '14px',
-                                            'fontWeight': 'bold'
+                                            'fontSize': '13px',
+                                            'fontWeight': 'bold',
+                                            'transition': 'all 0.2s',
+                                            'boxShadow': '0 2px 4px rgba(0,0,0,0.2)'
                                         }
                                     )
-                                ], style={
-                                    'padding': '20px',
-                                    'backgroundColor': '#fff3cd',
-                                    'border': '2px solid #e74c3c',
-                                    'borderRadius': '8px'
-                                })
-                            ], style={'marginTop': '30px'})
+                                ], style={'display': 'inline-block', 'verticalAlign': 'middle'})
+                            ], style={'marginBottom': '15px', 'display': 'flex', 'alignItems': 'center', 'justifyContent': 'space-between'}),
                             
-                        ], style={
-                            'padding': '25px',
-                            'backgroundColor': '#ffffff',
-                            'borderRadius': '8px',
-                            'marginTop': '10px',
-                            'boxShadow': 'inset 0 2px 8px rgba(0,0,0,0.05)'
-                        })
+                            # Container pentru imagini (va fi populat dinamic)
+                            html.Div(
+                                id={'type': 'images-display-container', 'index': token},
+                                children=images_content
+                            )
+                        ], style={'marginBottom': '25px'}),
+                        
+                        # Secțiune raport PDF
+                        html.Div([
+                            html.H4("📄 Raport PDF", style={'color': '#2980b9', 'marginBottom': '10px'}),
+                            
+                            # Upload nou PDF
+                            html.Div([
+                                dcc.Upload(
+                                    id={'type': 'pdf-upload', 'index': token},
+                                    children=html.Div([
+                                        '📁 Click pentru a încărca raport PDF (Checkme O2)'
+                                    ]),
+                                    style={
+                                        'width': '100%',
+                                        'height': '60px',
+                                        'lineHeight': '60px',
+                                        'borderWidth': '2px',
+                                        'borderStyle': 'dashed',
+                                        'borderRadius': '8px',
+                                        'textAlign': 'center',
+                                        'backgroundColor': '#e8f5e9',
+                                        'color': '#27ae60',
+                                        'cursor': 'pointer',
+                                        'fontWeight': 'bold'
+                                    },
+                                    multiple=False
+                                ),
+                                html.Div(
+                                    id={'type': 'pdf-upload-feedback', 'index': token},
+                                    style={'marginTop': '10px'}
+                                )
+                            ], style={'marginBottom': '20px'}),
+                            
+                            # Afișare PDF-uri existente (încărcat dinamic la expandare)
+                            html.Div(
+                                id={'type': 'pdf-display-container', 'index': token},
+                                children=render_pdfs_display(token, patient_links.get_all_pdfs_for_link(token))
+                            )
+                        ], style={'marginBottom': '25px', 'padding': '20px', 'backgroundColor': '#f8f9fa', 'borderRadius': '8px'}),
+                        
+                        # Secțiune interpretare
+                        html.Div([
+                            html.H4("📝 Interpretare", style={'color': '#2980b9', 'marginBottom': '10px'}),
+                            dcc.Textarea(
+                                id={'type': 'medical-interpretation', 'index': token},
+                                value=link_data.get('medical_notes', ''),
+                                placeholder='Scrieți interpretarea aici (ex: Episoade de desaturare nocturnă, apnee obstructivă severă, recomand CPAP)...',
+                                style={
+                                    'width': '100%',
+                                    'minHeight': '120px',
+                                    'padding': '15px',
+                                    'border': '2px solid #3498db',
+                                    'borderRadius': '8px',
+                                    'fontSize': '14px',
+                                    'fontFamily': 'Arial, sans-serif'
+                                }
+                            ),
+                            html.Button(
+                                '💾 Salvează Interpretare',
+                                id={'type': 'save-interpretation-btn', 'index': token},
+                                n_clicks=0,
+                                style={
+                                    'marginTop': '10px',
+                                    'padding': '10px 25px',
+                                    'backgroundColor': '#27ae60',
+                                    'color': 'white',
+                                    'border': 'none',
+                                    'borderRadius': '5px',
+                                    'cursor': 'pointer',
+                                    'fontWeight': 'bold'
+                                }
+                            ),
+                            html.Span(
+                                id={'type': 'save-interpretation-feedback', 'index': token},
+                                style={'marginLeft': '15px', 'color': 'green', 'fontWeight': 'bold'}
+                            )
+                        ], style={'marginBottom': '25px'}),
+                        
+                        # Link către pacient
+                        html.Div([
+                            html.Hr(style={'margin': '20px 0'}),
+                            html.Strong("🔗 Link Pacient: ", style={'marginRight': '10px', 'display': 'block', 'marginBottom': '10px'}),
+                            dcc.Input(
+                                id={'type': 'link-input-view', 'index': token},
+                                value=f"{os.getenv('APP_URL', 'http://127.0.0.1:8050')}/?token={token}",
+                                readOnly=True,
+                                style={
+                                    'width': '100%',
+                                    'padding': '10px',
+                                    'backgroundColor': '#ecf0f1',
+                                    'border': '2px solid #bdc3c7',
+                                    'borderRadius': '5px',
+                                    'fontSize': '12px',
+                                    'fontFamily': 'monospace',
+                                    'marginBottom': '10px'
+                                }
+                            ),
+                            html.Div([
+                                html.Button(
+                                    '📋 Copy Link',
+                                    id={'type': 'copy-link-view', 'index': token},
+                                    n_clicks=0,
+                                    style={
+                                        'padding': '8px 20px',
+                                        'marginRight': '10px',
+                                        'backgroundColor': '#3498db',
+                                        'color': 'white',
+                                        'border': 'none',
+                                        'borderRadius': '5px',
+                                        'cursor': 'pointer',
+                                        'fontSize': '13px',
+                                        'fontWeight': 'bold'
+                                    }
+                                ),
+                                html.A(
+                                    '🌐 Testează în browser',
+                                    href=f"{os.getenv('APP_URL', 'http://127.0.0.1:8050')}/?token={token}",
+                                    target='_blank',
+                                    style={
+                                        'padding': '8px 20px',
+                                        'backgroundColor': '#27ae60',
+                                        'color': 'white',
+                                        'textDecoration': 'none',
+                                        'borderRadius': '5px',
+                                        'fontSize': '13px',
+                                        'fontWeight': 'bold',
+                                        'display': 'inline-block'
+                                    }
+                                )
+                            ], style={'display': 'flex', 'gap': '10px'})
+                        ], style={'marginTop': '20px'}),
+                        
+                        # Secțiune ștergere înregistrare
+                        html.Div([
+                            html.Hr(style={'margin': '20px 0', 'borderTop': '2px solid #e74c3c'}),
+                            html.Div([
+                                html.Strong("⚠️ Zonă Periculoasă", style={'color': '#e74c3c', 'fontSize': '16px', 'marginBottom': '10px', 'display': 'block'}),
+                                html.P(
+                                    "Ștergerea acestei înregistrări va șterge permanent toate datele asociate (CSV, imagini, PDF-uri). Această acțiune este IREVERSIBILĂ!",
+                                    style={'fontSize': '13px', 'color': '#555', 'marginBottom': '15px', 'lineHeight': '1.6'}
+                                ),
+                                html.Button(
+                                    '🗑️ Șterge această înregistrare',
+                                    id={'type': 'delete-link-btn', 'index': token},
+                                    n_clicks=0,
+                                    style={
+                                        'padding': '10px 30px',
+                                        'backgroundColor': '#e74c3c',
+                                        'color': 'white',
+                                        'border': 'none',
+                                        'borderRadius': '5px',
+                                        'cursor': 'pointer',
+                                        'fontSize': '14px',
+                                        'fontWeight': 'bold'
+                                    }
+                                )
+                            ], style={
+                                'padding': '20px',
+                                'backgroundColor': '#fff3cd',
+                                'border': '2px solid #e74c3c',
+                                'borderRadius': '8px'
+                            })
+                        ], style={'marginTop': '30px'})
+                        
+                    ], style={
+                        'padding': '25px',
+                        'backgroundColor': '#ffffff',
+                        'borderRadius': '8px',
+                        'marginTop': '10px',
+                        'boxShadow': 'inset 0 2px 8px rgba(0,0,0,0.05)'
+                    })
                 
                 logger.info(f"  ↳ Creare row_container pentru {token[:8]}...")
                 
@@ -2919,1770 +3225,7 @@ def admin_save_link_metadata(n_clicks_list, notes_list, sent_list, ids_list):
 
 
 # ==============================================================================
-# CALLBACKS PACIENT
-# ==============================================================================
 
-@app.callback(
-    [Output('patient-content-container', 'style'),
-     Output('patient-access-result', 'children'),
-     Output('current-patient-token', 'data')],
-    [Input('patient-access-button', 'n_clicks')],
-    [State('patient-token-input', 'value')]
-)
-def patient_access_with_token(n_clicks, token):
-    """
-    Callback pentru acces pacient cu token.
-    """
-    if n_clicks == 0:
-        return no_update, no_update, no_update
-    
-    if not token or token.strip() == '':
-        return no_update, html.Div(
-            "⚠️ Introduceți token-ul primit de la medic!",
-            style={'padding': '15px', 'backgroundColor': '#fff3cd', 'border': '1px solid #ffc107', 'borderRadius': '5px'}
-        ), no_update
-    
-    logger.info(f"Tentativă acces pacient cu token: {token[:8]}...")
-    
-    # Validăm token-ul
-    if patient_links.validate_token(token):
-        patient_data = patient_links.get_patient_link(token)
-        
-        return (
-            {'display': 'block'},  # Afișăm conținutul pacient
-            html.Div([
-                html.H4("✅ Acces Autorizat!", style={'color': 'green'}),
-                html.P(f"Bine ați venit! Aparat: {patient_data['device_name']}")
-            ], style={'padding': '15px', 'backgroundColor': '#d4edda', 'border': '1px solid #28a745', 'borderRadius': '5px'}),
-            token  # Salvăm token-ul în store
-        )
-    else:
-        return (
-            no_update,
-            html.Div(
-                "❌ Token invalid sau inactiv! Verificați codul primit de la medic.",
-                style={'padding': '15px', 'backgroundColor': '#ffdddd', 'border': '1px solid red', 'borderRadius': '5px', 'color': 'red'}
-            ),
-            no_update
-        )
-
-
-@app.callback(
-    Output('patient-recordings-list', 'children'),
-    [Input('current-patient-token', 'data')]
-)
-def display_patient_recordings(token):
-    """
-    Afișează lista de înregistrări pentru pacient.
-    """
-    if not token:
-        return html.Div(
-            "🔒 Accesați cu token-ul pentru a vedea înregistrările.",
-            style={'padding': '20px', 'textAlign': 'center', 'color': '#666', 'fontStyle': 'italic'}
-        )
-    
-    recordings = patient_links.get_patient_recordings(token)
-    
-    if not recordings:
-        return html.Div(
-            "📭 Nu aveți încă înregistrări. Contactați medicul pentru a adăuga date.",
-            style={'padding': '20px', 'textAlign': 'center', 'color': '#666', 'fontStyle': 'italic'}
-        )
-    
-    # Creăm carduri pentru fiecare înregistrare
-    recording_cards = []
-    for rec in recordings:
-        recording_cards.append(
-            html.Div([
-                html.H4(f"📅 {rec['recording_date']}", style={'color': '#2c3e50'}),
-                html.P(f"⏱️ Interval: {rec['start_time']} - {rec['end_time']}"),
-                html.P(f"📊 SaO2: avg={rec['stats']['avg_spo2']:.1f}%, min={rec['stats']['min_spo2']}%, max={rec['stats']['max_spo2']}%"),
-                html.P(f"📁 Fișier: {rec['original_filename']}", style={'fontSize': '12px', 'color': '#7f8c8d'}),
-                html.Div([
-                    html.Button(
-                        '📈 Vezi Grafic',
-                        id={'type': 'view-recording-btn', 'index': rec['id']},
-                        style={
-                            'padding': '10px 20px',
-                            'backgroundColor': '#3498db',
-                            'color': 'white',
-                            'border': 'none',
-                            'borderRadius': '5px',
-                            'cursor': 'pointer',
-                            'marginRight': '10px'
-                        }
-                    ),
-                    html.Button(
-                        '📥 Descarcă CSV',
-                        id={'type': 'download-csv-btn', 'index': rec['id']},
-                        style={
-                            'padding': '10px 20px',
-                            'backgroundColor': '#27ae60',
-                            'color': 'white',
-                            'border': 'none',
-                            'borderRadius': '5px',
-                            'cursor': 'pointer',
-                            'marginRight': '10px'
-                        }
-                    ),
-                    html.Button(
-                        '🗑️ Șterge',
-                        id={'type': 'delete-recording-btn', 'index': rec['id']},
-                        style={
-                            'padding': '10px 20px',
-                            'backgroundColor': '#e74c3c',
-                            'color': 'white',
-                            'border': 'none',
-                            'borderRadius': '5px',
-                            'cursor': 'pointer'
-                        }
-                    )
-                ], style={'marginTop': '15px'}),
-                # Store pentru token-ul curent (pentru callback-ul de ștergere)
-                dcc.Store(id={'type': 'recording-token-store', 'index': rec['id']}, data=token)
-            ], style={
-                'padding': '20px',
-                'marginBottom': '15px',
-                'backgroundColor': '#ecf0f1',
-                'borderRadius': '10px',
-                'border': '1px solid #bdc3c7'
-            })
-        )
-    
-    return html.Div(recording_cards)
-
-
-@app.callback(
-    [Output('patient-explore-graph', 'figure'),
-     Output('global-notification-container', 'children', allow_duplicate=True)],
-    [Input('patient-explore-upload', 'contents')],
-    [State('patient-explore-upload', 'filename')],
-    prevent_initial_call=True
-)
-def patient_explore_csv(file_contents, file_name):
-    """
-    Callback pentru explorare CSV temporară de către pacient.
-    ⚠️ IMPORTANT: Nu salvează în DB, doar plotare temporară!
-    """
-    if file_contents is None:
-        return no_update, no_update
-    
-    logger.info(f"Pacient explorează CSV temporar: '{file_name}'")
-    
-    try:
-        # Decodăm și parsăm
-        content_type, content_string = file_contents.split(',')
-        decoded_content = base64.b64decode(content_string)
-        df = parse_csv_data(decoded_content, file_name)
-        
-        # Generăm graficul
-        initial_scale = config.ZOOM_SCALE_CONFIG['min_scale']
-        fig = create_plot(df, file_name, line_width_scale=initial_scale, marker_size_scale=initial_scale)
-        
-        # Aplicăm logo-ul pe figura interactivă (dacă este configurat)
-        try:
-            from plot_generator import apply_logo_to_figure
-            fig = apply_logo_to_figure(fig)
-        except Exception as logo_error:
-            logger.warning(f"Nu s-a putut aplica logo pe figura temporară: {logo_error}")
-        
-        notification = html.Div(
-            f"✅ CSV explorat: {file_name} ({len(df)} puncte). ⚠️ Graficul este temporar.",
-            style={'padding': '15px', 'backgroundColor': '#fff3cd', 'border': '1px solid #ffc107', 'borderRadius': '5px', 'marginBottom': '20px'}
-        )
-        
-        logger.info(f"Explorare CSV temporară reușită pentru '{file_name}'")
-        return fig, notification
-        
-    except Exception as e:
-        logger.error(f"Eroare la explorare CSV: {e}", exc_info=True)
-        error_notification = html.Div(
-            f"❌ EROARE: {str(e)}",
-            style={'padding': '15px', 'backgroundColor': '#ffdddd', 'border': '1px solid red', 'borderRadius': '5px', 'color': 'red', 'marginBottom': '20px'}
-        )
-        return go.Figure(), error_notification
-
-
-# ==============================================================================
-# CALLBACKS PDF - UPLOAD ȘI AFIȘARE RAPOARTE
-# ==============================================================================
-
-@app.callback(
-    [Output({'type': 'pdf-upload-feedback', 'index': ALL}, 'children'),
-     Output({'type': 'pdf-display-container', 'index': ALL}, 'children')],
-    [Input({'type': 'pdf-upload', 'index': ALL}, 'contents')],
-    [State({'type': 'pdf-upload', 'index': ALL}, 'filename'),
-     State({'type': 'pdf-upload', 'index': ALL}, 'id')],
-    prevent_initial_call=True
-)
-def handle_pdf_upload(contents_list, filenames_list, ids_list):
-    """
-    Callback pentru upload și procesare PDF-uri (rapoarte Checkme O2).
-    Parsează automat PDF-ul și salvează datele extrase.
-    """
-    from pdf_parser import parse_checkme_o2_report, format_report_for_display, PDF_SUPPORT
-    import tempfile
-    
-    if not any(contents_list):
-        return [no_update] * len(contents_list), [no_update] * len(contents_list)
-    
-    # Verificăm dacă pdfplumber este disponibil
-    if not PDF_SUPPORT:
-        error_msg = html.Div([
-            html.P("❌ Biblioteca pdfplumber nu este instalată!", style={'color': 'red', 'fontWeight': 'bold'}),
-            html.P("Rulați în terminal:", style={'marginTop': '10px'}),
-            html.Code("pip install pdfplumber", style={'display': 'block', 'padding': '10px', 'backgroundColor': '#f0f0f0', 'borderRadius': '5px'})
-        ], style={'padding': '15px', 'backgroundColor': '#ffdddd', 'border': '1px solid red', 'borderRadius': '5px'})
-        return [error_msg] * len(contents_list), [no_update] * len(contents_list)
-    
-    feedback_results = []
-    display_results = []
-    
-    for i, (contents, filename, btn_id) in enumerate(zip(contents_list, filenames_list, ids_list)):
-        token = btn_id['index']
-        
-        if contents is None:
-            feedback_results.append(no_update)
-            display_results.append(no_update)
-            continue
-        
-        logger.info(f"📤 Upload PDF primit pentru {token[:8]}...: {filename}")
-        
-        try:
-            # Decodăm conținutul PDF
-            content_type, content_string = contents.split(',')
-            pdf_bytes = base64.b64decode(content_string)
-            
-            # Salvăm PDF-ul local
-            pdf_path = patient_links.save_pdf_for_link(token, pdf_bytes, filename)
-            
-            if not pdf_path:
-                raise Exception("Eroare la salvarea PDF-ului")
-            
-            # Creăm fișier temporar pentru parsing
-            with tempfile.NamedTemporaryFile(suffix='.pdf', delete=False) as tmp_file:
-                tmp_file.write(pdf_bytes)
-                tmp_pdf_path = tmp_file.name
-            
-            try:
-                # Parsăm PDF-ul
-                logger.info(f"🔍 Parsare PDF: {filename}")
-                parsed_data = parse_checkme_o2_report(tmp_pdf_path)
-                
-                # Salvăm datele parsate
-                if patient_links.save_pdf_parsed_data(token, pdf_path, parsed_data):
-                    logger.info(f"✅ PDF procesat cu succes: {filename}")
-                    
-                    # Feedback pozitiv
-                    feedback_results.append(
-                        html.Div([
-                            html.P(f"✅ PDF încărcat și procesat: {filename}", style={'color': 'green', 'fontWeight': 'bold'}),
-                            html.Small(f"Salvat în: {pdf_path}", style={'color': '#666'})
-                        ], style={'padding': '10px', 'backgroundColor': '#d4edda', 'border': '1px solid #28a745', 'borderRadius': '5px'})
-                    )
-                    
-                    # Actualizăm afișarea PDF-urilor
-                    all_pdfs = patient_links.get_all_pdfs_for_link(token)
-                    display_results.append(render_pdfs_display(token, all_pdfs))
-                else:
-                    raise Exception("Eroare la salvarea datelor parsate")
-                    
-            finally:
-                # Ștergem fișierul temporar
-                import os
-                if os.path.exists(tmp_pdf_path):
-                    os.remove(tmp_pdf_path)
-            
-        except Exception as e:
-            logger.error(f"Eroare la procesarea PDF pentru {token[:8]}...: {e}", exc_info=True)
-            feedback_results.append(
-                html.Div(
-                    f"❌ Eroare la procesarea PDF: {str(e)}",
-                    style={'padding': '10px', 'backgroundColor': '#ffdddd', 'border': '1px solid red', 'borderRadius': '5px', 'color': 'red'}
-                )
-            )
-            display_results.append(no_update)
-    
-    return feedback_results, display_results
-
-
-def render_pdfs_display(token: str, pdfs_list: List[Dict]) -> html.Div:
-    """
-    Helper pentru rendering lista de PDF-uri existente cu previzualizare vizuală (iframe).
-    
-    Args:
-        token: UUID-ul pacientului
-        pdfs_list: Listă cu PDF-uri și metadata
-        
-    Returns:
-        html.Div: Componenta Dash pentru afișare
-    """
-    from pdf_parser import format_report_for_display, pdf_to_base64
-    
-    if not pdfs_list:
-        return html.Div(
-            "📭 Nu există rapoarte PDF încărcate încă.",
-            style={'padding': '15px', 'color': '#666', 'fontStyle': 'italic', 'textAlign': 'center', 'backgroundColor': '#f8f9fa', 'borderRadius': '5px'}
-        )
-    
-    pdf_cards = []
-    for pdf_info in pdfs_list:
-        pdf_path = pdf_info.get('pdf_path', '')
-        parsed_data = pdf_info.get('data', {})
-        parsed_at = pdf_info.get('parsed_at', '')
-        
-        # Formatăm datele pentru afișare
-        formatted_text = format_report_for_display(parsed_data)
-        
-        # Statistici quick view
-        stats = parsed_data.get('statistics', {})
-        quick_stats = []
-        if stats.get('avg_spo2'):
-            quick_stats.append(f"SpO2 mediu: {stats['avg_spo2']:.1f}%")
-        if stats.get('min_spo2'):
-            quick_stats.append(f"Min: {stats['min_spo2']:.1f}%")
-        if stats.get('max_spo2'):
-            quick_stats.append(f"Max: {stats['max_spo2']:.1f}%")
-        
-        # Card pentru fiecare PDF
-        pdf_cards.append(
-            html.Div([
-                # Header
-                html.Div([
-                    html.Strong(f"📄 {os.path.basename(pdf_path)}", style={'fontSize': '14px', 'color': '#2c3e50'}),
-                    html.Div([
-                        html.Button(
-                            '📥 Descarcă',
-                            id={'type': 'download-pdf-btn', 'index': f"{token}|{pdf_path}"},
-                            n_clicks=0,
-                            style={
-                                'padding': '5px 15px',
-                                'backgroundColor': '#3498db',
-                                'color': 'white',
-                                'border': 'none',
-                                'borderRadius': '5px',
-                                'cursor': 'pointer',
-                                'fontSize': '12px',
-                                'marginRight': '10px'
-                            }
-                        ),
-                        html.Button(
-                            '🗑️',
-                            id={'type': 'delete-pdf-btn', 'index': f"{token}|{pdf_path}"},
-                            n_clicks=0,
-                            style={
-                                'padding': '5px 10px',
-                                'backgroundColor': '#e74c3c',
-                                'color': 'white',
-                                'border': 'none',
-                                'borderRadius': '5px',
-                                'cursor': 'pointer',
-                                'fontSize': '12px'
-                            }
-                        )
-                    ], style={'display': 'inline-block'})
-                ], style={'display': 'flex', 'justifyContent': 'space-between', 'alignItems': 'center', 'marginBottom': '15px'}),
-                
-                # Quick stats
-                html.Div([
-                    html.Div([
-                        html.Span(stat, style={
-                            'display': 'inline-block',
-                            'padding': '5px 10px',
-                            'backgroundColor': '#e8f5e9',
-                            'borderRadius': '5px',
-                            'marginRight': '10px',
-                            'marginBottom': '5px',
-                            'fontSize': '13px',
-                            'color': '#27ae60'
-                        })
-                        for stat in quick_stats
-                    ])
-                ], style={'marginBottom': '15px'}),
-                
-                # === PREVIZUALIZARE VIZUALĂ PDF (IFRAME) ===
-                html.Div([
-                    html.Strong("🖼️ Previzualizare PDF:", style={'display': 'block', 'marginBottom': '10px', 'color': '#2c3e50'}),
-                    html.Iframe(
-                        src=pdf_to_base64(pdf_path),
-                        style={
-                            'width': '100%',
-                            'height': '600px',
-                            'border': '2px solid #ddd',
-                            'borderRadius': '8px',
-                            'backgroundColor': '#f8f9fa'
-                        }
-                    )
-                ], style={'marginBottom': '20px'}),
-                
-                # Date detaliate (formatate) - collapse pentru economie spațiu
-                html.Details([
-                    html.Summary("📊 Vezi raport text extras (date parsate)", style={'cursor': 'pointer', 'fontWeight': 'bold', 'color': '#2980b9', 'marginBottom': '10px'}),
-                    html.Div([
-                        html.Pre(
-                            formatted_text if formatted_text.strip() else "⚠️ Nu s-au putut extrage date text din PDF (posibil PDF scanat/imagine). Vizualizați previzualizarea vizuală de mai sus.",
-                            style={
-                                'padding': '15px',
-                                'backgroundColor': '#ffffff',
-                                'border': '1px solid #ddd',
-                                'borderRadius': '5px',
-                                'fontSize': '13px',
-                                'lineHeight': '1.6',
-                                'whiteSpace': 'pre-wrap',
-                                'fontFamily': 'Arial, sans-serif',
-                                'color': '#555' if formatted_text.strip() else '#999',
-                                'fontStyle': 'normal' if formatted_text.strip() else 'italic'
-                            }
-                        )
-                    ], style={'marginTop': '10px'})
-                ]),
-                
-                # Footer cu metadata
-                html.Hr(style={'margin': '15px 0'}),
-                html.Small(f"Procesat: {parsed_at[:19] if parsed_at else 'N/A'}", style={'color': '#95a5a6', 'fontSize': '11px'})
-                
-            ], style={
-                'padding': '20px',
-                'marginBottom': '15px',
-                'backgroundColor': '#fff',
-                'borderRadius': '8px',
-                'border': '2px solid #27ae60',
-                'boxShadow': '0 2px 6px rgba(0,0,0,0.1)'
-            })
-        )
-    
-    return html.Div(pdf_cards)
-
-
-@app.callback(
-    Output('data-view-container', 'children', allow_duplicate=True),
-    [Input({'type': 'delete-pdf-btn', 'index': ALL}, 'n_clicks')],
-    [State({'type': 'delete-pdf-btn', 'index': ALL}, 'id')],
-    prevent_initial_call=True
-)
-def handle_pdf_deletion(n_clicks_list, ids_list):
-    """
-    Callback pentru ștergerea PDF-urilor.
-    """
-    if not any(n_clicks_list):
-        return no_update
-    
-    from dash import ctx
-    
-    if not ctx.triggered_id:
-        return no_update
-    
-    triggered_id = ctx.triggered_id['index']
-    token, pdf_path = triggered_id.split('|', 1)
-    
-    logger.info(f"🗑️ Ștergere PDF solicitată: {pdf_path} pentru {token[:8]}...")
-    
-    try:
-        if patient_links.delete_pdf_from_link(token, pdf_path):
-            logger.info(f"✅ PDF șters cu succes: {pdf_path}")
-            # Refresh data view
-            return no_update  # Callback-ul principal de refresh va reîncărca
-        else:
-            logger.error(f"Eroare la ștergerea PDF: {pdf_path}")
-            return no_update
-    except Exception as e:
-        logger.error(f"Eroare critică la ștergerea PDF: {e}", exc_info=True)
-        return no_update
-
-
-@app.callback(
-    Output('expanded-row-id', 'data', allow_duplicate=True),
-    [Input('admin-refresh-data-view', 'n_clicks')],
-    prevent_initial_call=True
-)
-def refresh_after_pdf_action(n_clicks):
-    """
-    Trigger pentru refresh după acțiuni PDF.
-    """
-    return no_update
-
-
-# ==============================================================================
-# CALLBACKS BATCH SESSION - TRACKING PROGRES & ISTORIC
-# ==============================================================================
-
-@app.callback(
-    [Output('admin-batch-progress-text', 'children'),
-     Output('admin-batch-progress-bar', 'style'),
-     Output('admin-batch-status-detail', 'children')],
-    [Input('admin-batch-progress-interval', 'n_intervals')],
-    [State('admin-batch-session-id', 'data')]
-)
-def update_batch_progress_display(n_intervals, session_id):
-    """
-    Actualizează afișarea progresului procesării batch în timp real.
-    Citește starea din batch_session_manager.
-    """
-    if not session_id:
-        return "0 / 0 fișiere", {'height': '30px', 'width': '0%', 'backgroundColor': '#27ae60', 'borderRadius': '5px'}, ""
-    
-    # Obține progres sesiune
-    progress_data = batch_session_manager.get_session_progress(session_id)
-    
-    if not progress_data:
-        return "Sesiune nu există", {'height': '30px', 'width': '0%', 'backgroundColor': '#e74c3c', 'borderRadius': '5px'}, ""
-    
-    metadata = progress_data['metadata']
-    processed = metadata.get('processed_files', 0)
-    total = metadata.get('total_files', 0)
-    failed = metadata.get('failed_files', 0)
-    
-    # Calculăm procentajul
-    percentage = int((processed / total * 100)) if total > 0 else 0
-    
-    # Text indicator
-    progress_text = f"{processed} / {total} fișiere"
-    
-    # Stil bară progres
-    bar_style = {
-        'height': '30px',
-        'width': f'{percentage}%',
-        'backgroundColor': '#27ae60',
-        'borderRadius': '5px',
-        'transition': 'width 0.3s ease',
-        'display': 'flex',
-        'alignItems': 'center',
-        'justifyContent': 'center',
-        'color': 'white',
-        'fontWeight': 'bold',
-        'fontSize': '12px'
-    }
-    
-    # Status detaliat
-    status_detail = html.Div([
-        html.Span(f"✅ Procesate: {processed} ", style={'color': 'green', 'marginRight': '15px'}),
-        html.Span(f"❌ Erori: {failed} ", style={'color': 'red', 'marginRight': '15px'}) if failed > 0 else "",
-        html.Span(f"⏳ Rămase: {total - processed}", style={'color': 'orange'})
-    ])
-    
-    return progress_text, bar_style, status_detail
-
-
-@app.callback(
-    Output('admin-batch-sessions-history', 'children'),
-    [Input('url', 'pathname'),  # Refresh la încărcare pagină
-     Input('admin-refresh-trigger', 'data')]  # Refresh după procesare
-)
-def display_batch_sessions_history(pathname, trigger):
-    """
-    Afișează istoricul sesiunilor batch (ultimele 10).
-    """
-    sessions = batch_session_manager.get_all_sessions(limit=10)
-    
-    if not sessions:
-        return html.P("🔍 Nu există sesiuni batch încă.", style={'textAlign': 'center', 'color': '#95a5a6', 'padding': '20px'})
-    
-    session_rows = []
-    for session in sessions:
-        session_id = session.get('session_id', 'N/A')
-        created_at = session.get('created_at', 'N/A')
-        status = session.get('status', 'unknown')
-        total_files = session.get('total_files', 0)
-        processed = session.get('processed_files', 0)
-        failed = session.get('failed_files', 0)
-        
-        # Formatare dată
-        try:
-            dt = datetime.fromisoformat(created_at)
-            formatted_date = dt.strftime("%d/%m/%Y %H:%M:%S")
-        except:
-            formatted_date = created_at
-        
-        # Culoare în funcție de status
-        status_colors = {
-            'completed': '#27ae60',
-            'in_progress': '#f39c12',
-            'failed': '#e74c3c',
-            'pending': '#3498db'
-        }
-        status_color = status_colors.get(status, '#95a5a6')
-        
-        # Badge status
-        status_text = {
-            'completed': '✅ Completă',
-            'in_progress': '⏳ În curs',
-            'failed': '❌ Eșuată',
-            'pending': '🔵 Așteptare'
-        }
-        status_badge = status_text.get(status, status.upper())
-        
-        session_rows.append(
-            html.Div([
-                html.Div([
-                    html.Strong(f"📅 {formatted_date}", style={'marginRight': '15px'}),
-                    html.Span(status_badge, style={
-                        'padding': '4px 10px',
-                        'backgroundColor': status_color,
-                        'color': 'white',
-                        'borderRadius': '12px',
-                        'fontSize': '12px',
-                        'fontWeight': 'bold'
-                    })
-                ], style={'marginBottom': '8px'}),
-                
-                html.Div([
-                    html.Span(f"📂 Total: {total_files} fișiere", style={'marginRight': '15px', 'fontSize': '13px'}),
-                    html.Span(f"✅ Procesate: {processed}", style={'marginRight': '15px', 'fontSize': '13px', 'color': 'green'}),
-                    html.Span(f"❌ Erori: {failed}", style={'fontSize': '13px', 'color': 'red'}) if failed > 0 else ""
-                ]),
-                
-                html.Small(f"ID: {session_id[:16]}...", style={'color': '#95a5a6', 'display': 'block', 'marginTop': '5px', 'fontSize': '11px'})
-            ], style={
-                'padding': '12px',
-                'marginBottom': '10px',
-                'backgroundColor': 'white',
-                'borderRadius': '6px',
-                'border': f'1px solid {status_color}',
-                'borderLeft': f'4px solid {status_color}'
-            })
-        )
-    
-    return html.Div(session_rows)
-
-
-# ============================================================================
-# FILTRARE TEMPORALĂ - Callback-uri pentru butoane și calendar
-# ============================================================================
-
-@app.callback(
-    [Output('active-date-filter', 'data'),
-     Output('date-picker-start', 'date'),
-     Output('date-picker-end', 'date')],
-    [Input('filter-today', 'n_clicks'),
-     Input('filter-yesterday', 'n_clicks'),
-     Input('filter-week', 'n_clicks'),
-     Input('filter-month', 'n_clicks'),
-     Input('filter-year', 'n_clicks'),
-     Input('apply-date-filter', 'n_clicks'),
-     Input('clear-date-filter', 'n_clicks')],
-    [State('date-picker-start', 'date'),
-     State('date-picker-end', 'date')],
-    prevent_initial_call=True
-)
-def update_date_filter(today_clicks, yesterday_clicks, week_clicks, month_clicks, year_clicks, 
-                        apply_clicks, clear_clicks, start_date, end_date):
-    """
-    Actualizează filtrul de date activ bazat pe butoanele apăsate sau calendar.
-    """
-    from dash import ctx
-    from datetime import datetime, timedelta
-    
-    if not ctx.triggered_id:
-        return no_update, no_update, no_update
-    
-    trigger_id = ctx.triggered_id
-    logger.info(f"📅 Filtru temporal: {trigger_id}")
-    
-    today = datetime.now().date()
-    
-    # Resetare filtru
-    if trigger_id == 'clear-date-filter':
-        return None, None, None
-    
-    # Butoane rapide
-    if trigger_id == 'filter-today':
-        return {'start': today.isoformat(), 'end': today.isoformat(), 'label': 'Azi'}, today.isoformat(), today.isoformat()
-    
-    elif trigger_id == 'filter-yesterday':
-        yesterday = today - timedelta(days=1)
-        return {'start': yesterday.isoformat(), 'end': yesterday.isoformat(), 'label': 'Ieri'}, yesterday.isoformat(), yesterday.isoformat()
-    
-    elif trigger_id == 'filter-week':
-        week_ago = today - timedelta(days=7)
-        return {'start': week_ago.isoformat(), 'end': today.isoformat(), 'label': '1 Săptămână'}, week_ago.isoformat(), today.isoformat()
-    
-    elif trigger_id == 'filter-month':
-        month_ago = today - timedelta(days=30)
-        return {'start': month_ago.isoformat(), 'end': today.isoformat(), 'label': '1 Lună'}, month_ago.isoformat(), today.isoformat()
-    
-    elif trigger_id == 'filter-year':
-        year_ago = today - timedelta(days=365)
-        return {'start': year_ago.isoformat(), 'end': today.isoformat(), 'label': '1 An'}, year_ago.isoformat(), today.isoformat()
-    
-    # Aplicare interval personalizat
-    elif trigger_id == 'apply-date-filter':
-        if start_date and end_date:
-            return {'start': start_date, 'end': end_date, 'label': 'Interval Personalizat'}, start_date, end_date
-        elif start_date:
-            return {'start': start_date, 'end': start_date, 'label': 'Interval Personalizat'}, start_date, start_date
-        else:
-            logger.warning("Nicio dată selectată pentru filtrare")
-            return no_update, no_update, no_update
-    
-    return no_update, no_update, no_update
-
-
-# ==============================================================================
-# CALLBACKS SETĂRI DOCTOR - UPLOAD LOGO & FOOTER
-# ==============================================================================
-
-@app.callback(
-    [Output('settings-logo-preview-container', 'children'),
-     Output('settings-status-notification', 'children')],
-    [Input('settings-logo-upload', 'contents')],
-    [State('settings-logo-upload', 'filename')]
-)
-def handle_logo_upload(contents, filename):
-    """
-    Gestionează upload-ul logo-ului medicului.
-    """
-    import doctor_settings
-    
-    if not contents:
-        return no_update, no_update
-    
-    try:
-        # Decodăm conținutul base64
-        content_type, content_string = contents.split(',')
-        logo_bytes = base64.b64decode(content_string)
-        
-        # Salvăm logo-ul
-        logo_path = doctor_settings.save_doctor_logo(logo_bytes, filename)
-        
-        if logo_path:
-            # Creăm preview-ul
-            logo_base64 = doctor_settings.get_doctor_logo_base64()
-            
-            preview = html.Div([
-                html.H4("✅ Logo Curent:", style={'color': '#27ae60', 'marginBottom': '10px'}),
-                html.Img(
-                    src=logo_base64,
-                    style={
-                        'maxWidth': '300px',
-                        'maxHeight': '150px',
-                        'border': '2px solid #27ae60',
-                        'borderRadius': '8px',
-                        'padding': '10px',
-                        'backgroundColor': 'white'
-                    }
-                ),
-                html.P(
-                    f"📁 {filename}",
-                    style={'fontSize': '12px', 'color': '#666', 'marginTop': '10px'}
-                )
-            ], style={
-                'textAlign': 'center',
-                'padding': '20px',
-                'backgroundColor': '#d4edda',
-                'borderRadius': '8px',
-                'border': '1px solid #c3e6cb'
-            })
-            
-            notification = html.Div([
-                html.Strong("✅ Succes! ", style={'color': '#27ae60'}),
-                html.Span("Logo-ul a fost încărcat și salvat cu succes.")
-            ], style={
-                'padding': '15px',
-                'backgroundColor': '#d4edda',
-                'border': '1px solid #c3e6cb',
-                'borderRadius': '5px',
-                'color': '#155724'
-            })
-            
-            logger.info(f"✅ Logo uploadat cu succes: {filename}")
-            return preview, notification
-        else:
-            error_notification = html.Div([
-                html.Strong("❌ Eroare! ", style={'color': '#e74c3c'}),
-                html.Span("Nu s-a putut salva logo-ul. Verificați formatul imaginii.")
-            ], style={
-                'padding': '15px',
-                'backgroundColor': '#f8d7da',
-                'border': '1px solid #f5c6cb',
-                'borderRadius': '5px',
-                'color': '#721c24'
-            })
-            
-            return no_update, error_notification
-            
-    except Exception as e:
-        logger.error(f"Eroare la upload logo: {e}", exc_info=True)
-        
-        error_notification = html.Div([
-            html.Strong("❌ Eroare! ", style={'color': '#e74c3c'}),
-            html.Span(f"Eroare la procesarea fișierului: {str(e)}")
-        ], style={
-            'padding': '15px',
-            'backgroundColor': '#f8d7da',
-            'border': '1px solid #f5c6cb',
-            'borderRadius': '5px',
-            'color': '#721c24'
-        })
-        
-        return no_update, error_notification
-
-
-@app.callback(
-    [Output('settings-logo-preview-container', 'children', allow_duplicate=True),
-     Output('settings-status-notification', 'children', allow_duplicate=True)],
-    [Input('settings-delete-logo-button', 'n_clicks')],
-    prevent_initial_call=True
-)
-def handle_logo_delete(n_clicks):
-    """
-    Gestionează ștergerea logo-ului medicului.
-    """
-    import doctor_settings
-    
-    if not n_clicks:
-        return no_update, no_update
-    
-    try:
-        if doctor_settings.delete_doctor_logo():
-            empty_preview = html.P("📭 Nu ați încărcat încă un logo.", style={
-                'textAlign': 'center',
-                'color': '#95a5a6',
-                'padding': '20px',
-                'backgroundColor': '#f8f9fa',
-                'borderRadius': '5px',
-                'border': '1px dashed #bdc3c7'
-            })
-            
-            notification = html.Div([
-                html.Strong("✅ Succes! ", style={'color': '#27ae60'}),
-                html.Span("Logo-ul a fost șters.")
-            ], style={
-                'padding': '15px',
-                'backgroundColor': '#d4edda',
-                'border': '1px solid #c3e6cb',
-                'borderRadius': '5px',
-                'color': '#155724'
-            })
-            
-            logger.info("🗑️ Logo șters cu succes")
-            return empty_preview, notification
-        else:
-            error_notification = html.Div([
-                html.Strong("❌ Eroare! ", style={'color': '#e74c3c'}),
-                html.Span("Nu s-a putut șterge logo-ul.")
-            ], style={
-                'padding': '15px',
-                'backgroundColor': '#f8d7da',
-                'border': '1px solid #f5c6cb',
-                'borderRadius': '5px',
-                'color': '#721c24'
-            })
-            
-            return no_update, error_notification
-            
-    except Exception as e:
-        logger.error(f"Eroare la ștergerea logo-ului: {e}", exc_info=True)
-        return no_update, no_update
-
-
-@app.callback(
-    Output('settings-status-notification', 'children', allow_duplicate=True),
-    [Input('settings-save-footer-button', 'n_clicks'),
-     Input('settings-logo-apply-options', 'value')],
-    [State('settings-footer-textarea', 'value')],
-    prevent_initial_call=True
-)
-def handle_settings_save(footer_clicks, logo_apply_options, footer_text):
-    """
-    Gestionează salvarea setărilor (footer și preferințe logo).
-    """
-    import doctor_settings
-    from dash import callback_context
-    
-    if not callback_context.triggered:
-        return no_update
-    
-    trigger_id = callback_context.triggered[0]['prop_id'].split('.')[0]
-    
-    try:
-        # Salvăm preferințele de aplicare logo
-        if logo_apply_options is not None:
-            apply_to_images = 'images' in logo_apply_options
-            apply_to_pdf = 'pdf' in logo_apply_options
-            apply_to_site = 'site' in logo_apply_options
-            
-            doctor_settings.update_logo_preferences(
-                apply_to_images=apply_to_images,
-                apply_to_pdf=apply_to_pdf,
-                apply_to_site=apply_to_site
-            )
-        
-        # Salvăm footer-ul dacă butonul a fost apăsat
-        if trigger_id == 'settings-save-footer-button' and footer_clicks:
-            footer_text = footer_text or ""
-            
-            if doctor_settings.update_footer_info(footer_text):
-                notification = html.Div([
-                    html.Strong("✅ Succes! ", style={'color': '#27ae60'}),
-                    html.Span("Setările au fost salvate cu succes.")
-                ], style={
-                    'padding': '15px',
-                    'backgroundColor': '#d4edda',
-                    'border': '1px solid #c3e6cb',
-                    'borderRadius': '5px',
-                    'color': '#155724'
-                })
-                
-                logger.info("✅ Setări salvate cu succes")
-                return notification
-            else:
-                error_notification = html.Div([
-                    html.Strong("❌ Eroare! ", style={'color': '#e74c3c'}),
-                    html.Span("Nu s-au putut salva setările.")
-                ], style={
-                    'padding': '15px',
-                    'backgroundColor': '#f8d7da',
-                    'border': '1px solid #f5c6cb',
-                    'borderRadius': '5px',
-                    'color': '#721c24'
-                })
-                
-                return error_notification
-        
-        # Dacă doar s-au schimbat preferințele logo (fără click pe buton)
-        if trigger_id == 'settings-logo-apply-options':
-            notification = html.Div([
-                html.Strong("✅ Actualizat! ", style={'color': '#2980b9'}),
-                html.Span("Preferințele de aplicare au fost salvate.")
-            ], style={
-                'padding': '15px',
-                'backgroundColor': '#d1ecf1',
-                'border': '1px solid #bee5eb',
-                'borderRadius': '5px',
-                'color': '#0c5460'
-            })
-            
-            logger.info("✅ Preferințe logo actualizate")
-            return notification
-        
-        return no_update
-        
-    except Exception as e:
-        logger.error(f"Eroare la salvarea setărilor: {e}", exc_info=True)
-        
-        error_notification = html.Div([
-            html.Strong("❌ Eroare! ", style={'color': '#e74c3c'}),
-            html.Span(f"Eroare la salvarea setărilor: {str(e)}")
-        ], style={
-            'padding': '15px',
-            'backgroundColor': '#f8d7da',
-            'border': '1px solid #f5c6cb',
-            'borderRadius': '5px',
-            'color': '#721c24'
-        })
-        
-        return error_notification
-
-
-@app.callback(
-    Output('settings-footer-preview', 'children'),
-    [Input('settings-footer-textarea', 'value')]
-)
-def update_footer_preview(footer_text):
-    """
-    Actualizează preview-ul footer-ului în timp real pe măsură ce se scrie.
-    """
-    import doctor_settings
-    from dash import dcc as dash_dcc
-    
-    if not footer_text or footer_text.strip() == "":
-        return html.P(
-            "Footer-ul va apărea aici după ce scrieți text...", 
-            style={'color': '#95a5a6', 'fontStyle': 'italic', 'fontSize': '12px'}
-        )
-    
-    try:
-        # Procesăm footer-ul pentru a obține lista de componente Dash
-        footer_components = doctor_settings.process_footer_links(footer_text)
-        
-        # Returnăm un Div cu componentele procesate
-        return html.Div(
-            children=footer_components,
-            style={
-                'color': '#555',
-                'fontSize': '13px',
-                'lineHeight': '1.6',
-                'margin': '0',
-                'whiteSpace': 'normal'
-            }
-        )
-    except Exception as e:
-        logger.error(f"Eroare la preview footer: {e}", exc_info=True)
-        return html.P(
-            f"⚠️ Eroare la procesarea textului: {str(e)}", 
-            style={'color': '#e74c3c', 'fontSize': '12px'}
-        )
-
-
-@app.callback(
-    [Output('settings-logo-preview-container', 'children', allow_duplicate=True),
-     Output('settings-footer-textarea', 'value'),
-     Output('settings-logo-apply-options', 'value')],
-    [Input('app-tabs', 'value')],
-    prevent_initial_call=True
-)
-def load_settings_on_tab_open(tab_value):
-    """
-    Încarcă setările salvate când se deschide tab-ul de setări.
-    """
-    import doctor_settings
-    
-    if tab_value != 'tab-settings':
-        return no_update, no_update, no_update
-    
-    try:
-        # Încărcăm setările
-        settings = doctor_settings.load_doctor_settings()
-        
-        # Încărcăm logo-ul dacă există
-        logo_base64 = doctor_settings.get_doctor_logo_base64()
-        
-        if logo_base64:
-            preview = html.Div([
-                html.H4("✅ Logo Curent:", style={'color': '#27ae60', 'marginBottom': '10px'}),
-                html.Img(
-                    src=logo_base64,
-                    style={
-                        'maxWidth': '300px',
-                        'maxHeight': '150px',
-                        'border': '2px solid #27ae60',
-                        'borderRadius': '8px',
-                        'padding': '10px',
-                        'backgroundColor': 'white'
-                    }
-                ),
-                html.P(
-                    f"📁 {settings.get('logo_filename', 'Logo')}",
-                    style={'fontSize': '12px', 'color': '#666', 'marginTop': '10px'}
-                )
-            ], style={
-                'textAlign': 'center',
-                'padding': '20px',
-                'backgroundColor': '#d4edda',
-                'borderRadius': '8px',
-                'border': '1px solid #c3e6cb'
-            })
-        else:
-            preview = html.P("📭 Nu ați încărcat încă un logo.", style={
-                'textAlign': 'center',
-                'color': '#95a5a6',
-                'padding': '20px',
-                'backgroundColor': '#f8f9fa',
-                'borderRadius': '5px',
-                'border': '1px dashed #bdc3c7'
-            })
-        
-        # Încărcăm footer-ul
-        footer_text = settings.get('footer_info', '')
-        
-        # Încărcăm preferințele de aplicare
-        apply_options = []
-        if settings.get('apply_logo_to_images', True):
-            apply_options.append('images')
-        if settings.get('apply_logo_to_pdf', True):
-            apply_options.append('pdf')
-        if settings.get('apply_logo_to_site', True):
-            apply_options.append('site')
-        
-        logger.debug("✅ Setări încărcate pentru afișare în tab")
-        return preview, footer_text, apply_options
-        
-    except Exception as e:
-        logger.error(f"Eroare la încărcarea setărilor: {e}", exc_info=True)
-        return no_update, no_update, no_update
-
-
-# ==============================================================================
-# CALLBACKS AFIȘARE LOGO & FOOTER PENTRU PACIENȚI
-# ==============================================================================
-
-@app.callback(
-    [Output('patient-logo-container', 'children'),
-     Output('patient-footer-container', 'children')],
-    [Input('force-routing-trigger', 'n_intervals')]
-)
-def display_doctor_branding_for_patient(n_intervals):
-    """
-    [SOLUȚIA A] Afișează logo-ul și footer-ul medicului pe pagina pacientului.
-    Token-ul se citește DIRECT din Flask request.args.
-    """
-    from flask import request
-    import doctor_settings
-    
-    token = request.args.get('token')
-    if not token:
-        return None, None
-    
-    try:
-        # Încărcăm setările medicului
-        settings = doctor_settings.load_doctor_settings()
-        
-        # Logo
-        logo_component = None
-        if doctor_settings.should_apply_logo_to_site():
-            logo_base64 = doctor_settings.get_doctor_logo_base64()
-            if logo_base64:
-                logo_component = html.Img(
-                    src=logo_base64,
-                    style={
-                        'maxWidth': '250px',
-                        'maxHeight': '120px',
-                        'marginTop': '20px',
-                        'marginBottom': '10px',
-                        'filter': 'drop-shadow(0 2px 4px rgba(0,0,0,0.1))'
-                    }
-                )
-                logger.debug("✅ Logo afișat pentru pacient")
-        
-        # Footer
-        footer_component = None
-        footer_text = doctor_settings.get_footer_info()
-        if footer_text:
-            # Procesăm footer-ul pentru a obține lista de componente Dash
-            footer_components = doctor_settings.process_footer_links(footer_text)
-            
-            # Creăm containerul footer cu componentele procesate
-            footer_component = html.Div(
-                children=footer_components,
-                style={
-                    'textAlign': 'center',
-                    'color': '#555',
-                    'fontSize': '13px',
-                    'padding': '15px',
-                    'backgroundColor': '#f8f9fa',
-                    'borderRadius': '8px',
-                    'border': '1px solid #e0e0e0',
-                    'lineHeight': '1.6',
-                    'margin': '0',
-                    'whiteSpace': 'normal'
-                }
-            )
-            logger.debug("✅ Footer personalizat afișat pentru pacient (cu link-uri procesate)")
-        
-        return logo_component, footer_component
-        
-    except Exception as e:
-        logger.error(f"Eroare la afișarea branding-ului pentru pacient: {e}", exc_info=True)
-        return None, None
-
-
-@app.callback(
-    Output('medical-footer-container', 'children'),
-    [Input('force-routing-trigger', 'n_intervals')]
-)
-def display_footer_for_medical_pages(n_intervals):
-    """
-    [SOLUȚIA A] Afișează footer-ul medicului pe paginile medicale (admin, batch, etc.).
-    Se declanșează la încărcarea paginii (trigger din force-routing-trigger Interval).
-    """
-    import doctor_settings
-    
-    try:
-        # Încărcăm setările medicului
-        footer_text = doctor_settings.get_footer_info()
-        
-        if not footer_text:
-            return None
-        
-        # Procesăm footer-ul pentru a obține lista de componente Dash
-        footer_components = doctor_settings.process_footer_links(footer_text)
-        
-        # Creăm containerul footer cu componentele procesate
-        footer_component = html.Div(
-            children=footer_components,
-            style={
-                'textAlign': 'center',
-                'color': '#555',
-                'fontSize': '13px',
-                'padding': '15px',
-                'backgroundColor': '#f8f9fa',
-                'borderRadius': '8px',
-                'border': '1px solid #e0e0e0',
-                'lineHeight': '1.6',
-                'margin': '0 auto',
-                'maxWidth': '900px',
-                'whiteSpace': 'normal'
-            }
-        )
-        
-        logger.debug("✅ Footer personalizat afișat pe pagina medicală")
-        return footer_component
-        
-    except Exception as e:
-        logger.error(f"Eroare la afișarea footer-ului pe pagina medicală: {e}", exc_info=True)
-        return None
-
-
-# ==============================================================================
-# CALLBACKS ȘTERGERE ÎNREGISTRĂRI
-# ==============================================================================
-
-@app.callback(
-    [Output('delete-confirmation-modal', 'style'),
-     Output('delete-confirmation-modal', 'children'),
-     Output('delete-recording-store', 'data')],
-    [Input({'type': 'delete-recording-btn', 'index': ALL}, 'n_clicks')],
-    [State({'type': 'delete-recording-btn', 'index': ALL}, 'id'),
-     State({'type': 'recording-token-store', 'index': ALL}, 'data')],
-    prevent_initial_call=True
-)
-def show_delete_confirmation(n_clicks_list, btn_ids, token_list):
-    """
-    Afișează modal de confirmare pentru ștergerea unei înregistrări.
-    """
-    from dash import ctx
-    
-    # Verificăm dacă există click-uri
-    if not any(n_clicks_list) or not ctx.triggered_id:
-        return {'display': 'none'}, [], None
-    
-    # Găsim care buton a fost apăsat
-    triggered_id = ctx.triggered_id
-    recording_id = triggered_id['index']
-    
-    # Găsim token-ul corespunzător
-    token = None
-    for i, btn_id in enumerate(btn_ids):
-        if btn_id['index'] == recording_id:
-            token = token_list[i] if i < len(token_list) else None
-            break
-    
-    if not token:
-        logger.error(f"Nu s-a găsit token pentru înregistrarea {recording_id}")
-        return {'display': 'none'}, [], None
-    
-    # Găsim informațiile despre înregistrare
-    recordings = patient_links.get_patient_recordings(token)
-    recording_info = None
-    for rec in recordings:
-        if rec['id'] == recording_id:
-            recording_info = rec
-            break
-    
-    if not recording_info:
-        logger.error(f"Nu s-a găsit înregistrarea {recording_id}")
-        return {'display': 'none'}, [], None
-    
-    logger.info(f"⚠️ Cerere ștergere pentru înregistrarea {recording_id} ({recording_info.get('original_filename')})")
-    
-    # Creăm modal-ul de confirmare
-    modal_content = html.Div([
-        html.Div([
-            html.Div([
-                html.H3("⚠️ Confirmare Ștergere", style={
-                    'color': '#e74c3c',
-                    'marginBottom': '20px',
-                    'textAlign': 'center'
-                }),
-                html.P([
-                    "Sunteți sigur că doriți să ștergeți această înregistrare?",
-                    html.Br(),
-                    html.Br(),
-                    html.Strong(f"📅 Data: {recording_info.get('recording_date')}"),
-                    html.Br(),
-                    html.Strong(f"⏱️ Interval: {recording_info.get('start_time')} - {recording_info.get('end_time')}"),
-                    html.Br(),
-                    html.Strong(f"📁 Fișier: {recording_info.get('original_filename')}")
-                ], style={
-                    'fontSize': '14px',
-                    'color': '#555',
-                    'lineHeight': '1.8',
-                    'marginBottom': '30px'
-                }),
-                html.Div([
-                    html.Strong("⚠️ ATENȚIE: ", style={'color': '#e74c3c'}),
-                    "Această acțiune este ",
-                    html.Strong("IREVERSIBILĂ", style={'color': '#e74c3c'}),
-                    ". Fișierul CSV și toate datele asociate vor fi șterse permanent."
-                ], style={
-                    'padding': '15px',
-                    'backgroundColor': '#fff3cd',
-                    'border': '2px solid #ffc107',
-                    'borderRadius': '8px',
-                    'marginBottom': '30px',
-                    'fontSize': '13px',
-                    'color': '#856404'
-                }),
-                html.Div([
-                    html.Button(
-                        '❌ Da, șterge definitiv',
-                        id='confirm-delete-btn',
-                        style={
-                            'padding': '12px 30px',
-                            'backgroundColor': '#e74c3c',
-                            'color': 'white',
-                            'border': 'none',
-                            'borderRadius': '5px',
-                            'cursor': 'pointer',
-                            'fontSize': '14px',
-                            'fontWeight': 'bold',
-                            'marginRight': '15px'
-                        }
-                    ),
-                    html.Button(
-                        '✅ Anulează',
-                        id='cancel-delete-btn',
-                        style={
-                            'padding': '12px 30px',
-                            'backgroundColor': '#95a5a6',
-                            'color': 'white',
-                            'border': 'none',
-                            'borderRadius': '5px',
-                            'cursor': 'pointer',
-                            'fontSize': '14px',
-                            'fontWeight': 'bold'
-                        }
-                    )
-                ], style={'textAlign': 'center'})
-            ], style={
-                'backgroundColor': 'white',
-                'padding': '40px',
-                'borderRadius': '15px',
-                'boxShadow': '0 10px 40px rgba(0,0,0,0.3)',
-                'maxWidth': '550px',
-                'margin': '0 auto'
-            })
-        ], style={
-            'position': 'fixed',
-            'top': '0',
-            'left': '0',
-            'right': '0',
-            'bottom': '0',
-            'backgroundColor': 'rgba(0,0,0,0.5)',
-            'display': 'flex',
-            'alignItems': 'center',
-            'justifyContent': 'center',
-            'zIndex': '10000',
-            'padding': '20px'
-        })
-    ])
-    
-    # Salvăm informațiile în store pentru ștergere
-    delete_data = {
-        'token': token,
-        'recording_id': recording_id,
-        'recording_info': recording_info
-    }
-    
-    return {'display': 'block'}, modal_content, delete_data
-
-
-@app.callback(
-    [Output('delete-confirmation-modal', 'style', allow_duplicate=True),
-     Output('patient-recordings-list', 'children', allow_duplicate=True),
-     Output('global-notification-container', 'children', allow_duplicate=True)],
-    [Input('confirm-delete-btn', 'n_clicks'),
-     Input('cancel-delete-btn', 'n_clicks')],
-    [State('delete-recording-store', 'data'),
-     State('current-patient-token', 'data')],
-    prevent_initial_call=True
-)
-def handle_delete_confirmation(confirm_clicks, cancel_clicks, delete_data, current_token):
-    """
-    Gestionează confirmarea sau anularea ștergerii.
-    """
-    from dash import ctx
-    
-    if not ctx.triggered_id:
-        return no_update, no_update, no_update
-    
-    triggered_id = ctx.triggered_id
-    
-    # Dacă s-a anulat
-    if triggered_id == 'cancel-delete-btn':
-        logger.info("❌ Ștergere anulată de utilizator")
-        return {'display': 'none'}, no_update, no_update
-    
-    # Dacă s-a confirmat ștergerea
-    if triggered_id == 'confirm-delete-btn' and delete_data:
-        token = delete_data.get('token')
-        recording_id = delete_data.get('recording_id')
-        recording_info = delete_data.get('recording_info', {})
-        
-        logger.info(f"🗑️ Executare ștergere pentru înregistrarea {recording_id}...")
-        
-        try:
-            # Șterge înregistrarea
-            success = patient_links.delete_recording(token, recording_id)
-            
-            if success:
-                # Reîncărcăm lista de înregistrări
-                recordings = patient_links.get_patient_recordings(token)
-                
-                # Recreăm cardurile
-                if not recordings:
-                    new_list = html.Div(
-                        "📭 Nu mai aveți înregistrări.",
-                        style={'padding': '20px', 'textAlign': 'center', 'color': '#666', 'fontStyle': 'italic'}
-                    )
-                else:
-                    recording_cards = []
-                    for rec in recordings:
-                        recording_cards.append(
-                            html.Div([
-                                html.H4(f"📅 {rec['recording_date']}", style={'color': '#2c3e50'}),
-                                html.P(f"⏱️ Interval: {rec['start_time']} - {rec['end_time']}"),
-                                html.P(f"📊 SaO2: avg={rec['stats']['avg_spo2']:.1f}%, min={rec['stats']['min_spo2']}%, max={rec['stats']['max_spo2']}%"),
-                                html.P(f"📁 Fișier: {rec['original_filename']}", style={'fontSize': '12px', 'color': '#7f8c8d'}),
-                                html.Div([
-                                    html.Button(
-                                        '📈 Vezi Grafic',
-                                        id={'type': 'view-recording-btn', 'index': rec['id']},
-                                        style={
-                                            'padding': '10px 20px',
-                                            'backgroundColor': '#3498db',
-                                            'color': 'white',
-                                            'border': 'none',
-                                            'borderRadius': '5px',
-                                            'cursor': 'pointer',
-                                            'marginRight': '10px'
-                                        }
-                                    ),
-                                    html.Button(
-                                        '📥 Descarcă CSV',
-                                        id={'type': 'download-csv-btn', 'index': rec['id']},
-                                        style={
-                                            'padding': '10px 20px',
-                                            'backgroundColor': '#27ae60',
-                                            'color': 'white',
-                                            'border': 'none',
-                                            'borderRadius': '5px',
-                                            'cursor': 'pointer',
-                                            'marginRight': '10px'
-                                        }
-                                    ),
-                                    html.Button(
-                                        '🗑️ Șterge',
-                                        id={'type': 'delete-recording-btn', 'index': rec['id']},
-                                        style={
-                                            'padding': '10px 20px',
-                                            'backgroundColor': '#e74c3c',
-                                            'color': 'white',
-                                            'border': 'none',
-                                            'borderRadius': '5px',
-                                            'cursor': 'pointer'
-                                        }
-                                    )
-                                ], style={'marginTop': '15px'}),
-                                dcc.Store(id={'type': 'recording-token-store', 'index': rec['id']}, data=token)
-                            ], style={
-                                'padding': '20px',
-                                'marginBottom': '15px',
-                                'backgroundColor': '#ecf0f1',
-                                'borderRadius': '10px',
-                                'border': '1px solid #bdc3c7'
-                            })
-                        )
-                    new_list = html.Div(recording_cards)
-                
-                # Notificare succes
-                notification = html.Div([
-                    html.Div([
-                        html.Strong("✅ Înregistrare ștearsă cu succes!", style={'display': 'block', 'marginBottom': '10px'}),
-                        html.P(f"📁 {recording_info.get('original_filename', 'Fișier')}", style={'margin': '0', 'fontSize': '13px'}),
-                        html.P(f"📅 {recording_info.get('recording_date', '')} {recording_info.get('start_time', '')}", style={'margin': '0', 'fontSize': '13px'})
-                    ], style={
-                        'padding': '20px',
-                        'backgroundColor': '#d4edda',
-                        'border': '1px solid #28a745',
-                        'borderRadius': '8px',
-                        'color': '#155724',
-                        'marginBottom': '20px'
-                    })
-                ])
-                
-                logger.info(f"✅ Înregistrare ștearsă cu succes: {recording_id}")
-                return {'display': 'none'}, new_list, notification
-            else:
-                # Eroare la ștergere
-                notification = html.Div(
-                    "❌ Eroare la ștergerea înregistrării. Încercați din nou.",
-                    style={
-                        'padding': '20px',
-                        'backgroundColor': '#f8d7da',
-                        'border': '1px solid #dc3545',
-                        'borderRadius': '8px',
-                        'color': '#721c24',
-                        'marginBottom': '20px'
-                    }
-                )
-                logger.error(f"❌ Eroare la ștergerea înregistrării {recording_id}")
-                return {'display': 'none'}, no_update, notification
-                
-        except Exception as e:
-            logger.error(f"Excepție la ștergerea înregistrării: {e}", exc_info=True)
-            notification = html.Div(
-                f"❌ Eroare: {str(e)}",
-                style={
-                    'padding': '20px',
-                    'backgroundColor': '#f8d7da',
-                    'border': '1px solid #dc3545',
-                    'borderRadius': '8px',
-                    'color': '#721c24',
-                    'marginBottom': '20px'
-                }
-            )
-            return {'display': 'none'}, no_update, notification
-    
-    return no_update, no_update, no_update
-
-
-# ==============================================================================
-# CALLBACKS ȘTERGERE LINK-URI (MEDICI)
-# ==============================================================================
-
-@app.callback(
-    [Output('delete-confirmation-modal', 'style', allow_duplicate=True),
-     Output('delete-confirmation-modal', 'children', allow_duplicate=True),
-     Output('delete-recording-store', 'data', allow_duplicate=True)],
-    [Input({'type': 'delete-link-btn', 'index': ALL}, 'n_clicks')],
-    [State({'type': 'delete-link-btn', 'index': ALL}, 'id')],
-    prevent_initial_call=True
-)
-def show_delete_link_confirmation(n_clicks_list, btn_ids):
-    """
-    Afișează modal de confirmare pentru ștergerea unui link (înregistrare completă).
-    """
-    from dash import ctx
-    
-    # Verificăm dacă există click-uri
-    if not any(n_clicks_list) or not ctx.triggered_id:
-        return no_update, no_update, no_update
-    
-    # Găsim care buton a fost apăsat
-    triggered_id = ctx.triggered_id
-    token = triggered_id['index']
-    
-    # Obținem informațiile despre link
-    link_data = patient_links.get_patient_link(token, track_view=False)
-    
-    if not link_data:
-        logger.error(f"Nu s-a găsit link-ul {token[:8]}...")
-        return no_update, no_update, no_update
-    
-    # Obținem numărul de înregistrări
-    recordings = patient_links.get_patient_recordings(token)
-    recordings_count = len(recordings) if recordings else 0
-    
-    logger.info(f"⚠️ Cerere ștergere LINK complet: {token[:8]}... ({link_data.get('device_name')})")
-    
-    # Creăm modal-ul de confirmare
-    modal_content = html.Div([
-        html.Div([
-            html.Div([
-                html.H3("⚠️ ATENȚIE: Ștergere Înregistrare Completă", style={
-                    'color': '#c0392b',
-                    'marginBottom': '20px',
-                    'textAlign': 'center'
-                }),
-                html.P([
-                    "Sunteți pe cale să ștergeți ",
-                    html.Strong("ÎNTREAGA ÎNREGISTRARE", style={'color': '#e74c3c', 'fontSize': '16px'}),
-                    " pentru acest pacient!",
-                    html.Br(),
-                    html.Br(),
-                    html.Strong(f"🔧 Aparat: {link_data.get('device_name')}"),
-                    html.Br(),
-                    html.Strong(f"📅 Data: {link_data.get('recording_date', 'N/A')}"),
-                    html.Br(),
-                    html.Strong(f"📊 Înregistrări CSV: {recordings_count}"),
-                    html.Br(),
-                    html.Strong(f"🔗 Token: {token[:12]}...")
-                ], style={
-                    'fontSize': '14px',
-                    'color': '#555',
-                    'lineHeight': '1.8',
-                    'marginBottom': '30px'
-                }),
-                html.Div([
-                    html.Strong("🚨 ACȚIUNE IREVERSIBILĂ:", style={'color': '#c0392b', 'display': 'block', 'marginBottom': '10px'}),
-                    html.Ul([
-                        html.Li("Toate fișierele CSV vor fi șterse"),
-                        html.Li("Toate imaginile generate vor fi șterse"),
-                        html.Li("Toate rapoartele PDF vor fi șterse"),
-                        html.Li("Toate notițele medicale vor fi șterse"),
-                        html.Li("Link-ul pacientului va deveni INACTIV")
-                    ], style={'textAlign': 'left', 'fontSize': '13px'})
-                ], style={
-                    'padding': '20px',
-                    'backgroundColor': '#ffdddd',
-                    'border': '3px solid #c0392b',
-                    'borderRadius': '8px',
-                    'marginBottom': '30px'
-                }),
-                html.Div([
-                    html.P(
-                        "Această operație NU poate fi anulată! Dacă nu sunteți 100% sigur, apăsați Anulează.",
-                        style={'fontSize': '13px', 'color': '#721c24', 'fontWeight': 'bold', 'marginBottom': '0'}
-                    )
-                ], style={
-                    'padding': '15px',
-                    'backgroundColor': '#f8d7da',
-                    'border': '1px solid #f5c6cb',
-                    'borderRadius': '5px',
-                    'marginBottom': '30px'
-                }),
-                html.Div([
-                    html.Button(
-                        '🗑️ DA, ȘTERGE TOT',
-                        id='confirm-delete-link-btn',
-                        style={
-                            'padding': '12px 30px',
-                            'backgroundColor': '#c0392b',
-                            'color': 'white',
-                            'border': 'none',
-                            'borderRadius': '5px',
-                            'cursor': 'pointer',
-                            'fontSize': '14px',
-                            'fontWeight': 'bold',
-                            'marginRight': '15px'
-                        }
-                    ),
-                    html.Button(
-                        '✅ Anulează (recomand)',
-                        id='cancel-delete-link-btn',
-                        style={
-                            'padding': '12px 30px',
-                            'backgroundColor': '#27ae60',
-                            'color': 'white',
-                            'border': 'none',
-                            'borderRadius': '5px',
-                            'cursor': 'pointer',
-                            'fontSize': '14px',
-                            'fontWeight': 'bold'
-                        }
-                    )
-                ], style={'textAlign': 'center'})
-            ], style={
-                'backgroundColor': 'white',
-                'padding': '40px',
-                'borderRadius': '15px',
-                'boxShadow': '0 10px 40px rgba(0,0,0,0.3)',
-                'maxWidth': '650px',
-                'margin': '0 auto'
-            })
-        ], style={
-            'position': 'fixed',
-            'top': '0',
-            'left': '0',
-            'right': '0',
-            'bottom': '0',
-            'backgroundColor': 'rgba(0,0,0,0.7)',
-            'display': 'flex',
-            'alignItems': 'center',
-            'justifyContent': 'center',
-            'zIndex': '10000',
-            'padding': '20px'
-        })
-    ])
-    
-    # Salvăm informațiile în store pentru ștergere
-    delete_data = {
-        'type': 'link',  # Pentru a diferenția de ștergerea unei înregistrări
-        'token': token,
-        'link_data': link_data,
-        'recordings_count': recordings_count
-    }
-    
-    return {'display': 'block'}, modal_content, delete_data
-
-
-@app.callback(
-    [Output('delete-confirmation-modal', 'style', allow_duplicate=True),
-     Output('admin-refresh-trigger', 'data', allow_duplicate=True),
-     Output('global-notification-container', 'children', allow_duplicate=True)],
-    [Input('confirm-delete-link-btn', 'n_clicks'),
-     Input('cancel-delete-link-btn', 'n_clicks')],
-    [State('delete-recording-store', 'data')],
-    prevent_initial_call=True
-)
-def handle_delete_link_confirmation(confirm_clicks, cancel_clicks, delete_data):
-    """
-    Gestionează confirmarea sau anularea ștergerii unui link complet.
-    """
-    from dash import ctx
-    import time
-    
-    if not ctx.triggered_id:
-        return no_update, no_update, no_update
-    
-    triggered_id = ctx.triggered_id
-    
-    # Dacă s-a anulat
-    if triggered_id == 'cancel-delete-link-btn':
-        logger.info("✅ Ștergere link ANULATĂ de utilizator (decizie înțeleaptă!)")
-        return {'display': 'none'}, no_update, no_update
-    
-    # Dacă s-a confirmat ștergerea
-    if triggered_id == 'confirm-delete-link-btn' and delete_data and delete_data.get('type') == 'link':
-        token = delete_data.get('token')
-        link_data = delete_data.get('link_data', {})
-        recordings_count = delete_data.get('recordings_count', 0)
-        
-        logger.warning(f"🗑️ EXECUTARE ȘTERGERE COMPLETĂ pentru link {token[:8]}... ({link_data.get('device_name')})")
-        
-        try:
-            # Șterge link-ul COMPLET (include toate fișierele)
-            success = patient_links.delete_patient_link(token)
-            
-            if success:
-                # Notificare succes
-                notification = html.Div([
-                    html.Div([
-                        html.Strong("✅ Înregistrare ștearsă complet!", style={'display': 'block', 'marginBottom': '10px', 'fontSize': '16px'}),
-                        html.P(f"🔧 Aparat: {link_data.get('device_name', 'N/A')}", style={'margin': '5px 0', 'fontSize': '13px'}),
-                        html.P(f"📅 Data: {link_data.get('recording_date', 'N/A')}", style={'margin': '5px 0', 'fontSize': '13px'}),
-                        html.P(f"📊 {recordings_count} înregistrări CSV șterse", style={'margin': '5px 0', 'fontSize': '13px'}),
-                        html.P(f"🔗 Token: {token[:12]}... (INVALID acum)", style={'margin': '5px 0', 'fontSize': '13px', 'color': '#666'})
-                    ], style={
-                        'padding': '20px',
-                        'backgroundColor': '#d4edda',
-                        'border': '1px solid #28a745',
-                        'borderRadius': '8px',
-                        'color': '#155724',
-                        'marginBottom': '20px'
-                    })
-                ])
-                
-                logger.info(f"✅ Link șters cu succes: {token[:8]}... - Toate datele au fost eliminate")
-                
-                # Trigger refresh pentru a actualiza lista
-                refresh_trigger = int(time.time() * 1000)  # Timestamp în milisecunde
-                
-                return {'display': 'none'}, refresh_trigger, notification
-            else:
-                # Eroare la ștergere
-                notification = html.Div(
-                    "❌ Eroare la ștergerea link-ului. Verificați log-urile pentru detalii.",
-                    style={
-                        'padding': '20px',
-                        'backgroundColor': '#f8d7da',
-                        'border': '1px solid #dc3545',
-                        'borderRadius': '8px',
-                        'color': '#721c24',
-                        'marginBottom': '20px'
-                    }
-                )
-                logger.error(f"❌ Eroare la ștergerea link-ului {token[:8]}...")
-                return {'display': 'none'}, no_update, notification
-                
-        except Exception as e:
-            logger.error(f"Excepție la ștergerea link-ului: {e}", exc_info=True)
-            notification = html.Div(
-                f"❌ Eroare: {str(e)}",
-                style={
-                    'padding': '20px',
-                    'backgroundColor': '#f8d7da',
-                    'border': '1px solid #dc3545',
-                    'borderRadius': '8px',
-                    'color': '#721c24',
-                    'marginBottom': '20px'
-                }
-            )
-            return {'display': 'none'}, no_update, notification
-    
-    return no_update, no_update, no_update
-
-
-logger.info("✅ Modulul callbacks_medical.py încărcat cu succes.")
-
+# --- Callback modules (split for maintainability) ---
+import callbacks.patient_view_callbacks  # noqa: F401, E402
+import callbacks.medical_branding_callbacks  # noqa: F401, E402

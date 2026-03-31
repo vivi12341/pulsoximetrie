@@ -1,6 +1,10 @@
 from dash import dcc, html
 import config
 from debug_system import get_debug_footer
+from shared.runtime_mode import is_cloud_runtime
+
+_CLOUD_RUNTIME = is_cloud_runtime()
+_BROWSE_STORE_INIT = None if _CLOUD_RUNTIME else config.BATCH_BROWSE_ROOT
 
 def get_medical_layout():
     return html.Div([
@@ -65,6 +69,11 @@ def _get_batch_tab():
                     
                     # Store pentru refresh automat
                     dcc.Store(id='admin-refresh-trigger', data=0),
+                    # Explorator foldere mod local (căi pe server; ascuns în cloud)
+                    dcc.Store(id='admin-batch-browse-input-current', data=_BROWSE_STORE_INIT),
+                    dcc.Store(id='admin-batch-browse-input-entries', data=[]),
+                    dcc.Store(id='admin-batch-browse-output-current', data=_BROWSE_STORE_INIT),
+                    dcc.Store(id='admin-batch-browse-output-entries', data=[]),
                     
                     # === SELECTOR MOD PROCESARE ===
                     html.Div([
@@ -86,13 +95,25 @@ def _get_batch_tab():
                     html.Div(
                         id='admin-batch-local-mode',
                         children=[
+                            html.Div(
+                                id='admin-batch-local-cloud-hint',
+                                children=[
+                                    html.P(
+                                        "În mediul cloud, modul local nu poate accesa folderele de pe PC-ul dumneavoastră. "
+                                        "Folosiți Modul Online (upload) sau rulați aplicația local.",
+                                        style={'fontSize': '13px', 'color': '#856404', 'backgroundColor': '#fff3cd',
+                                               'padding': '12px', 'borderRadius': '5px', 'border': '1px solid #ffc107'}
+                                    )
+                                ],
+                                style={'display': 'block' if _CLOUD_RUNTIME else 'none', 'marginBottom': '15px'}
+                            ),
                             html.Label("📂 Folder intrare (CSV + PDF):", className="font-bold d-block mb-10"),
                             html.Div([
                                 dcc.Input(
                                     id='admin-batch-input-folder',
                                     type='text',
                                     value='',
-                                    placeholder='Ex: bach data SAU de modificat reguli',
+                                    placeholder='Ex: C:\\Date\\bach data sau cale relativă la proiect',
                                     className="form-input",
                                     style={'borderRadius': '5px 5px 0 0'}
                                 ),
@@ -102,7 +123,40 @@ def _get_batch_tab():
                                     html.Code("de modificat reguli", style={'padding': '5px 10px', 'backgroundColor': '#e8f4f8', 'borderRadius': '3px', 'marginRight': '5px', 'fontSize': '12px'}),
                                     html.Code("intrare", style={'padding': '5px 10px', 'backgroundColor': '#e8f4f8', 'borderRadius': '3px', 'fontSize': '12px'})
                                 ], style={'padding': '10px', 'backgroundColor': '#f8f9fa', 'borderRadius': '0 0 5px 5px', 'border': '1px solid #bdc3c7', 'borderTop': 'none'})
-                            ], className="mb-20")
+                            ], className="mb-10"),
+                            html.Div(
+                                id='admin-batch-browse-input-wrapper',
+                                style={'display': 'none' if _CLOUD_RUNTIME else 'block',
+                                       'marginBottom': '20px', 'padding': '12px', 'backgroundColor': '#eef6fc',
+                                       'border': '1px solid #b8daff', 'borderRadius': '6px'},
+                                children=[
+                                    html.Strong("Explorator foldere (disc server):", className="d-block mb-10",
+                                                style={'color': '#1a5276'}),
+                                    html.Div(id='admin-batch-browse-input-path-display', className="mb-10",
+                                             style={'fontSize': '12px', 'wordBreak': 'break-all'}),
+                                    html.Div([
+                                        html.Button(
+                                            '⬆ Folder părinte',
+                                            id='admin-batch-browse-input-up',
+                                            n_clicks=0,
+                                            className="btn-secondary",
+                                            style={'marginRight': '10px', 'padding': '8px 14px'}
+                                        ),
+                                        html.Button(
+                                            '✓ Folosește acest folder pentru intrare',
+                                            id='admin-batch-browse-input-use',
+                                            n_clicks=0,
+                                            className="btn-success",
+                                            style={'padding': '8px 14px'}
+                                        )
+                                    ], className="mb-10"),
+                                    html.Div(
+                                        id='admin-batch-browse-input-list',
+                                        style={'display': 'flex', 'flexDirection': 'column', 'gap': '6px', 'maxHeight': '220px',
+                                               'overflowY': 'auto'}
+                                    )
+                                ]
+                            )
                         ],
                         style={'display': 'none'}
                     ),
@@ -156,7 +210,40 @@ def _get_batch_tab():
                         type='text',
                         value='',
                         placeholder=f'Implicit: .\\{config.OUTPUT_DIR}',
-                        className="form-input mb-20"
+                        className="form-input mb-10"
+                    ),
+                    html.Div(
+                        id='admin-batch-browse-output-wrapper',
+                        style={'display': 'none' if _CLOUD_RUNTIME else 'block',
+                               'marginBottom': '20px', 'padding': '12px', 'backgroundColor': '#f4fcf4',
+                               'border': '1px solid #c3e6cb', 'borderRadius': '6px'},
+                        children=[
+                            html.Strong("Explorator folder ieșire (disc server):", className="d-block mb-10",
+                                        style={'color': '#155724'}),
+                            html.Div(id='admin-batch-browse-output-path-display', className="mb-10",
+                                     style={'fontSize': '12px', 'wordBreak': 'break-all'}),
+                            html.Div([
+                                html.Button(
+                                    '⬆ Folder părinte',
+                                    id='admin-batch-browse-output-up',
+                                    n_clicks=0,
+                                    className="btn-secondary",
+                                    style={'marginRight': '10px', 'padding': '8px 14px'}
+                                ),
+                                html.Button(
+                                    '✓ Folosește acest folder pentru ieșire',
+                                    id='admin-batch-browse-output-use',
+                                    n_clicks=0,
+                                    className="btn-success",
+                                    style={'padding': '8px 14px'}
+                                )
+                            ], className="mb-10"),
+                            html.Div(
+                                id='admin-batch-browse-output-list',
+                                style={'display': 'flex', 'flexDirection': 'column', 'gap': '6px', 'maxHeight': '220px',
+                                       'overflowY': 'auto'}
+                            )
+                        ]
                     ),
                     
                     html.Div([

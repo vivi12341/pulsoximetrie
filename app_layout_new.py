@@ -20,7 +20,7 @@ import patient_links
 # Import layouts modulare
 from layout_partials.medical_layout import get_medical_layout
 from layout_partials.patient_layout import get_patient_layout, get_error_layout
-from callbacks_medical import create_login_prompt
+from callbacks.medical_callbacks import create_login_prompt
 
 def get_layout():
     """

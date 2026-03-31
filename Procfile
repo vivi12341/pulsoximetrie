@@ -1,2 +1,1 @@
-web: gunicorn --workers 4 --threads 2 --timeout 120 --bind 0.0.0.0:$PORT --log-level warning --access-logfile - --error-logfile - "run_medical:app.server"
-
+web: gunicorn --workers 4 --threads 2 --timeout 120 --bind 0.0.0.0:$PORT --log-level warning --access-logfile - --error-logfile - wsgi:application
